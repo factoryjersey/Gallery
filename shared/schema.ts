@@ -67,6 +67,8 @@ export const media = pgTable("media", {
   height: integer("height"),
   objectPath: text("object_path").notNull(), // path in object storage
   alt: text("alt"),
+  // Responsive image variants (JSON format: { thumbnail: string, medium: string, large: string, webp: string })
+  variants: json("variants"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

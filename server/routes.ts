@@ -1,11 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
+import { processImage, getPublicUrl } from "./imageProcessor";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -318,6 +319,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching media:", error);
       res.status(500).json({ error: "Failed to fetch media" });
+    }
+  });
+
+  // Image upload with processing (generates responsive variants and WebP)
+  app.post("/api/media/upload", upload.single('image'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No image file provided" });
+      }
+
+      // Validate image type
+      if (!req.file.mimetype.startsWith('image/')) {
+        return res.status(400).json({ error: "File must be an image" });
+      }
+
+      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+      if (!bucketId) {
+        return res.status(500).json({ error: "Object storage not configured" });
+      }
+
+      // Process image and generate variants
+      const processed = await processImage(
+        req.file.buffer,
+        req.file.originalname,
+        bucketId,
+        objectStorageClient
+      );
+
+      // Create media record with variants
+      const mediaData = {
+        filename: req.file.originalname,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: processed.metadata.size,
+        width: processed.metadata.width,
+        height: processed.metadata.height,
+        objectPath: processed.variants.original,
+        variants: processed.variants,
+        alt: req.body.alt || '',
+      };
+
+      const media = await storage.createMedia(mediaData);
+      
+      // Return media with public URLs
+      res.json({
+        media: {
+          ...media,
+          urls: {
+            thumbnail: getPublicUrl(bucketId, processed.variants.thumbnail),
+            medium: getPublicUrl(bucketId, processed.variants.medium),
+            large: getPublicUrl(bucketId, processed.variants.large),
+            webp: getPublicUrl(bucketId, processed.variants.webp),
+            original: getPublicUrl(bucketId, processed.variants.original),
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Error uploading and processing image:", error);
+      res.status(500).json({ error: "Failed to upload and process image" });
     }
   });
 
