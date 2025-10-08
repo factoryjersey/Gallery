@@ -1,0 +1,266 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { 
+  FileText, 
+  PlusCircle, 
+  BarChart3, 
+  Users, 
+  FolderOpen, 
+  Tags,
+  Image,
+  Upload,
+  Settings
+} from "lucide-react";
+import ArticleEditor from "@/components/ArticleEditor";
+import WordPressImporter from "@/components/WordPressImporter";
+
+export default function Admin() {
+  const [activeTab, setActiveTab] = useState("dashboard");
+
+  const { data: statsData } = useQuery({
+    queryKey: ["/api/stats"],
+  });
+
+  const { data: articlesData } = useQuery({
+    queryKey: ["/api/articles", { status: "all", limit: 10 }],
+  });
+
+  const stats = statsData?.stats;
+
+  return (
+    <div className="min-h-screen bg-muted">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-card rounded-lg shadow-lg overflow-hidden">
+          {/* Header */}
+          <div className="bg-primary text-primary-foreground px-6 py-4 border-b border-border/20">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-bold font-serif">Admin Dashboard</h1>
+              <div className="flex items-center space-x-4">
+                <Button variant="secondary" size="sm">
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  New Article
+                </Button>
+                <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex">
+            {/* Sidebar */}
+            <div className="w-64 bg-muted/50 border-r border-border p-4">
+              <nav className="space-y-1">
+                <button
+                  onClick={() => setActiveTab("dashboard")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "dashboard" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-dashboard"
+                >
+                  <BarChart3 className="w-5 h-5 mr-3" />
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => setActiveTab("articles")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "articles" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-articles"
+                >
+                  <FileText className="w-5 h-5 mr-3" />
+                  Articles
+                </button>
+                <button
+                  onClick={() => setActiveTab("categories")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "categories" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-categories"
+                >
+                  <FolderOpen className="w-5 h-5 mr-3" />
+                  Categories
+                </button>
+                <button
+                  onClick={() => setActiveTab("media")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "media" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-media"
+                >
+                  <Image className="w-5 h-5 mr-3" />
+                  Media
+                </button>
+                <button
+                  onClick={() => setActiveTab("import")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "import" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-import"
+                >
+                  <Upload className="w-5 h-5 mr-3" />
+                  WordPress Import
+                </button>
+              </nav>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 p-6">
+              {activeTab === "dashboard" && (
+                <div className="space-y-6">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Total Articles</p>
+                            <p className="text-2xl font-bold" data-testid="stat-total-articles">
+                              {stats?.totalArticles || 0}
+                            </p>
+                          </div>
+                          <FileText className="h-8 w-8 text-primary/60" />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Published</p>
+                            <p className="text-2xl font-bold" data-testid="stat-published">
+                              {stats?.publishedArticles || 0}
+                            </p>
+                          </div>
+                          <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <div className="h-4 w-4 bg-green-500 rounded-full" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Drafts</p>
+                            <p className="text-2xl font-bold" data-testid="stat-drafts">
+                              {stats?.draftArticles || 0}
+                            </p>
+                          </div>
+                          <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                            <div className="h-4 w-4 bg-yellow-500 rounded-full" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Total Views</p>
+                            <p className="text-2xl font-bold" data-testid="stat-total-views">
+                              {stats?.totalViews?.toLocaleString() || 0}
+                            </p>
+                          </div>
+                          <BarChart3 className="h-8 w-8 text-secondary/60" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Recent Articles */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Recent Articles</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4" data-testid="recent-articles">
+                        {articlesData?.articles?.slice(0, 5).map((article) => (
+                          <div key={article.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                            <div>
+                              <h4 className="font-medium">{article.title}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {article.category.name} • {article.author.name}
+                              </p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                article.status === 'published' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {article.status}
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                {article.views} views
+                              </span>
+                            </div>
+                          </div>
+                        )) || (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No articles found. Create your first article!
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {activeTab === "articles" && (
+                <ArticleEditor />
+              )}
+
+              {activeTab === "import" && (
+                <WordPressImporter />
+              )}
+
+              {activeTab === "categories" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Categories Management</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      Category management interface coming soon...
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeTab === "media" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Media Library</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-8 text-muted-foreground">
+                      Media library interface coming soon...
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

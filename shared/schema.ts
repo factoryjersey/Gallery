@@ -1,0 +1,175 @@
+import { sql, relations } from "drizzle-orm";
+import { pgTable, text, varchar, timestamp, integer, boolean, json } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const authors = pgTable("authors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  bio: text("bio"),
+  avatar: text("avatar"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const categories = pgTable("categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  color: text("color").default("#3B82F6"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const tags = pgTable("tags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const articles = pgTable("articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  excerpt: text("excerpt"),
+  content: text("content").notNull(),
+  featuredImage: text("featured_image"),
+  status: text("status").notNull().default("draft"), // draft, published, archived
+  views: integer("views").default(0).notNull(),
+  readTime: integer("read_time").default(5).notNull(), // in minutes
+  authorId: varchar("author_id").references(() => authors.id).notNull(),
+  categoryId: varchar("category_id").references(() => categories.id).notNull(),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  // SEO fields
+  metaTitle: text("meta_title"),
+  metaDescription: text("meta_description"),
+  // WordPress import data
+  wpId: integer("wp_id"), // original WordPress post ID
+  wpData: json("wp_data"), // store original WordPress data for reference
+});
+
+export const articleTags = pgTable("article_tags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  tagId: varchar("tag_id").references(() => tags.id, { onDelete: "cascade" }).notNull(),
+});
+
+export const media = pgTable("media", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  filename: text("filename").notNull(),
+  originalName: text("original_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  size: integer("size").notNull(), // in bytes
+  width: integer("width"),
+  height: integer("height"),
+  objectPath: text("object_path").notNull(), // path in object storage
+  alt: text("alt"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Relations
+export const authorsRelations = relations(authors, ({ many }) => ({
+  articles: many(articles),
+}));
+
+export const categoriesRelations = relations(categories, ({ many }) => ({
+  articles: many(articles),
+}));
+
+export const tagsRelations = relations(tags, ({ many }) => ({
+  articleTags: many(articleTags),
+}));
+
+export const articlesRelations = relations(articles, ({ one, many }) => ({
+  author: one(authors, {
+    fields: [articles.authorId],
+    references: [authors.id],
+  }),
+  category: one(categories, {
+    fields: [articles.categoryId],
+    references: [categories.id],
+  }),
+  articleTags: many(articleTags),
+}));
+
+export const articleTagsRelations = relations(articleTags, ({ one }) => ({
+  article: one(articles, {
+    fields: [articleTags.articleId],
+    references: [articles.id],
+  }),
+  tag: one(tags, {
+    fields: [articleTags.tagId],
+    references: [tags.id],
+  }),
+}));
+
+// Insert schemas
+export const insertAuthorSchema = createInsertSchema(authors).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertTagSchema = createInsertSchema(tags).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertArticleSchema = createInsertSchema(articles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  views: true,
+});
+
+export const insertMediaSchema = createInsertSchema(media).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types
+export type Author = typeof authors.$inferSelect;
+export type InsertAuthor = z.infer<typeof insertAuthorSchema>;
+
+export type Category = typeof categories.$inferSelect;
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
+
+export type Tag = typeof tags.$inferSelect;
+export type InsertTag = z.infer<typeof insertTagSchema>;
+
+export type Article = typeof articles.$inferSelect;
+export type InsertArticle = z.infer<typeof insertArticleSchema>;
+
+export type ArticleTag = typeof articleTags.$inferSelect;
+
+export type Media = typeof media.$inferSelect;
+export type InsertMedia = z.infer<typeof insertMediaSchema>;
+
+// Extended types for API responses
+export type ArticleWithDetails = Article & {
+  author: Author;
+  category: Category;
+  tags: Tag[];
+};
+
+// Legacy user table (keeping for compatibility)
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
+});
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
