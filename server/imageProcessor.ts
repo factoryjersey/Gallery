@@ -59,53 +59,44 @@ export async function processImage(
   });
   variants.original = originalPath;
 
-  // Generate thumbnail
+  // Generate thumbnail (WebP)
   const thumbnailBuffer = await sharp(buffer)
     .resize(SIZES.thumbnail, null, { withoutEnlargement: true })
-    .jpeg({ quality: 80 })
+    .webp({ quality: 80 })
     .toBuffer();
   
-  const thumbnailPath = `public/images/${timestamp}-${baseName}-thumbnail.jpg`;
+  const thumbnailPath = `public/images/${timestamp}-${baseName}-thumbnail.webp`;
   await bucket.file(thumbnailPath).save(thumbnailBuffer, {
-    metadata: { contentType: 'image/jpeg' },
+    metadata: { contentType: 'image/webp' },
   });
   variants.thumbnail = thumbnailPath;
 
-  // Generate medium
+  // Generate medium (WebP)
   const mediumBuffer = await sharp(buffer)
     .resize(SIZES.medium, null, { withoutEnlargement: true })
-    .jpeg({ quality: 85 })
-    .toBuffer();
-  
-  const mediumPath = `public/images/${timestamp}-${baseName}-medium.jpg`;
-  await bucket.file(mediumPath).save(mediumBuffer, {
-    metadata: { contentType: 'image/jpeg' },
-  });
-  variants.medium = mediumPath;
-
-  // Generate large
-  const largeBuffer = await sharp(buffer)
-    .resize(SIZES.large, null, { withoutEnlargement: true })
-    .jpeg({ quality: 90 })
-    .toBuffer();
-  
-  const largePath = `public/images/${timestamp}-${baseName}-large.jpg`;
-  await bucket.file(largePath).save(largeBuffer, {
-    metadata: { contentType: 'image/jpeg' },
-  });
-  variants.large = largePath;
-
-  // Generate WebP version (modern format for better compression)
-  const webpBuffer = await sharp(buffer)
-    .resize(SIZES.large, null, { withoutEnlargement: true })
     .webp({ quality: 85 })
     .toBuffer();
   
-  const webpPath = `public/images/${timestamp}-${baseName}.webp`;
-  await bucket.file(webpPath).save(webpBuffer, {
+  const mediumPath = `public/images/${timestamp}-${baseName}-medium.webp`;
+  await bucket.file(mediumPath).save(mediumBuffer, {
     metadata: { contentType: 'image/webp' },
   });
-  variants.webp = webpPath;
+  variants.medium = mediumPath;
+
+  // Generate large (WebP)
+  const largeBuffer = await sharp(buffer)
+    .resize(SIZES.large, null, { withoutEnlargement: true })
+    .webp({ quality: 90 })
+    .toBuffer();
+  
+  const largePath = `public/images/${timestamp}-${baseName}-large.webp`;
+  await bucket.file(largePath).save(largeBuffer, {
+    metadata: { contentType: 'image/webp' },
+  });
+  variants.large = largePath;
+
+  // Also keep the large WebP in the webp variant field for backwards compatibility
+  variants.webp = largePath;
 
   return {
     variants,

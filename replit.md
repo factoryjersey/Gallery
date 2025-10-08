@@ -70,11 +70,20 @@ Preferred communication style: Simple, everyday language.
 - **Upload Strategy:** Client-side direct uploads using Uppy dashboard
 - **ACL System:** Custom access control with group-based permissions (defined but not fully implemented)
 
+**Image Optimization (NEW - October 2025):**
+- **Processing:** Sharp library for server-side image processing
+- **Responsive Variants:** Automatic generation of thumbnail (300px), medium (800px), and large (1200px) sizes
+- **WebP Conversion:** All images converted to WebP format for better compression
+- **Storage:** All variants stored in GCS with paths tracked in media.variants JSON field
+- **Lazy Loading:** IntersectionObserver-based lazy loading with progressive blur-to-sharp transitions
+- **Performance:** Images load only when near viewport with 50px rootMargin for preloading
+
 **Design Decisions:**
 - Uppy chosen for robust, customizable file upload experience with progress tracking
 - Direct-to-GCS uploads reduce server load and improve performance
 - ACL policy framework prepared for fine-grained access control
 - Multer middleware for server-side file handling when needed
+- Sharp for image processing provides excellent performance and format support
 
 ### Content Import
 
