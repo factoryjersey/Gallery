@@ -3,6 +3,7 @@ import { Calendar, Clock, User } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import type { ArticleWithDetails } from "@shared/schema";
+import LazyImage from "@/components/LazyImage";
 
 interface FeaturedHeroProps {
   articles: ArticleWithDetails[];
@@ -33,7 +34,7 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
           <Link href={`/article/${mainArticle.slug}`}>
             <div className="relative overflow-hidden rounded-lg shadow-lg group cursor-pointer article-card" data-testid="featured-main">
               {mainArticle.featuredImage ? (
-                <img
+                <LazyImage
                   src={mainArticle.featuredImage}
                   alt={mainArticle.title}
                   className="w-full h-[500px] object-cover group-hover:scale-105 transition-transform duration-300"
@@ -78,7 +79,7 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
               <Link key={article.id} href={`/article/${article.slug}`}>
                 <div className="relative overflow-hidden rounded-lg shadow-lg group cursor-pointer article-card" data-testid={`featured-secondary-${index}`}>
                   {article.featuredImage ? (
-                    <img
+                    <LazyImage
                       src={article.featuredImage}
                       alt={article.title}
                       className="w-full h-[240px] object-cover group-hover:scale-105 transition-transform duration-300"

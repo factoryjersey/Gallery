@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Link } from "wouter";
 import { useState } from "react";
 import type { ArticleWithDetails } from "@shared/schema";
+import LazyImage from "@/components/LazyImage";
 
 interface ArticleGridProps {
   articles: ArticleWithDetails[];
@@ -105,7 +106,7 @@ export default function ArticleGrid({ articles, isLoading, pagination, onPageCha
             <Card className={`article-card overflow-hidden cursor-pointer ${viewMode === 'list' ? 'md:flex' : ''}`} data-testid={`article-card-${article.slug}`}>
               <div className={`relative overflow-hidden ${viewMode === 'list' ? 'md:w-1/3' : ''}`}>
                 {article.featuredImage ? (
-                  <img
+                  <LazyImage
                     src={article.featuredImage}
                     alt={article.title}
                     className={`w-full object-cover ${viewMode === 'grid' ? 'h-48' : 'h-48 md:h-full'}`}
