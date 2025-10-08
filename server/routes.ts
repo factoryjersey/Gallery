@@ -429,15 +429,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Only import posts (not pages or other post types)
           if (postType !== 'post') continue;
 
-          // Handle categories
-          let category = await storage.getCategoryBySlug('imported');
+          // Parse WordPress categories
+          const categoryElements = item.getElementsByTagName('category');
+          let category = null;
+          
+          // Find the first category with domain="category" (actual post category, not tag)
+          for (let j = 0; j < categoryElements.length; j++) {
+            const catEl = categoryElements[j];
+            const domain = catEl.getAttribute('domain');
+            
+            if (domain === 'category') {
+              const categoryName = catEl.textContent?.trim() || '';
+              const categorySlug = catEl.getAttribute('nicename') || categoryName.toLowerCase().replace(/\s+/g, '-');
+              
+              if (categoryName) {
+                // Check if category exists
+                category = await storage.getCategoryBySlug(categorySlug);
+                
+                if (!category) {
+                  // Create new category from WordPress
+                  category = await storage.createCategory({
+                    name: categoryName,
+                    slug: categorySlug,
+                    description: `Imported from WordPress`,
+                  });
+                  importResults.categories++;
+                }
+                
+                break; // Use first category found
+              }
+            }
+          }
+          
+          // Fallback to Uncategorized if no category found
           if (!category) {
-            category = await storage.createCategory({
-              name: 'Imported',
-              slug: 'imported',
-              description: 'Content imported from WordPress',
-            });
-            importResults.categories++;
+            category = await storage.getCategoryBySlug('uncategorized');
+            if (!category) {
+              category = await storage.createCategory({
+                name: 'Uncategorized',
+                slug: 'uncategorized',
+                description: 'Posts without a category',
+              });
+              importResults.categories++;
+            }
           }
 
           const articleData = {
