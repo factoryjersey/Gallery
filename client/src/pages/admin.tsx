@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,9 @@ import {
   Tags,
   Image,
   Upload,
-  Settings
+  Settings,
+  Home,
+  Eye
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import WordPressImporter from "@/components/WordPressImporter";
@@ -40,13 +43,21 @@ export default function Admin() {
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-bold font-serif">Admin Dashboard</h1>
               <div className="flex items-center space-x-4">
-                <Button variant="secondary" size="sm">
+                <Link href="/">
+                  <Button variant="secondary" size="sm" data-testid="button-view-site">
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Site
+                  </Button>
+                </Link>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-primary-foreground hover:bg-primary-foreground/10"
+                  onClick={() => setActiveTab("articles")}
+                  data-testid="button-new-article"
+                >
                   <PlusCircle className="h-4 w-4 mr-2" />
                   New Article
-                </Button>
-                <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
                 </Button>
               </div>
             </div>
