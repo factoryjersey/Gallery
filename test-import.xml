@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0"
+	xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:wp="http://wordpress.org/export/1.2/">
+
+<channel>
+	<title>Test Magazine</title>
+	<link>http://testsite.com</link>
+	<description>Test WordPress Export</description>
+	<language>en-US</language>
+	<wp:wxr_version>1.2</wp:wxr_version>
+	<wp:base_site_url>http://testsite.com</wp:base_site_url>
+	<wp:base_blog_url>http://testsite.com</wp:base_blog_url>
+
+	<wp:author>
+		<wp:author_id>1</wp:author_id>
+		<wp:author_login>editor</wp:author_login>
+		<wp:author_email>editor@testsite.com</wp:author_email>
+		<wp:author_display_name>Test Editor</wp:author_display_name>
+		<wp:author_first_name>Test</wp:author_first_name>
+		<wp:author_last_name>Editor</wp:author_last_name>
+	</wp:author>
+
+	<wp:category>
+		<wp:term_id>3</wp:term_id>
+		<wp:category_nicename>business</wp:category_nicename>
+		<wp:category_parent></wp:category_parent>
+		<wp:cat_name>Business</wp:cat_name>
+	</wp:category>
+
+	<wp:tag>
+		<wp:term_id>5</wp:term_id>
+		<wp:tag_slug>innovation</wp:tag_slug>
+		<wp:tag_name>Innovation</wp:tag_name>
+	</wp:tag>
+
+	<item>
+		<title>The Rise of Remote Work Culture</title>
+		<link>http://testsite.com/rise-remote-work-culture</link>
+		<pubDate>Mon, 01 Jan 2024 10:00:00 +0000</pubDate>
+		<dc:creator>editor</dc:creator>
+		<guid isPermaLink="false">http://testsite.com/?p=123</guid>
+		<description>How companies are adapting to the new normal of distributed teams.</description>
+		<content:encoded><![CDATA[<p>The landscape of work has fundamentally changed in recent years. More companies are embracing remote work as a permanent fixture rather than a temporary solution.</p>
+
+<h2>The Benefits</h2>
+
+<p>Remote work offers flexibility, improved work-life balance, and access to a global talent pool. Companies are discovering that productivity can actually increase when employees work from home.</p>
+
+<h2>The Challenges</h2>
+
+<p>However, it's not without challenges. Communication, collaboration, and maintaining company culture require new approaches and tools.</p>
+
+<p>Organizations must invest in technology and create intentional processes to keep distributed teams connected and engaged.</p>]]></content:encoded>
+		<excerpt:encoded><![CDATA[How companies are adapting to the new normal of distributed teams.]]></excerpt:encoded>
+		<wp:post_id>123</wp:post_id>
+		<wp:post_date>2024-01-01 10:00:00</wp:post_date>
+		<wp:post_date_gmt>2024-01-01 10:00:00</wp:post_date_gmt>
+		<wp:post_name>rise-remote-work-culture</wp:post_name>
+		<wp:status>publish</wp:status>
+		<wp:post_type>post</wp:post_type>
+		<category domain="category" nicename="business">Business</category>
+		<category domain="post_tag" nicename="innovation">Innovation</category>
+	</item>
+
+</channel>
+</rss>
