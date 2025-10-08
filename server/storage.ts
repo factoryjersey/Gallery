@@ -291,7 +291,7 @@ export class DatabaseStorage implements IStorage {
       orderDir = 'desc',
     } = options;
 
-    let whereCondition = eq(articles.status, status);
+    let whereCondition: any = status === 'all' ? undefined : eq(articles.status, status);
 
     if (categoryId) {
       whereCondition = and(whereCondition, eq(articles.categoryId, categoryId));

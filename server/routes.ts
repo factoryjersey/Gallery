@@ -490,9 +490,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
+          // Check if slug already exists and make it unique
+          let uniqueSlug = slug || `imported-post-${Date.now()}`;
+          let slugExists = await storage.getArticleBySlug(uniqueSlug);
+          let slugCounter = 2;
+          
+          while (slugExists) {
+            uniqueSlug = `${slug}-${slugCounter}`;
+            slugExists = await storage.getArticleBySlug(uniqueSlug);
+            slugCounter++;
+          }
+
           const articleData = {
             title: title || 'Untitled',
-            slug: slug || `imported-post-${Date.now()}`,
+            slug: uniqueSlug,
             excerpt: excerpt || '',
             content: content || '',
             status: status === 'publish' ? 'published' : 'draft',
