@@ -421,10 +421,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const title = getTextContent(item, 'title');
           const content = getTextContent(item, 'content:encoded');
           const excerpt = getTextContent(item, 'excerpt:encoded');
-          const slug = getTextContent(item, 'wp:post_name');
+          let slug = getTextContent(item, 'wp:post_name');
           const status = getTextContent(item, 'wp:status');
           const postType = getTextContent(item, 'wp:post_type');
           const pubDate = getTextContent(item, 'pubDate');
+          
+          // Generate slug from title if wp:post_name is empty
+          if (!slug || slug.trim() === '') {
+            slug = (title || '')
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, '') // Remove special chars
+              .replace(/\s+/g, '-')      // Replace spaces with -
+              .replace(/-+/g, '-')       // Replace multiple - with single -
+              .trim()
+              .replace(/^-+|-+$/g, '');  // Trim - from start/end
+            
+            // Fallback if slug is still empty
+            if (!slug) {
+              slug = `post-${Date.now()}`;
+            }
+          }
 
           // Only import posts (not pages or other post types)
           if (postType !== 'post') continue;

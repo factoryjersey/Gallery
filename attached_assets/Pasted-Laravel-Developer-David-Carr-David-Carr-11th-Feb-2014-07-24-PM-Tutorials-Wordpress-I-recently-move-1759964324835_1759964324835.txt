@@ -1,0 +1,150 @@
+Laravel Developer David Carr
+David Carr
+
+11th Feb 2014 07:24 PM
+Tutorials Wordpress
+
+I recently moved away from Wordpress to my own system, one of the challenges I faced was moving my posts from Wordpress into my own system. I found using the exported XML file was the easiest way to achieve this.
+
+Upon first looking at the XML file I thought using SimpleXML would be the easiest approach. My first attempt enabled me to see the details of the post but the post content and excerpt proved to be a little harder to extract.
+
+The reason for this Wordpress uses namespaces with in the XML feed meaning doing a simple lookup would not work the posts needed to be looped through and extracted separately or using a different namespace lookup.
+
+Searching Google I found a brilliant class on Gists by James King https://gist.github.com/Jamesking56/4773838
+
+<?php
+
+
+/**
+* WordPress class - Manages the WordPress XML file and gets all data from that.
+*/
+class Wordpress
+{
+    public static $wpXML;
+
+    function __construct($wpXML)
+    {
+        $this->wpXML = $wpXML;
+    }
+
+    public function getPosts()
+    {
+        $xml = simplexml_load_file($this->wpXML);
+        $posts = array();
+
+        foreach($xml->channel->item as $item)
+        {
+            $categories = array();
+            foreach($item->category as $category)
+            {
+                //echo $category['domain'];
+                if($category['nicename'] != "uncategorized" && $category['domain'] == "category")
+                {
+                    //echo 'Yep';
+                    $categories[] = $category['nicename'];
+                }
+            }
+
+            $content = $item->children('http://purl.org/rss/1.0/modules/content/');
+            
+            $posts[] = array(
+                "title"=>$item->title,
+                "content"=>$content->encoded,
+                "pubDate"=>$item->pubDate,
+                "categories"=>implode(",", $categories),
+                "slug"=>str_replace("/", "", str_replace("http://blog.jamesking56.co.uk/", "", $item->guid))
+            );
+        }
+
+        return $posts;
+    }
+}
+
+?>
+This class is written very well and got me nearly everything I needed apart from the post's excerpt that was missing from the class but luckily adding that was a simple process. I only needed to add another namespace definition and store that to a variable.
+
+$excerpt = $item->children('http://wordpress.org/export/1.2/excerpt/');
+The class collects the posts adds them to an array and returns the array, This is fine but I wanted to add the posts to the database inside the class rather then getting an array and looping through it again.
+
+A simple change was needed in the class I passed my database reference ($db) then as the array is created I can pass that to the database in one motion.
+
+$wp = new Wordpress('sitename.xml',$db);
+$posts = $wp->getPosts();
+My final class looks like this:
+
+class Wordpress
+{
+    public $wpXML;
+    public $db;
+ 
+    function __construct($wpXML,$db)
+    {
+        $this->wpXML = $wpXML;
+        $this->db = $db;
+    }
+
+    private function _slug($text){ 
+
+      // replace non letter or digits by -
+      $text = preg_replace('~[^\pLd]+~u', '-', $text);
+
+      // trim
+      $text = trim($text, '-');
+
+      // transliterate
+      $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
+
+      // lowercase
+      $text = strtolower($text);
+
+      // remove unwanted characters
+      $text = preg_replace('~[^-w]+~', '', $text);
+
+      if (empty($text))
+      {
+        return 'n-a';
+      }
+
+      return $text;
+    }
+ 
+    public function getPosts()
+    {
+        $xml = simplexml_load_file($this->wpXML);
+        $posts = array();
+ 
+        foreach($xml->channel->item as $item)
+        {
+            $categories = array();
+            foreach($item->category as $category)
+            {
+                //echo $category['domain'];
+                if($category['nicename'] != "uncategorized" && $category['domain'] == "category")
+                {
+                    //echo 'Yep';
+                    $categories[] = $category['nicename'];
+                }
+            }
+ 
+            $content = $item->children('http://purl.org/rss/1.0/modules/content/');
+            $excerpt = $item->children('http://wordpress.org/export/1.2/excerpt/');
+
+                
+
+            $post = array(
+                "postTitle"=>$item[0]->title,
+                "postSlug"=>$this->_slug($item[0]->title),
+                "postCont"=>htmlentities($content->encoded),
+                "postDesc"=>htmlentities($excerpt->encoded),
+                "postDate"=> strftime("%Y-%m-%d %H:%M:%S", strtotime($item[0]->pubDate))
+            );
+
+            $this->db->insert("blog",$post);
+        }
+ 
+        //return $posts;
+    }
+}
+
+$wp = new Wordpress('sitename.xml',$db);
+$posts = $wp->getPosts();
