@@ -18,11 +18,14 @@ import {
   Eye
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
+import ArticleList from "@/components/ArticleList";
+import CategoryList from "@/components/CategoryList";
 import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [showArticleEditor, setShowArticleEditor] = useState(false);
 
   const { data: statsData } = useQuery({
     queryKey: ["/api/stats"],
@@ -53,7 +56,10 @@ export default function Admin() {
                   variant="ghost" 
                   size="sm" 
                   className="text-primary-foreground hover:bg-primary-foreground/10"
-                  onClick={() => setActiveTab("articles")}
+                  onClick={() => {
+                    setActiveTab("articles");
+                    setShowArticleEditor(true);
+                  }}
                   data-testid="button-new-article"
                 >
                   <PlusCircle className="h-4 w-4 mr-2" />
@@ -80,7 +86,10 @@ export default function Admin() {
                   Dashboard
                 </button>
                 <button
-                  onClick={() => setActiveTab("articles")}
+                  onClick={() => {
+                    setActiveTab("articles");
+                    setShowArticleEditor(false);
+                  }}
                   className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
                     activeTab === "articles" 
                       ? "bg-primary text-primary-foreground" 
@@ -237,7 +246,7 @@ export default function Admin() {
               )}
 
               {activeTab === "articles" && (
-                <ArticleEditor />
+                showArticleEditor ? <ArticleEditor /> : <ArticleList />
               )}
 
               {activeTab === "import" && (
@@ -262,16 +271,7 @@ export default function Admin() {
               )}
 
               {activeTab === "categories" && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Categories Management</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      Category management interface coming soon...
-                    </div>
-                  </CardContent>
-                </Card>
+                <CategoryList />
               )}
 
               {activeTab === "media" && (
