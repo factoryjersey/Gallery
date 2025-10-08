@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import WordPressImporter from "@/components/WordPressImporter";
+import WordPressDBMigration from "@/components/WordPressDBMigration";
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -229,7 +230,24 @@ export default function Admin() {
               )}
 
               {activeTab === "import" && (
-                <WordPressImporter />
+                <div className="space-y-6">
+                  <Tabs defaultValue="xml" data-testid="import-tabs">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="xml" data-testid="tab-xml-import">
+                        XML Import
+                      </TabsTrigger>
+                      <TabsTrigger value="database" data-testid="tab-db-import">
+                        Database Migration
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="xml" data-testid="xml-import-content">
+                      <WordPressImporter />
+                    </TabsContent>
+                    <TabsContent value="database" data-testid="db-import-content">
+                      <WordPressDBMigration />
+                    </TabsContent>
+                  </Tabs>
+                </div>
               )}
 
               {activeTab === "categories" && (
