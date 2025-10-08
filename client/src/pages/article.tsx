@@ -12,7 +12,7 @@ export default function Article() {
   const { slug } = useParams();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["/api/articles/by-slug", slug],
+    queryKey: [`/api/articles/by-slug/${slug}`],
   });
 
   if (isLoading) {

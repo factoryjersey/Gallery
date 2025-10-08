@@ -20,13 +20,15 @@ export default function Home() {
     queryKey: ["/api/articles/featured"],
   });
 
+  const queryParams = new URLSearchParams({
+    ...(selectedCategory && { categoryId: selectedCategory }),
+    ...(searchTerm && { search: searchTerm }),
+    page: currentPage.toString(),
+    limit: "6",
+  });
+
   const { data: articlesData, isLoading } = useQuery({
-    queryKey: ["/api/articles", {
-      categoryId: selectedCategory,
-      search: searchTerm,
-      page: currentPage,
-      limit: 6,
-    }],
+    queryKey: [`/api/articles?${queryParams.toString()}`],
   });
 
   const handleCategoryFilter = (categoryId: string) => {

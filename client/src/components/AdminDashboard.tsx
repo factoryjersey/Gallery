@@ -34,7 +34,7 @@ export default function AdminDashboard() {
   });
 
   const { data: articlesData } = useQuery({
-    queryKey: ['/api/articles', { limit: 10, offset: 0 }],
+    queryKey: ['/api/articles?limit=10&offset=0'],
   });
 
   const { data: categories = [] } = useQuery({

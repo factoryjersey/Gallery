@@ -25,7 +25,7 @@ export default function Admin() {
   });
 
   const { data: articlesData } = useQuery({
-    queryKey: ["/api/articles", { status: "all", limit: 10 }],
+    queryKey: ["/api/articles?status=all&limit=10"],
   });
 
   const stats = statsData?.stats;

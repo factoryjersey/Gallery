@@ -170,6 +170,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/categories/by-slug/:slug", async (req, res) => {
+    try {
+      const category = await storage.getCategoryBySlug(req.params.slug);
+      if (!category) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+      res.json({ category });
+    } catch (error) {
+      console.error("Error fetching category by slug:", error);
+      res.status(500).json({ error: "Failed to fetch category" });
+    }
+  });
+
   app.get("/api/categories/:id", async (req, res) => {
     try {
       const category = await storage.getCategory(req.params.id);

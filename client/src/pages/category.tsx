@@ -14,15 +14,12 @@ export default function Category() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const { data: categoryData } = useQuery({
-    queryKey: ["/api/categories/by-slug", slug],
+    queryKey: [`/api/categories/by-slug/${slug}`],
   });
 
   const { data: articlesData, isLoading } = useQuery({
-    queryKey: ["/api/articles", {
-      categorySlug: slug,
-      page: currentPage,
-      limit: 12,
-    }],
+    queryKey: [`/api/articles?categoryId=${categoryData?.category?.id}&page=${currentPage}&limit=12`],
+    enabled: !!categoryData?.category?.id,
   });
 
   if (!categoryData?.category) {

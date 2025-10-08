@@ -180,7 +180,7 @@ export class DatabaseStorage implements IStorage {
 
     if (!result.length || !result[0].author || !result[0].category) return undefined;
 
-    const articleTags = await db
+    const tagResults = await db
       .select({ tag: tags })
       .from(articleTags)
       .leftJoin(tags, eq(articleTags.tagId, tags.id))
@@ -190,7 +190,7 @@ export class DatabaseStorage implements IStorage {
       ...result[0].article,
       author: result[0].author,
       category: result[0].category,
-      tags: articleTags.map(at => at.tag).filter(Boolean) as Tag[],
+      tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
     };
   }
 
@@ -209,7 +209,7 @@ export class DatabaseStorage implements IStorage {
 
     if (!result.length || !result[0].author || !result[0].category) return undefined;
 
-    const articleTags = await db
+    const tagResults = await db
       .select({ tag: tags })
       .from(articleTags)
       .leftJoin(tags, eq(articleTags.tagId, tags.id))
@@ -219,7 +219,7 @@ export class DatabaseStorage implements IStorage {
       ...result[0].article,
       author: result[0].author,
       category: result[0].category,
-      tags: articleTags.map(at => at.tag).filter(Boolean) as Tag[],
+      tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
     };
   }
 
@@ -339,7 +339,7 @@ export class DatabaseStorage implements IStorage {
     for (const row of result) {
       if (!row.author || !row.category) continue;
 
-      const articleTags = await db
+      const tagResults = await db
         .select({ tag: tags })
         .from(articleTags)
         .leftJoin(tags, eq(articleTags.tagId, tags.id))
@@ -349,7 +349,7 @@ export class DatabaseStorage implements IStorage {
         ...row.article,
         author: row.author,
         category: row.category,
-        tags: articleTags.map(at => at.tag).filter(Boolean) as Tag[],
+        tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
       });
     }
 
@@ -393,7 +393,7 @@ export class DatabaseStorage implements IStorage {
     for (const row of result) {
       if (!row.author || !row.category) continue;
 
-      const articleTags = await db
+      const tagResults = await db
         .select({ tag: tags })
         .from(articleTags)
         .leftJoin(tags, eq(articleTags.tagId, tags.id))
@@ -403,7 +403,7 @@ export class DatabaseStorage implements IStorage {
         ...row.article,
         author: row.author,
         category: row.category,
-        tags: articleTags.map(at => at.tag).filter(Boolean) as Tag[],
+        tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
       });
     }
 
