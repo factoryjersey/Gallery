@@ -425,6 +425,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const status = getTextContent(item, 'wp:status');
           const postType = getTextContent(item, 'wp:post_type');
           const pubDate = getTextContent(item, 'pubDate');
+          const wpPostId = getTextContent(item, 'wp:post_id');
+          const wpLink = getTextContent(item, 'link');
+          
+          // Extract WordPress post meta (custom fields)
+          const postMeta: Record<string, string> = {};
+          const postMetaElements = item.getElementsByTagName('wp:postmeta');
+          for (let j = 0; j < postMetaElements.length; j++) {
+            const metaEl = postMetaElements[j];
+            const metaKey = getTextContent(metaEl, 'wp:meta_key');
+            const metaValue = getTextContent(metaEl, 'wp:meta_value');
+            if (metaKey && metaValue) {
+              postMeta[metaKey] = metaValue;
+            }
+          }
           
           // Generate slug from title if wp:post_name is empty
           if (!slug || slug.trim() === '') {
@@ -501,19 +515,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
             slugCounter++;
           }
 
+          // Extract WordPress tags
+          const wpTagIds: string[] = [];
+          for (let j = 0; j < categoryElements.length; j++) {
+            const catEl = categoryElements[j];
+            const domain = catEl.getAttribute('domain');
+            
+            if (domain === 'post_tag') {
+              const tagName = catEl.textContent?.trim() || '';
+              const tagSlug = catEl.getAttribute('nicename') || tagName.toLowerCase().replace(/\s+/g, '-');
+              
+              if (tagName) {
+                let tag = await storage.getTagBySlug(tagSlug);
+                
+                if (!tag) {
+                  tag = await storage.createTag({
+                    name: tagName,
+                    slug: tagSlug,
+                  });
+                  importResults.tags = (importResults.tags || 0) + 1;
+                }
+                
+                wpTagIds.push(tag.id);
+              }
+            }
+          }
+
+          // Extract featured image - try excerpt first, then content
+          let featuredImage = extractFeaturedImage(excerpt || '');
+          if (!featuredImage && content) {
+            featuredImage = extractFeaturedImage(content);
+          }
+          
+          // Extract meta description - prioritize WordPress SEO meta, fallback to excerpt
+          let metaDescription = 
+            postMeta['_yoast_wpseo_metadesc'] || 
+            postMeta['_aioseop_description'] || 
+            postMeta['_genesis_description'] ||
+            undefined;
+          
+          // Fallback to excerpt-based description if no meta found
+          if (!metaDescription && excerpt) {
+            metaDescription = excerpt.replace(/<[^>]*>/g, '').substring(0, 160);
+          }
+
           const articleData = {
             title: title || 'Untitled',
             slug: uniqueSlug,
             excerpt: excerpt || '',
             content: content || '',
+            featuredImage: featuredImage || undefined,
+            metaDescription,
             status: status === 'publish' ? 'published' : 'draft',
             authorId: defaultAuthor.id,
             categoryId: category.id,
             publishedAt: pubDate ? new Date(pubDate) : new Date(),
             readTime: Math.max(1, Math.ceil((content?.length || 0) / 1000)),
+            wpId: wpPostId ? parseInt(wpPostId) : undefined,
+            wpData: {
+              originalLink: wpLink,
+              originalStatus: status,
+              postType: postType,
+              postMeta: Object.keys(postMeta).length > 0 ? postMeta : undefined,
+            },
           };
 
-          await storage.createArticle(articleData);
+          await storage.createArticle(articleData, wpTagIds);
           importResults.articles++;
 
         } catch (error) {
@@ -553,4 +620,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 function getTextContent(parent: Element, tagName: string): string {
   const elements = parent.getElementsByTagName(tagName);
   return elements.length > 0 ? elements[0].textContent || '' : '';
+}
+
+// Helper function to extract featured image URL from HTML content
+function extractFeaturedImage(html: string): string | null {
+  if (!html) return null;
+  
+  // Match first <img> tag and extract src attribute (handles both single and double quotes)
+  const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (imgMatch && imgMatch[1]) {
+    return imgMatch[1];
+  }
+  
+  // Fallback: try data-src for lazy-loaded images
+  const dataSrcMatch = html.match(/<img[^>]+data-src=["']([^"']+)["']/i);
+  if (dataSrcMatch && dataSrcMatch[1]) {
+    return dataSrcMatch[1];
+  }
+  
+  return null;
 }
