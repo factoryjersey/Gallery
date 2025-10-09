@@ -13,11 +13,15 @@ const OLD_WP_URLS = [
   'http://www.gallery.je/wp-content/uploads/',
   '//www.gallery.je/wp-content/uploads/',
 ];
-const NEW_LOCAL_PATH = '/uploads/';
+
+// Get bucket ID from environment
+const BUCKET_ID = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+const NEW_CLOUD_PATH = `https://storage.googleapis.com/${BUCKET_ID}/public/uploads/`;
 
 async function migrateImageUrls() {
   console.log('Starting image URL migration...');
-  console.log(`Replacing WordPress URLs with: ${NEW_LOCAL_PATH}`);
+  console.log(`Bucket ID: ${BUCKET_ID}`);
+  console.log(`Replacing WordPress URLs with: ${NEW_CLOUD_PATH}`);
   console.log('---');
 
   try {
@@ -30,21 +34,21 @@ async function migrateImageUrls() {
       // Update content field
       const contentResult = await db.execute(sql`
         UPDATE articles 
-        SET content = REPLACE(content, ${oldUrl}, ${NEW_LOCAL_PATH})
+        SET content = REPLACE(content, ${oldUrl}, ${NEW_CLOUD_PATH})
         WHERE content LIKE ${`%${oldUrl}%`}
       `);
       
       // Update excerpt field
       const excerptResult = await db.execute(sql`
         UPDATE articles 
-        SET excerpt = REPLACE(excerpt, ${oldUrl}, ${NEW_LOCAL_PATH})
+        SET excerpt = REPLACE(excerpt, ${oldUrl}, ${NEW_CLOUD_PATH})
         WHERE excerpt LIKE ${`%${oldUrl}%`}
       `);
       
       // Update featured_image field
       const featuredResult = await db.execute(sql`
         UPDATE articles 
-        SET featured_image = REPLACE(featured_image, ${oldUrl}, ${NEW_LOCAL_PATH})
+        SET featured_image = REPLACE(featured_image, ${oldUrl}, ${NEW_CLOUD_PATH})
         WHERE featured_image LIKE ${`%${oldUrl}%`}
       `);
 
