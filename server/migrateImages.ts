@@ -8,49 +8,61 @@ import { sql } from 'drizzle-orm';
  * Usage: tsx server/migrateImages.ts
  */
 
-const OLD_WP_URL = 'https://www.gallery.je/wp-content/uploads/';
-const NEW_LOCAL_PATH = '/uploads/'; // Adjust this to match where you placed the uploads folder
+const OLD_WP_URLS = [
+  'https://www.gallery.je/wp-content/uploads/',
+  'http://www.gallery.je/wp-content/uploads/',
+  '//www.gallery.je/wp-content/uploads/',
+];
+const NEW_LOCAL_PATH = '/uploads/';
 
 async function migrateImageUrls() {
   console.log('Starting image URL migration...');
-  console.log(`Replacing: ${OLD_WP_URL}`);
-  console.log(`With: ${NEW_LOCAL_PATH}`);
+  console.log(`Replacing WordPress URLs with: ${NEW_LOCAL_PATH}`);
   console.log('---');
 
   try {
-    // Update content field
-    const contentResult = await db.execute(sql`
-      UPDATE articles 
-      SET content = REPLACE(content, ${OLD_WP_URL}, ${NEW_LOCAL_PATH})
-      WHERE content LIKE ${`%${OLD_WP_URL}%`}
-    `);
-    console.log(`✓ Updated content in ${contentResult.rowCount} articles`);
+    let totalUpdated = 0;
 
-    // Update excerpt field
-    const excerptResult = await db.execute(sql`
-      UPDATE articles 
-      SET excerpt = REPLACE(excerpt, ${OLD_WP_URL}, ${NEW_LOCAL_PATH})
-      WHERE excerpt LIKE ${`%${OLD_WP_URL}%`}
-    `);
-    console.log(`✓ Updated excerpt in ${excerptResult.rowCount} articles`);
+    // Replace each variant of the WordPress URL
+    for (const oldUrl of OLD_WP_URLS) {
+      console.log(`Processing: ${oldUrl}`);
 
-    // Update featured_image field
-    const featuredResult = await db.execute(sql`
-      UPDATE articles 
-      SET featured_image = REPLACE(featured_image, ${OLD_WP_URL}, ${NEW_LOCAL_PATH})
-      WHERE featured_image LIKE ${`%${OLD_WP_URL}%`}
-    `);
-    console.log(`✓ Updated featured_image in ${featuredResult.rowCount} articles`);
+      // Update content field
+      const contentResult = await db.execute(sql`
+        UPDATE articles 
+        SET content = REPLACE(content, ${oldUrl}, ${NEW_LOCAL_PATH})
+        WHERE content LIKE ${`%${oldUrl}%`}
+      `);
+      
+      // Update excerpt field
+      const excerptResult = await db.execute(sql`
+        UPDATE articles 
+        SET excerpt = REPLACE(excerpt, ${oldUrl}, ${NEW_LOCAL_PATH})
+        WHERE excerpt LIKE ${`%${oldUrl}%`}
+      `);
+      
+      // Update featured_image field
+      const featuredResult = await db.execute(sql`
+        UPDATE articles 
+        SET featured_image = REPLACE(featured_image, ${oldUrl}, ${NEW_LOCAL_PATH})
+        WHERE featured_image LIKE ${`%${oldUrl}%`}
+      `);
 
-    // Verification query
+      const updated = (contentResult.rowCount || 0) + (excerptResult.rowCount || 0) + (featuredResult.rowCount || 0);
+      console.log(`  ✓ Updated ${updated} fields`);
+      totalUpdated += updated;
+    }
+
+    // Verification query - check all variants
     const remaining = await db.execute(sql`
       SELECT COUNT(*) as count FROM articles 
-      WHERE content LIKE ${`%${OLD_WP_URL}%`} 
-      OR excerpt LIKE ${`%${OLD_WP_URL}%`} 
-      OR featured_image LIKE ${`%${OLD_WP_URL}%`}
+      WHERE content LIKE '%www.gallery.je/wp-content/uploads/%'
+      OR excerpt LIKE '%www.gallery.je/wp-content/uploads/%'
+      OR featured_image LIKE '%www.gallery.je/wp-content/uploads/%'
     `);
     
     console.log('---');
+    console.log(`Total fields updated: ${totalUpdated}`);
     console.log(`Remaining WordPress URLs: ${remaining.rows[0].count}`);
     console.log('Migration complete!');
   } catch (error) {
