@@ -41,6 +41,7 @@ export interface IStorage {
   // Article methods
   getArticle(id: string): Promise<ArticleWithDetails | undefined>;
   getArticleBySlug(slug: string): Promise<ArticleWithDetails | undefined>;
+  getArticleByWpId(wpId: number): Promise<ArticleWithDetails | undefined>;
   createArticle(article: InsertArticle, tagIds?: string[]): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>, tagIds?: string[]): Promise<Article | undefined>;
   deleteArticle(id: string): Promise<boolean>;
@@ -211,6 +212,35 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(authors, eq(articles.authorId, authors.id))
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .where(eq(articles.slug, slug))
+      .limit(1);
+
+    if (!result.length || !result[0].author || !result[0].category) return undefined;
+
+    const tagResults = await db
+      .select({ tag: tags })
+      .from(articleTags)
+      .leftJoin(tags, eq(articleTags.tagId, tags.id))
+      .where(eq(articleTags.articleId, result[0].article.id));
+
+    return {
+      ...result[0].article,
+      author: result[0].author,
+      category: result[0].category,
+      tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
+    };
+  }
+
+  async getArticleByWpId(wpId: number): Promise<ArticleWithDetails | undefined> {
+    const result = await db
+      .select({
+        article: articles,
+        author: authors,
+        category: categories,
+      })
+      .from(articles)
+      .leftJoin(authors, eq(articles.authorId, authors.id))
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .where(eq(articles.wpId, wpId))
       .limit(1);
 
     if (!result.length || !result[0].author || !result[0].category) return undefined;

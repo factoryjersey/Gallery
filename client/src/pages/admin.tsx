@@ -23,6 +23,7 @@ import CategoryList from "@/components/CategoryList";
 import AuthorList from "@/components/AuthorList";
 import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
+import WordPressAuthorUpdater from "@/components/WordPressAuthorUpdater";
 import { ImageAnalysis } from "@/components/ImageAnalysis";
 
 export default function Admin() {
@@ -266,9 +267,12 @@ export default function Admin() {
               {activeTab === "import" && (
                 <div className="space-y-6">
                   <Tabs defaultValue="xml" data-testid="import-tabs">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className="grid w-full grid-cols-3">
                       <TabsTrigger value="xml" data-testid="tab-xml-import">
-                        XML Import
+                        Full Import
+                      </TabsTrigger>
+                      <TabsTrigger value="authors" data-testid="tab-authors-update">
+                        Update Authors
                       </TabsTrigger>
                       <TabsTrigger value="database" data-testid="tab-db-import">
                         Database Migration
@@ -276,6 +280,9 @@ export default function Admin() {
                     </TabsList>
                     <TabsContent value="xml" data-testid="xml-import-content">
                       <WordPressImporter />
+                    </TabsContent>
+                    <TabsContent value="authors" data-testid="authors-update-content">
+                      <WordPressAuthorUpdater />
                     </TabsContent>
                     <TabsContent value="database" data-testid="db-import-content">
                       <WordPressDBMigration />

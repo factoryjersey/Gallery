@@ -660,6 +660,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // WordPress author update (preserves content and images)
+  app.post("/api/admin/wordpress-update-authors", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const xmlContent = req.file.buffer.toString('utf-8');
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+      
+      const items = Array.from(xmlDoc.getElementsByTagName('item'));
+      
+      const updateResults = {
+        totalPosts: items.length,
+        authorsCreated: 0,
+        articlesUpdated: 0,
+        articlesNotFound: 0,
+        errors: [] as string[],
+      };
+
+      // Cache for WordPress authors
+      const authorCache = new Map<string, any>();
+
+      for (let i = 0; i < items.length; i++) {
+        try {
+          const item = items[i];
+          const postType = getTextContent(item, 'wp:post_type');
+          const status = getTextContent(item, 'wp:status');
+          
+          // Only process published/draft posts
+          if (postType !== 'post' || !['publish', 'draft'].includes(status)) {
+            continue;
+          }
+
+          const wpPostId = getTextContent(item, 'wp:post_id');
+          const wpAuthorName = getTextContent(item, 'dc:creator');
+
+          if (!wpPostId) {
+            continue;
+          }
+
+          // Get or create author
+          let author;
+          const authorName = wpAuthorName || 'Imported Author';
+          
+          if (authorCache.has(authorName)) {
+            author = authorCache.get(authorName);
+          } else {
+            const authorEmail = `${authorName.toLowerCase().replace(/\s+/g, '.')}@imported.local`;
+            
+            let existingAuthor = await storage.getAuthorByEmail(authorEmail);
+            if (!existingAuthor) {
+              existingAuthor = await storage.createAuthor({
+                name: authorName,
+                email: authorEmail,
+                bio: '',
+              });
+              updateResults.authorsCreated++;
+            }
+            
+            author = existingAuthor;
+            authorCache.set(authorName, author);
+          }
+
+          // Find existing article by wpId
+          const existingArticle = await storage.getArticleByWpId(parseInt(wpPostId));
+          
+          if (existingArticle) {
+            // Update only the author, preserve everything else
+            await storage.updateArticle(existingArticle.id, {
+              authorId: author.id,
+            });
+            updateResults.articlesUpdated++;
+          } else {
+            updateResults.articlesNotFound++;
+          }
+
+        } catch (error) {
+          console.error(`Error updating item ${i}:`, error);
+          updateResults.errors.push(`Item ${i}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Author update completed`,
+        results: updateResults,
+      });
+
+    } catch (error) {
+      console.error("Error updating WordPress authors:", error);
+      res.status(500).json({ error: "Failed to update WordPress authors" });
+    }
+  });
+
   // Image usage analysis endpoint
   app.get("/api/admin/image-analysis", async (req, res) => {
     try {
