@@ -25,38 +25,33 @@ import { format } from "date-fns";
 export default function ArticleList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+
+  const queryParams = new URLSearchParams({
+    status: 'all',
+    ...(searchTerm && { search: searchTerm }),
+    ...(selectedYear !== "all" && { year: selectedYear }),
+    page: currentPage.toString(),
+    limit: itemsPerPage.toString(),
+  });
 
   const { data: articlesData, isLoading } = useQuery({
-    queryKey: ["/api/articles?status=all&limit=10000"],
+    queryKey: [`/api/articles?${queryParams.toString()}`],
   });
 
   const articles = articlesData?.articles || [];
+  const pagination = articlesData?.pagination;
   
-  // Extract unique years from articles
+  // Generate available years (2008-2025)
   const availableYears = useMemo(() => {
-    const years = new Set<number>();
-    articles.forEach((article: any) => {
-      if (article.publishedAt) {
-        const year = new Date(article.publishedAt).getFullYear();
-        years.add(year);
-      }
-    });
-    return Array.from(years).sort((a, b) => b - a);
-  }, [articles]);
-
-  const filteredArticles = articles.filter((article: any) => {
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = (
-      (article.title ?? '').toLowerCase().includes(searchLower) ||
-      (article.category?.name ?? '').toLowerCase().includes(searchLower) ||
-      (article.author?.name ?? '').toLowerCase().includes(searchLower)
-    );
-
-    const matchesYear = selectedYear === "all" || 
-      (article.publishedAt && new Date(article.publishedAt).getFullYear() === parseInt(selectedYear));
-
-    return matchesSearch && matchesYear;
-  });
+    const currentYear = new Date().getFullYear();
+    const years: number[] = [];
+    for (let year = 2008; year <= currentYear; year++) {
+      years.push(year);
+    }
+    return years.reverse(); // Show newest first
+  }, []);
 
   if (isLoading) {
     return (
@@ -102,9 +97,9 @@ export default function ArticleList() {
 
       <Card>
         <CardContent className="p-0">
-          {filteredArticles.length === 0 ? (
+          {articles.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchTerm ? "No articles found matching your search." : "No articles yet. Create your first article!"}
+              {searchTerm || selectedYear !== "all" ? "No articles found matching your filters." : "No articles yet. Create your first article!"}
             </div>
           ) : (
             <Table>
@@ -120,7 +115,7 @@ export default function ArticleList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredArticles.map((article: any) => (
+                {articles.map((article: any) => (
                   <TableRow key={article.id} data-testid={`row-article-${article.id}`}>
                     <TableCell className="font-medium max-w-xs truncate">
                       {article.title}
@@ -178,9 +173,51 @@ export default function ArticleList() {
         </CardContent>
       </Card>
 
-      <div className="text-sm text-muted-foreground">
-        Showing {filteredArticles.length} of {articles.length} articles
-      </div>
+      {pagination && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} articles
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="text-sm text-muted-foreground mr-4">
+              Items per page:
+              <select 
+                value={itemsPerPage} 
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="ml-2 border rounded px-2 py-1 bg-background"
+                data-testid="select-items-per-page"
+              >
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(currentPage - 1)}
+              data-testid="pagination-prev"
+            >
+              Previous
+            </Button>
+            <div className="text-sm">
+              Page {pagination.page} of {pagination.totalPages}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= pagination.totalPages}
+              onClick={() => setCurrentPage(currentPage + 1)}
+              data-testid="pagination-next"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

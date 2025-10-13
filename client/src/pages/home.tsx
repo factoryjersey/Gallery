@@ -12,6 +12,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const { data: categoriesData } = useQuery({
     queryKey: ["/api/categories"],
@@ -26,7 +27,7 @@ export default function Home() {
     ...(searchTerm && { search: searchTerm }),
     ...(selectedYear !== "all" && { year: selectedYear }),
     page: currentPage.toString(),
-    limit: "6",
+    limit: itemsPerPage.toString(),
   });
 
   const { data: articlesData, isLoading } = useQuery({
@@ -58,6 +59,11 @@ export default function Home() {
     setCurrentPage(1);
   };
 
+  const handleItemsPerPageChange = (newLimit: number) => {
+    setItemsPerPage(newLimit);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header onSearch={handleSearch} />
@@ -82,6 +88,8 @@ export default function Home() {
                 isLoading={isLoading}
                 pagination={articlesData?.pagination}
                 onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={handleItemsPerPageChange}
               />
             </div>
             <div className="lg:col-span-1">

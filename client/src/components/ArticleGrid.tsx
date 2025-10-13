@@ -18,9 +18,18 @@ interface ArticleGridProps {
     totalPages: number;
   };
   onPageChange?: (page: number) => void;
+  itemsPerPage?: number;
+  onItemsPerPageChange?: (limit: number) => void;
 }
 
-export default function ArticleGrid({ articles, isLoading, pagination, onPageChange }: ArticleGridProps) {
+export default function ArticleGrid({ 
+  articles, 
+  isLoading, 
+  pagination, 
+  onPageChange,
+  itemsPerPage = 20,
+  onItemsPerPageChange
+}: ArticleGridProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   if (isLoading) {
@@ -158,53 +167,77 @@ export default function ArticleGrid({ articles, isLoading, pagination, onPageCha
       </div>
 
       {/* Pagination */}
-      {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-center space-x-2 mt-8" data-testid="pagination">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pagination.page <= 1}
-            onClick={() => handlePageChange(pagination.page - 1)}
-            data-testid="pagination-prev"
-          >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Previous
-          </Button>
+      {pagination && (
+        <div className="mt-8 space-y-4">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <div>
+              Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} articles
+            </div>
+            {onItemsPerPageChange && (
+              <div className="flex items-center space-x-2">
+                <span>Items per page:</span>
+                <select 
+                  value={itemsPerPage} 
+                  onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+                  className="border rounded px-2 py-1 bg-background"
+                  data-testid="select-items-per-page"
+                >
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            )}
+          </div>
           
-          {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-            let pageNumber;
-            if (pagination.totalPages <= 5) {
-              pageNumber = i + 1;
-            } else {
-              const start = Math.max(1, pagination.page - 2);
-              const end = Math.min(pagination.totalPages, start + 4);
-              pageNumber = start + i;
-              if (pageNumber > end) return null;
-            }
-
-            return (
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-center space-x-2" data-testid="pagination">
               <Button
-                key={pageNumber}
-                variant={pageNumber === pagination.page ? "default" : "outline"}
+                variant="outline"
                 size="sm"
-                onClick={() => handlePageChange(pageNumber)}
-                data-testid={`pagination-${pageNumber}`}
+                disabled={pagination.page <= 1}
+                onClick={() => handlePageChange(pagination.page - 1)}
+                data-testid="pagination-prev"
               >
-                {pageNumber}
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Previous
               </Button>
-            );
-          })}
-          
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pagination.page >= pagination.totalPages}
-            onClick={() => handlePageChange(pagination.page + 1)}
-            data-testid="pagination-next"
-          >
-            Next
-            <ChevronRight className="h-4 w-4 ml-2" />
-          </Button>
+              
+              {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                let pageNumber;
+                if (pagination.totalPages <= 5) {
+                  pageNumber = i + 1;
+                } else {
+                  const start = Math.max(1, pagination.page - 2);
+                  const end = Math.min(pagination.totalPages, start + 4);
+                  pageNumber = start + i;
+                  if (pageNumber > end) return null;
+                }
+
+                return (
+                  <Button
+                    key={pageNumber}
+                    variant={pageNumber === pagination.page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNumber)}
+                    data-testid={`pagination-${pageNumber}`}
+                  >
+                    {pageNumber}
+                  </Button>
+                );
+              })}
+              
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.page >= pagination.totalPages}
+                onClick={() => handlePageChange(pagination.page + 1)}
+                data-testid="pagination-next"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
