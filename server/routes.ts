@@ -263,6 +263,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/authors/:id", async (req, res) => {
+    try {
+      const validatedData = insertAuthorSchema.partial().parse(req.body);
+      const author = await storage.updateAuthor(req.params.id, validatedData);
+      if (!author) {
+        return res.status(404).json({ error: "Author not found" });
+      }
+      res.json({ author });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid author data", details: error.errors });
+      }
+      console.error("Error updating author:", error);
+      res.status(500).json({ error: "Failed to update author" });
+    }
+  });
+
   app.delete("/api/authors/:id", async (req, res) => {
     try {
       const success = await storage.deleteAuthor(req.params.id);

@@ -63,6 +63,23 @@ export default function AuthorList() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name: string; email: string; bio: string } }) =>
+      apiRequest(`/api/authors/${id}`, "PUT", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/authors"] });
+      toast({ title: "Author updated successfully" });
+      setIsDialogOpen(false);
+      resetForm();
+    },
+    onError: () => {
+      toast({ 
+        title: "Failed to update author", 
+        variant: "destructive" 
+      });
+    },
+  });
+
   const deleteAuthorMutation = useMutation({
     mutationFn: (id: string) =>
       apiRequest(`/api/authors/${id}`, "DELETE", {}),
@@ -83,6 +100,16 @@ export default function AuthorList() {
     setEditingAuthor(null);
   };
 
+  const handleEdit = (author: Author) => {
+    setEditingAuthor(author);
+    setFormData({
+      name: author.name,
+      email: author.email,
+      bio: author.bio || "",
+    });
+    setIsDialogOpen(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) {
@@ -92,7 +119,12 @@ export default function AuthorList() {
       });
       return;
     }
-    createMutation.mutate(formData);
+    
+    if (editingAuthor) {
+      updateMutation.mutate({ id: editingAuthor.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
   };
 
   const authors = authorsData?.authors || [];
@@ -162,10 +194,14 @@ export default function AuthorList() {
                   </Button>
                   <Button 
                     type="submit" 
-                    disabled={createMutation.isPending}
+                    disabled={createMutation.isPending || updateMutation.isPending}
                     data-testid="button-save-author"
                   >
-                    {createMutation.isPending ? "Saving..." : "Save Author"}
+                    {(createMutation.isPending || updateMutation.isPending) 
+                      ? "Saving..." 
+                      : editingAuthor 
+                        ? "Update Author" 
+                        : "Create Author"}
                   </Button>
                 </div>
               </form>
@@ -200,6 +236,14 @@ export default function AuthorList() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEdit(author)}
+                        data-testid={`button-edit-author-${author.id}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="destructive"
                         size="sm"
