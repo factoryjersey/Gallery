@@ -21,6 +21,7 @@ export interface IStorage {
   getAuthorByEmail(email: string): Promise<Author | undefined>;
   createAuthor(author: InsertAuthor): Promise<Author>;
   updateAuthor(id: string, author: Partial<InsertAuthor>): Promise<Author | undefined>;
+  deleteAuthor(id: string): Promise<boolean>;
   getAllAuthors(): Promise<Author[]>;
 
   // Category methods
@@ -108,6 +109,11 @@ export class DatabaseStorage implements IStorage {
   async updateAuthor(id: string, author: Partial<InsertAuthor>): Promise<Author | undefined> {
     const [updated] = await db.update(authors).set(author).where(eq(authors.id, id)).returning();
     return updated || undefined;
+  }
+
+  async deleteAuthor(id: string): Promise<boolean> {
+    const result = await db.delete(authors).where(eq(authors.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   async getAllAuthors(): Promise<Author[]> {

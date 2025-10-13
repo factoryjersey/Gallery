@@ -20,6 +20,7 @@ import {
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
 import CategoryList from "@/components/CategoryList";
+import AuthorList from "@/components/AuthorList";
 import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
 
@@ -111,6 +112,18 @@ export default function Admin() {
                 >
                   <FolderOpen className="w-5 h-5 mr-3" />
                   Categories
+                </button>
+                <button
+                  onClick={() => setActiveTab("authors")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "authors" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-authors"
+                >
+                  <Users className="w-5 h-5 mr-3" />
+                  Authors
                 </button>
                 <button
                   onClick={() => setActiveTab("media")}
@@ -272,6 +285,10 @@ export default function Admin() {
 
               {activeTab === "categories" && (
                 <CategoryList />
+              )}
+
+              {activeTab === "authors" && (
+                <AuthorList />
               )}
 
               {activeTab === "media" && (

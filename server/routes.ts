@@ -263,6 +263,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/authors/:id", async (req, res) => {
+    try {
+      const success = await storage.deleteAuthor(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Author not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting author:", error);
+      res.status(500).json({ error: "Failed to delete author" });
+    }
+  });
+
   // Media and Object Storage
   app.get("/objects/:objectPath(*)", async (req, res) => {
     const objectStorageService = new ObjectStorageService();
