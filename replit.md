@@ -27,6 +27,14 @@ Preferred communication style: Simple, everyday language.
 - Custom theming system using CSS variables for easy brand customization
 - Responsive design prioritizing mobile-first approach
 
+**Image Gallery & Lightbox (NEW - October 2025):**
+- **Library:** yet-another-react-lightbox for full-screen image viewing
+- **Auto-Detection:** ArticleGallery component automatically detects consecutive `wp-block-image` elements
+- **Gallery Grouping:** 3+ consecutive images are wrapped in a grid layout (`gallery-grid`)
+- **Click Behavior:** All article images are clickable and open in lightbox
+- **Navigation:** Keyboard (arrows, ESC) and click navigation through all images
+- **WordPress Support:** Handles both Gutenberg block images and classic WordPress galleries
+
 ### Backend Architecture
 
 **Technology Stack:**

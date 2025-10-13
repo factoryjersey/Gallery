@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
+import ArticleGallery from "@/components/ArticleGallery";
 
 export default function Article() {
   const { slug } = useParams();
@@ -129,10 +130,9 @@ export default function Article() {
         )}
 
         {/* Article Content */}
-        <div 
+        <ArticleGallery 
+          content={article.content}
           className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-bold prose-p:text-foreground prose-p:leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: article.content }}
-          data-testid="article-content"
         />
 
         {/* Article Footer */}
