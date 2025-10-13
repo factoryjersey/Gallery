@@ -660,6 +660,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Image usage analysis endpoint
+  app.get("/api/admin/image-analysis", async (req, res) => {
+    try {
+      // Fetch all articles (no pagination, get all)
+      const allArticles = await storage.getArticles({
+        status: undefined, // Get all statuses
+        limit: 100000, // Very high limit to get all
+        offset: 0,
+        orderBy: 'publishedAt',
+        orderDir: 'desc',
+      });
+
+      // Extract all image URLs from article content
+      const imageUrlPattern = /https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^\s"'<>)]+\.(jpg|jpeg|png|gif|webp)/gi;
+      const usedImages = new Set<string>();
+
+      for (const article of allArticles.articles) {
+        // Check featured image
+        if (article.featuredImage) {
+          usedImages.add(article.featuredImage);
+        }
+
+        // Check content for images
+        if (article.content) {
+          const matches = article.content.matchAll(imageUrlPattern);
+          for (const match of matches) {
+            usedImages.add(match[0]);
+          }
+        }
+      }
+
+      // Extract just the path (everything after .r2.dev/)
+      const usedPaths = Array.from(usedImages).map(url => {
+        const match = url.match(/https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/(.+)/);
+        return match ? match[1] : url;
+      });
+
+      // Group by year and file
+      const pathsByYear: Record<string, string[]> = {};
+      for (const path of usedPaths) {
+        const yearMatch = path.match(/^(\d{4})\//);
+        const year = yearMatch ? yearMatch[1] : 'unknown';
+        if (!pathsByYear[year]) {
+          pathsByYear[year] = [];
+        }
+        pathsByYear[year].push(path);
+      }
+
+      res.json({
+        totalArticles: allArticles.total,
+        totalImagesUsed: usedImages.size,
+        usedImageUrls: Array.from(usedImages).sort(),
+        usedPaths: usedPaths.sort(),
+        pathsByYear,
+        summary: {
+          totalImages: usedImages.size,
+          byYear: Object.keys(pathsByYear).sort().reduce((acc, year) => {
+            acc[year] = pathsByYear[year].length;
+            return acc;
+          }, {} as Record<string, number>)
+        }
+      });
+    } catch (error) {
+      console.error("Error analyzing image usage:", error);
+      res.status(500).json({ error: "Failed to analyze image usage" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

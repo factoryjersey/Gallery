@@ -23,6 +23,7 @@ import CategoryList from "@/components/CategoryList";
 import AuthorList from "@/components/AuthorList";
 import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
+import { ImageAnalysis } from "@/components/ImageAnalysis";
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -292,16 +293,7 @@ export default function Admin() {
               )}
 
               {activeTab === "media" && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Media Library</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-center py-8 text-muted-foreground">
-                      Media library interface coming soon...
-                    </div>
-                  </CardContent>
-                </Card>
+                <ImageAnalysis />
               )}
             </div>
           </div>
