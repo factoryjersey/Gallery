@@ -49,6 +49,13 @@ Preferred communication style: Simple, everyday language.
 - **Preserved Styles:** text-align for intentional alignment
 - **Result:** Consistent typography across all body copy using global CSS styles
 
+**Author Management (NEW - October 2025):**
+- **WordPress Import:** Automatically extracts and creates individual authors from `dc:creator` XML tags
+- **Admin Dashboard:** Full CRUD operations (Create, Read, Update, Delete) for managing authors
+- **Author Caching:** Import process caches authors to avoid duplicates during batch imports
+- **Article Editor:** Author dropdown selection integrated into article creation/editing workflow
+- **Email Generation:** Auto-generates unique emails for imported WordPress authors (@imported.local domain)
+
 ### Backend Architecture
 
 **Technology Stack:**
