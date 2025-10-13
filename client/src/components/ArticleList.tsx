@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -10,6 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -21,12 +32,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Search, Edit, Eye, Trash2, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import { useLocation } from "wouter";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ArticleList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string>("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [articleToDelete, setArticleToDelete] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const queryParams = new URLSearchParams({
     status: 'all',
@@ -52,6 +72,104 @@ export default function ArticleList() {
     }
     return years.reverse(); // Show newest first
   }, []);
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (articleId: string) => {
+      return await apiRequest(`/api/articles/${articleId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      // Invalidate all article queries by matching keys that start with /api/articles
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/articles');
+        }
+      });
+      toast({
+        title: "Success",
+        description: "Article deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete article",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (articleIds: string[]) => {
+      await Promise.all(
+        articleIds.map(id => apiRequest(`/api/articles/${id}`, { method: 'DELETE' }))
+      );
+    },
+    onSuccess: () => {
+      // Invalidate all article queries by matching keys that start with /api/articles
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/articles');
+        }
+      });
+      setSelectedArticles(new Set());
+      toast({
+        title: "Success",
+        description: `${selectedArticles.size} articles deleted successfully`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete articles",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Handlers
+  const toggleArticle = (articleId: string) => {
+    const newSelected = new Set(selectedArticles);
+    if (newSelected.has(articleId)) {
+      newSelected.delete(articleId);
+    } else {
+      newSelected.add(articleId);
+    }
+    setSelectedArticles(newSelected);
+  };
+
+  const toggleAll = () => {
+    if (selectedArticles.size === articles.length) {
+      setSelectedArticles(new Set());
+    } else {
+      setSelectedArticles(new Set(articles.map(a => a.id)));
+    }
+  };
+
+  const handleBulkAction = () => {
+    if (bulkAction === 'delete' && selectedArticles.size > 0) {
+      bulkDeleteMutation.mutate(Array.from(selectedArticles));
+      setBulkAction('');
+    }
+  };
+
+  const handleDelete = (articleId: string) => {
+    setArticleToDelete(articleId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (articleToDelete) {
+      deleteMutation.mutate(articleToDelete);
+      setDeleteDialogOpen(false);
+      setArticleToDelete(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -95,6 +213,28 @@ export default function ArticleList() {
         </div>
       </div>
 
+      {/* Bulk Actions */}
+      {selectedArticles.size > 0 && (
+        <div className="flex items-center space-x-2 bg-muted p-3 rounded-md">
+          <span className="text-sm font-medium">{selectedArticles.size} selected</span>
+          <Select value={bulkAction} onValueChange={setBulkAction}>
+            <SelectTrigger className="w-[180px]" data-testid="select-bulk-action">
+              <SelectValue placeholder="Bulk Actions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="delete">Delete</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button 
+            onClick={handleBulkAction} 
+            disabled={!bulkAction || bulkDeleteMutation.isPending}
+            data-testid="button-apply-bulk"
+          >
+            Apply
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           {articles.length === 0 ? (
@@ -105,6 +245,13 @@ export default function ArticleList() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox 
+                      checked={selectedArticles.size === articles.length && articles.length > 0}
+                      onCheckedChange={toggleAll}
+                      data-testid="checkbox-select-all"
+                    />
+                  </TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Author</TableHead>
@@ -117,6 +264,13 @@ export default function ArticleList() {
               <TableBody>
                 {articles.map((article: any) => (
                   <TableRow key={article.id} data-testid={`row-article-${article.id}`}>
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedArticles.has(article.id)}
+                        onCheckedChange={() => toggleArticle(article.id)}
+                        data-testid={`checkbox-${article.id}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium max-w-xs truncate">
                       {article.title}
                     </TableCell>
@@ -145,6 +299,7 @@ export default function ArticleList() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => setLocation(`/article/${article.slug}`)}
                           data-testid={`button-view-${article.id}`}
                         >
                           <Eye className="h-4 w-4" />
@@ -152,6 +307,7 @@ export default function ArticleList() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => setLocation(`/admin/articles/edit/${article.id}`)}
                           data-testid={`button-edit-${article.id}`}
                         >
                           <Edit className="h-4 w-4" />
@@ -159,6 +315,8 @@ export default function ArticleList() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleDelete(article.id)}
+                          disabled={deleteMutation.isPending}
                           data-testid={`button-delete-${article.id}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -218,6 +376,24 @@ export default function ArticleList() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the article.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
