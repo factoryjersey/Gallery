@@ -15,12 +15,7 @@ const OLD_WP_URLS = [
 ];
 
 // Cloudflare R2 Configuration
-// Update this with your R2 bucket URL after you set it up
-// Options:
-// 1. R2 public bucket: https://pub-xxxxx.r2.dev/uploads/
-// 2. Custom domain: https://cdn.yourdomain.com/uploads/
-// 3. R2 custom subdomain: https://images.yourdomain.com/uploads/
-const R2_BASE_URL = process.env.R2_PUBLIC_URL || 'https://YOUR_R2_BUCKET.r2.dev';
+const R2_BASE_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
 const NEW_CLOUD_PATH = `${R2_BASE_URL}/uploads/`;
 
 async function migrateImageUrls() {
