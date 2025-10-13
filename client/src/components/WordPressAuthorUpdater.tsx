@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Upload, CheckCircle, AlertCircle, Users } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
 
 interface UpdateResults {
   totalPosts: number;
@@ -24,13 +23,18 @@ export default function WordPressAuthorUpdater() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await apiRequest("/api/admin/wordpress-update-authors", {
+      const response = await fetch("/api/admin/wordpress-update-authors", {
         method: "POST",
         body: formData,
-        isFormData: true,
+        credentials: "include",
       });
 
-      return response;
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`${response.status}: ${text}`);
+      }
+
+      return await response.json();
     },
     onSuccess: (data: any) => {
       setUpdateResults(data.results);
