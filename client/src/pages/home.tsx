@@ -49,8 +49,14 @@ export default function Home() {
     setCurrentPage(1);
   };
 
-  const handleSearch = (search: string) => {
+  const handleSearch = (search: string, category?: string, year?: string) => {
     setSearchTerm(search);
+    if (category) {
+      setSelectedCategory(category);
+    }
+    if (year) {
+      setSelectedYear(year);
+    }
     setCurrentPage(1);
   };
 

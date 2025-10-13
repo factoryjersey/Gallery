@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Search, 
   Menu, 
@@ -16,13 +17,15 @@ import {
 import { useQuery } from "@tanstack/react-query";
 
 interface HeaderProps {
-  onSearch?: (search: string) => void;
+  onSearch?: (search: string, category?: string, year?: string) => void;
 }
 
 export default function Header({ onSearch }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchCategory, setSearchCategory] = useState<string>("all");
+  const [searchYear, setSearchYear] = useState<string>("all");
 
   const { data: categoriesData } = useQuery({
     queryKey: ["/api/categories"],
@@ -35,13 +38,28 @@ export default function Header({ onSearch }: HeaderProps) {
     day: "numeric"
   });
 
+  // Generate available years (2008-2025)
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years: number[] = [];
+    for (let year = 2008; year <= currentYear; year++) {
+      years.push(year);
+    }
+    return years.reverse(); // Show newest first
+  }, []);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch?.(searchTerm);
+    onSearch?.(
+      searchTerm, 
+      searchCategory === "all" ? undefined : searchCategory,
+      searchYear === "all" ? undefined : searchYear
+    );
     setIsSearchExpanded(false);
   };
 
   const categories = categoriesData?.categories?.slice(0, 6) || [];
+  const allCategories = categoriesData?.categories || [];
 
   return (
     <header className="bg-background border-b border-border sticky top-0 z-50 shadow-sm">
@@ -131,24 +149,51 @@ export default function Header({ onSearch }: HeaderProps) {
         {/* Search Bar */}
         {isSearchExpanded && (
           <div className="pb-4" data-testid="search-bar">
-            <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto">
-              <Input
-                type="text"
-                placeholder="Search articles..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pr-12"
-                data-testid="search-input"
-              />
-              <Button
-                type="submit"
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2"
-                data-testid="search-submit"
-              >
-                <Search className="h-4 w-4" />
-              </Button>
+            <form onSubmit={handleSearch} className="max-w-4xl mx-auto space-y-3">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <Input
+                    type="text"
+                    placeholder="Search articles by title or content..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    data-testid="search-input"
+                  />
+                </div>
+                <Select value={searchCategory} onValueChange={setSearchCategory}>
+                  <SelectTrigger className="w-[180px]" data-testid="search-category-filter">
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {allCategories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={searchYear} onValueChange={setSearchYear}>
+                  <SelectTrigger className="w-[140px]" data-testid="search-year-filter">
+                    <SelectValue placeholder="All Years" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Years</SelectItem>
+                    {availableYears.map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="submit"
+                  data-testid="search-submit"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Search
+                </Button>
+              </div>
             </form>
           </div>
         )}
