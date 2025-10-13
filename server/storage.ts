@@ -275,6 +275,7 @@ export class DatabaseStorage implements IStorage {
     categoryId?: string;
     authorId?: string;
     search?: string;
+    year?: string;
     limit?: number;
     offset?: number;
     orderBy?: 'publishedAt' | 'createdAt' | 'views' | 'title';
@@ -285,6 +286,7 @@ export class DatabaseStorage implements IStorage {
       categoryId,
       authorId,
       search,
+      year,
       limit = 10,
       offset = 0,
       orderBy = 'publishedAt',
@@ -309,6 +311,14 @@ export class DatabaseStorage implements IStorage {
           like(articles.excerpt, `%${search}%`),
           like(articles.content, `%${search}%`)
         )
+      );
+    }
+
+    if (year) {
+      // Filter by year using SQL EXTRACT function
+      whereCondition = and(
+        whereCondition,
+        sql`EXTRACT(YEAR FROM ${articles.publishedAt}) = ${year}`
       );
     }
 

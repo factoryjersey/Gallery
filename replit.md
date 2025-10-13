@@ -35,6 +35,20 @@ Preferred communication style: Simple, everyday language.
 - **Navigation:** Keyboard (arrows, ESC) and click navigation through all images
 - **WordPress Support:** Handles both Gutenberg block images and classic WordPress galleries
 
+**Year Filter (NEW - October 2025):**
+- **Frontend:** Year dropdown filter on homepage alongside category filters
+- **Range:** Dynamically shows years 2008-2025 (newest first)
+- **Default:** "All Years" shows all articles
+- **Backend:** SQL EXTRACT function filters by `published_at` year
+- **Combined Filtering:** Works seamlessly with category and search filters
+- **Admin Dashboard:** Also available in admin article list for content review
+
+**Typography & Content Cleanup (October 2025):**
+- **Inline Style Removal:** Cleaned 2,447 articles (86% of total) to remove inline font formatting
+- **Removed Styles:** font-family, font-size, color, font-weight, font-style
+- **Preserved Styles:** text-align for intentional alignment
+- **Result:** Consistent typography across all body copy using global CSS styles
+
 ### Backend Architecture
 
 **Technology Stack:**

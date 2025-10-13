@@ -5,11 +5,12 @@ import FeaturedHero from "@/components/FeaturedHero";
 import CategoryFilter from "@/components/CategoryFilter";
 import ArticleGrid from "@/components/ArticleGrid";
 import Sidebar from "@/components/Sidebar";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   const { data: categoriesData } = useQuery({
@@ -23,6 +24,7 @@ export default function Home() {
   const queryParams = new URLSearchParams({
     ...(selectedCategory && { categoryId: selectedCategory }),
     ...(searchTerm && { search: searchTerm }),
+    ...(selectedYear !== "all" && { year: selectedYear }),
     page: currentPage.toString(),
     limit: "6",
   });
@@ -31,6 +33,16 @@ export default function Home() {
     queryKey: [`/api/articles?${queryParams.toString()}`],
   });
 
+  // Generate available years (2008-2025)
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years: number[] = [];
+    for (let year = 2008; year <= currentYear; year++) {
+      years.push(year);
+    }
+    return years.reverse(); // Show newest first
+  }, []);
+
   const handleCategoryFilter = (categoryId: string) => {
     setSelectedCategory(categoryId);
     setCurrentPage(1);
@@ -38,6 +50,11 @@ export default function Home() {
 
   const handleSearch = (search: string) => {
     setSearchTerm(search);
+    setCurrentPage(1);
+  };
+
+  const handleYearFilter = (year: string) => {
+    setSelectedYear(year);
     setCurrentPage(1);
   };
 
@@ -51,6 +68,9 @@ export default function Home() {
         categories={categoriesData?.categories || []}
         selectedCategory={selectedCategory}
         onSelectCategory={handleCategoryFilter}
+        selectedYear={selectedYear}
+        onSelectYear={handleYearFilter}
+        availableYears={availableYears}
       />
 
       <section className="py-12 bg-background">
