@@ -14,13 +14,18 @@ const OLD_WP_URLS = [
   '//www.gallery.je/wp-content/uploads/',
 ];
 
-// Get bucket ID from environment
-const BUCKET_ID = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
-const NEW_CLOUD_PATH = `https://storage.googleapis.com/${BUCKET_ID}/public/uploads/`;
+// Cloudflare R2 Configuration
+// Update this with your R2 bucket URL after you set it up
+// Options:
+// 1. R2 public bucket: https://pub-xxxxx.r2.dev/uploads/
+// 2. Custom domain: https://cdn.yourdomain.com/uploads/
+// 3. R2 custom subdomain: https://images.yourdomain.com/uploads/
+const R2_BASE_URL = process.env.R2_PUBLIC_URL || 'https://YOUR_R2_BUCKET.r2.dev';
+const NEW_CLOUD_PATH = `${R2_BASE_URL}/uploads/`;
 
 async function migrateImageUrls() {
   console.log('Starting image URL migration...');
-  console.log(`Bucket ID: ${BUCKET_ID}`);
+  console.log(`R2 Base URL: ${R2_BASE_URL}`);
   console.log(`Replacing WordPress URLs with: ${NEW_CLOUD_PATH}`);
   console.log('---');
 
