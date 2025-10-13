@@ -70,11 +70,26 @@ export default function Home() {
     setCurrentPage(1);
   };
 
+  // Check if any filters are active
+  const hasActiveFilters = searchTerm || selectedCategory || selectedYear !== "all";
+
+  // Get display names for active filters
+  const selectedCategoryName = categoriesData?.categories?.find(
+    cat => cat.id === selectedCategory
+  )?.name;
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setSelectedCategory("");
+    setSelectedYear("all");
+    setCurrentPage(1);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header onSearch={handleSearch} />
       
-      <FeaturedHero articles={featuredData?.articles || []} />
+      {!hasActiveFilters && <FeaturedHero articles={featuredData?.articles || []} />}
       
       <CategoryFilter 
         categories={categoriesData?.categories || []}
@@ -87,6 +102,38 @@ export default function Home() {
 
       <section className="py-12 bg-background">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {hasActiveFilters && (
+            <div className="mb-6 p-4 bg-muted rounded-lg border border-border">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium">Showing results for:</span>
+                  {searchTerm && (
+                    <span className="px-3 py-1 bg-primary text-primary-foreground rounded-full text-sm">
+                      "{searchTerm}"
+                    </span>
+                  )}
+                  {selectedCategoryName && (
+                    <span className="px-3 py-1 bg-secondary text-secondary-foreground rounded-full text-sm">
+                      {selectedCategoryName}
+                    </span>
+                  )}
+                  {selectedYear !== "all" && (
+                    <span className="px-3 py-1 bg-accent text-accent-foreground rounded-full text-sm">
+                      Year: {selectedYear}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={clearAllFilters}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                  data-testid="button-clear-filters"
+                >
+                  Clear all
+                </button>
+              </div>
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
               <ArticleGrid 
