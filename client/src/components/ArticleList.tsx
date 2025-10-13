@@ -1,8 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -12,25 +19,43 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Edit, Eye, Trash2 } from "lucide-react";
+import { Search, Edit, Eye, Trash2, Calendar } from "lucide-react";
 import { format } from "date-fns";
 
 export default function ArticleList() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
 
   const { data: articlesData, isLoading } = useQuery({
-    queryKey: ["/api/articles?status=all"],
+    queryKey: ["/api/articles?status=all&limit=10000"],
   });
 
   const articles = articlesData?.articles || [];
   
+  // Extract unique years from articles
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    articles.forEach((article: any) => {
+      if (article.publishedAt) {
+        const year = new Date(article.publishedAt).getFullYear();
+        years.add(year);
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [articles]);
+
   const filteredArticles = articles.filter((article: any) => {
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch = (
       (article.title ?? '').toLowerCase().includes(searchLower) ||
       (article.category?.name ?? '').toLowerCase().includes(searchLower) ||
       (article.author?.name ?? '').toLowerCase().includes(searchLower)
     );
+
+    const matchesYear = selectedYear === "all" || 
+      (article.publishedAt && new Date(article.publishedAt).getFullYear() === parseInt(selectedYear));
+
+    return matchesSearch && matchesYear;
   });
 
   if (isLoading) {
@@ -48,6 +73,20 @@ export default function ArticleList() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Articles</h2>
         <div className="flex items-center space-x-2">
+          <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <SelectTrigger className="w-[150px]" data-testid="select-year-filter">
+              <Calendar className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="All Years" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {availableYears.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year} ({articles.filter((a: any) => a.publishedAt && new Date(a.publishedAt).getFullYear() === year).length})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input

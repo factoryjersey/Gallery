@@ -87,16 +87,12 @@ export default function Header({ onSearch }: HeaderProps) {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/">
-              <a className="nav-link text-foreground hover:text-secondary font-medium" data-testid="nav-home">
-                Home
-              </a>
+            <Link href="/" className="nav-link text-foreground hover:text-secondary font-medium" data-testid="nav-home">
+              Home
             </Link>
             {categories.map((category) => (
-              <Link key={category.id} href={`/category/${category.slug}`}>
-                <a className="nav-link text-foreground hover:text-secondary font-medium" data-testid={`nav-${category.slug}`}>
-                  {category.name}
-                </a>
+              <Link key={category.id} href={`/category/${category.slug}`} className="nav-link text-foreground hover:text-secondary font-medium" data-testid={`nav-${category.slug}`}>
+                {category.name}
               </Link>
             ))}
           </nav>
@@ -162,24 +158,18 @@ export default function Header({ onSearch }: HeaderProps) {
       {isMobileMenuOpen && (
         <div className="md:hidden bg-background border-t border-border" data-testid="mobile-menu">
           <nav className="px-4 py-4 space-y-2">
-            <Link href="/">
-              <a className="block py-2 text-foreground hover:text-secondary font-medium" data-testid="mobile-nav-home">
-                Home
-              </a>
+            <Link href="/" className="block py-2 text-foreground hover:text-secondary font-medium" data-testid="mobile-nav-home">
+              Home
             </Link>
             {categories.map((category) => (
-              <Link key={category.id} href={`/category/${category.slug}`}>
-                <a className="block py-2 text-foreground hover:text-secondary font-medium" data-testid={`mobile-nav-${category.slug}`}>
-                  {category.name}
-                </a>
+              <Link key={category.id} href={`/category/${category.slug}`} className="block py-2 text-foreground hover:text-secondary font-medium" data-testid={`mobile-nav-${category.slug}`}>
+                {category.name}
               </Link>
             ))}
             <div className="pt-2 border-t border-border">
-              <Link href="/admin">
-                <a className="flex items-center py-2 text-foreground hover:text-secondary font-medium" data-testid="mobile-admin-link">
-                  <UserCircle className="w-4 h-4 mr-2" />
-                  Admin Dashboard
-                </a>
+              <Link href="/admin" className="flex items-center py-2 text-foreground hover:text-secondary font-medium" data-testid="mobile-admin-link">
+                <UserCircle className="w-4 h-4 mr-2" />
+                Admin Dashboard
               </Link>
             </div>
           </nav>
