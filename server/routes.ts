@@ -404,16 +404,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errors: [] as string[],
       };
 
-      // Create default author if none exists
-      let defaultAuthor = await storage.getAuthorByEmail('admin@example.com');
-      if (!defaultAuthor) {
-        defaultAuthor = await storage.createAuthor({
-          name: 'Imported Author',
-          email: 'admin@example.com',
-          bio: 'Content imported from WordPress',
-        });
-        importResults.authors++;
-      }
+      // Cache for WordPress authors to avoid duplicates
+      const authorCache = new Map<string, any>();
 
       // Process each WordPress post
       for (let i = 0; i < items.length; i++) {
@@ -429,6 +421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const pubDate = getTextContent(item, 'pubDate');
           const wpPostId = getTextContent(item, 'wp:post_id');
           const wpLink = getTextContent(item, 'link');
+          const wpAuthorName = getTextContent(item, 'dc:creator');
           
           // Extract WordPress post meta (custom fields)
           const postMeta: Record<string, string> = {};
@@ -517,6 +510,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
             slugCounter++;
           }
 
+          // Get or create author from WordPress dc:creator
+          let author;
+          const authorName = wpAuthorName || 'Imported Author';
+          
+          if (authorCache.has(authorName)) {
+            author = authorCache.get(authorName);
+          } else {
+            // Generate email from author name
+            const authorEmail = `${authorName.toLowerCase().replace(/\s+/g, '.')}@imported.local`;
+            author = await storage.getAuthorByEmail(authorEmail);
+            
+            if (!author) {
+              author = await storage.createAuthor({
+                name: authorName,
+                email: authorEmail,
+                bio: `Content author imported from WordPress`,
+              });
+              importResults.authors++;
+            }
+            
+            authorCache.set(authorName, author);
+          }
+
           // Extract WordPress tags
           const wpTagIds: string[] = [];
           for (let j = 0; j < categoryElements.length; j++) {
@@ -569,7 +585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             featuredImage: featuredImage || undefined,
             metaDescription,
             status: status === 'publish' ? 'published' : 'draft',
-            authorId: defaultAuthor.id,
+            authorId: author.id,
             categoryId: category.id,
             publishedAt: pubDate ? new Date(pubDate) : new Date(),
             readTime: Math.max(1, Math.ceil((content?.length || 0) / 1000)),
@@ -587,7 +603,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         } catch (error) {
           console.error(`Error importing item ${i}:`, error);
-          importResults.errors.push(`Item ${i}: ${error.message}`);
+          importResults.errors.push(`Item ${i}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
 
