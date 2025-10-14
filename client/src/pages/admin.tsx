@@ -26,6 +26,7 @@ import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
 import WordPressAuthorUpdater from "@/components/WordPressAuthorUpdater";
 import { MediaManager } from "@/components/MediaManager";
+import { MediaIndexing } from "@/components/MediaIndexing";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
@@ -174,6 +175,18 @@ export default function Admin() {
                 >
                   <Image className="w-5 h-5 mr-3" />
                   Media
+                </button>
+                <button
+                  onClick={() => setActiveTab("storage")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "storage" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-storage"
+                >
+                  <Settings className="w-5 h-5 mr-3" />
+                  Storage & Indexing
                 </button>
                 <button
                   onClick={() => setActiveTab("import")}
@@ -355,6 +368,10 @@ export default function Admin() {
 
               {activeTab === "media" && (
                 <MediaManager />
+              )}
+
+              {activeTab === "storage" && (
+                <MediaIndexing />
               )}
             </div>
           </div>

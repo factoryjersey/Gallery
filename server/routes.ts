@@ -461,6 +461,180 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Media indexing - scan bucket and index unindexed images
+  app.post("/api/media/index-bucket", async (req, res) => {
+    try {
+      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+      if (!bucketId) {
+        return res.status(500).json({ error: "Object storage not configured" });
+      }
+
+      const bucket = objectStorageClient.bucket(bucketId);
+      const [files] = await bucket.getFiles({ prefix: 'public/images/' });
+      
+      const indexedCount = { total: 0, skipped: 0, indexed: 0, errors: 0 };
+      const existingMedia = await storage.getAllMedia();
+      const existingPaths = new Set(existingMedia.map(m => m.objectPath));
+
+      for (const file of files) {
+        indexedCount.total++;
+        
+        // Skip if already indexed
+        if (existingPaths.has(file.name)) {
+          indexedCount.skipped++;
+          continue;
+        }
+
+        // Skip variant files (we only want to index originals)
+        if (file.name.includes('-thumbnail.') || file.name.includes('-medium.') || file.name.includes('-large.')) {
+          indexedCount.skipped++;
+          continue;
+        }
+
+        try {
+          const [metadata] = await file.getMetadata();
+          const filename = file.name.split('/').pop() || file.name;
+          
+          // Create media record
+          await storage.createMedia({
+            filename,
+            originalName: filename,
+            mimeType: metadata.contentType || 'image/jpeg',
+            size: parseInt(metadata.size || '0'),
+            width: null,
+            height: null,
+            objectPath: file.name,
+            variants: null,
+            alt: '',
+          });
+          
+          indexedCount.indexed++;
+        } catch (error) {
+          console.error(`Error indexing ${file.name}:`, error);
+          indexedCount.errors++;
+        }
+      }
+
+      res.json({ 
+        success: true,
+        stats: indexedCount
+      });
+    } catch (error) {
+      console.error("Error indexing bucket:", error);
+      res.status(500).json({ error: "Failed to index bucket" });
+    }
+  });
+
+  // Storage analysis - get stats about storage usage
+  app.get("/api/media/storage-analysis", async (req, res) => {
+    try {
+      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+      if (!bucketId) {
+        return res.status(500).json({ error: "Object storage not configured" });
+      }
+
+      const bucket = objectStorageClient.bucket(bucketId);
+      const [files] = await bucket.getFiles({ prefix: 'public/images/' });
+      
+      const analysis = {
+        totalFiles: files.length,
+        totalSize: 0,
+        byType: {
+          original: { count: 0, size: 0 },
+          thumbnail: { count: 0, size: 0 },
+          medium: { count: 0, size: 0 },
+          large: { count: 0, size: 0 },
+        },
+        indexed: 0,
+        unindexed: 0,
+      };
+
+      const existingMedia = await storage.getAllMedia();
+      const existingPaths = new Set(existingMedia.map(m => m.objectPath));
+      
+      for (const file of files) {
+        const [metadata] = await file.getMetadata();
+        const size = parseInt(metadata.size || '0');
+        analysis.totalSize += size;
+
+        // Categorize by type
+        const isVariant = file.name.includes('-thumbnail.') || 
+                         file.name.includes('-medium.') || 
+                         file.name.includes('-large.');
+
+        if (file.name.includes('-thumbnail.')) {
+          analysis.byType.thumbnail.count++;
+          analysis.byType.thumbnail.size += size;
+        } else if (file.name.includes('-medium.')) {
+          analysis.byType.medium.count++;
+          analysis.byType.medium.size += size;
+        } else if (file.name.includes('-large.')) {
+          analysis.byType.large.count++;
+          analysis.byType.large.size += size;
+        } else {
+          analysis.byType.original.count++;
+          analysis.byType.original.size += size;
+          
+          // Only count original images for indexed/unindexed (not variants)
+          if (existingPaths.has(file.name)) {
+            analysis.indexed++;
+          } else {
+            analysis.unindexed++;
+          }
+        }
+      }
+
+      res.json({ analysis });
+    } catch (error) {
+      console.error("Error analyzing storage:", error);
+      res.status(500).json({ error: "Failed to analyze storage" });
+    }
+  });
+
+  // Delete specific variant types
+  app.post("/api/media/cleanup-variants", async (req, res) => {
+    try {
+      const { variantType } = req.body; // 'thumbnail', 'medium', or 'large'
+      
+      if (!['thumbnail', 'medium', 'large'].includes(variantType)) {
+        return res.status(400).json({ error: "Invalid variant type" });
+      }
+
+      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+      if (!bucketId) {
+        return res.status(500).json({ error: "Object storage not configured" });
+      }
+
+      const bucket = objectStorageClient.bucket(bucketId);
+      const [files] = await bucket.getFiles({ prefix: 'public/images/' });
+      
+      const deletedFiles = [];
+      const errors = [];
+
+      for (const file of files) {
+        if (file.name.includes(`-${variantType}.`)) {
+          try {
+            await file.delete();
+            deletedFiles.push(file.name);
+          } catch (error) {
+            console.error(`Error deleting ${file.name}:`, error);
+            errors.push(file.name);
+          }
+        }
+      }
+
+      res.json({ 
+        success: true,
+        deleted: deletedFiles.length,
+        errors: errors.length,
+        deletedFiles,
+      });
+    } catch (error) {
+      console.error("Error cleaning up variants:", error);
+      res.status(500).json({ error: "Failed to cleanup variants" });
+    }
+  });
+
   // WordPress Import
   app.post("/api/import/wordpress", upload.single('xmlFile'), async (req, res) => {
     try {
