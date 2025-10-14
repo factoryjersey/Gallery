@@ -414,18 +414,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "File must be an image" });
       }
 
-      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
-      if (!bucketId) {
-        return res.status(500).json({ error: "Object storage not configured" });
-      }
+      // Check if R2 is configured, otherwise fall back to GCS
+      const useR2 = process.env.R2_BUCKET_NAME && 
+                    process.env.R2_ACCESS_KEY_ID && 
+                    process.env.R2_SECRET_ACCESS_KEY && 
+                    process.env.R2_ACCOUNT_ID;
 
-      // Process image and generate variants
-      const processed = await processImage(
-        req.file.buffer,
-        req.file.originalname,
-        bucketId,
-        objectStorageClient
-      );
+      let processed;
+      
+      if (useR2) {
+        // Use R2 for new uploads
+        const { processImageR2 } = await import('./imageProcessorR2');
+        processed = await processImageR2(req.file.buffer, req.file.originalname);
+      } else {
+        // Fallback to GCS
+        const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+        if (!bucketId) {
+          return res.status(500).json({ error: "Object storage not configured" });
+        }
+        processed = await processImage(
+          req.file.buffer,
+          req.file.originalname,
+          bucketId,
+          objectStorageClient
+        );
+      }
 
       // Create media record with variants
       const mediaData = {
@@ -442,16 +455,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const media = await storage.createMedia(mediaData);
       
-      // Return media with public URLs
+      // Return media with URLs (R2 URLs are already absolute)
       res.json({
         media: {
           ...media,
-          urls: {
-            thumbnail: getPublicUrl(bucketId, processed.variants.thumbnail),
-            medium: getPublicUrl(bucketId, processed.variants.medium),
-            large: getPublicUrl(bucketId, processed.variants.large),
-            webp: getPublicUrl(bucketId, processed.variants.webp),
-            original: getPublicUrl(bucketId, processed.variants.original),
+          urls: useR2 ? {
+            thumbnail: processed.variants.thumbnail,
+            medium: processed.variants.medium,
+            large: processed.variants.large,
+            webp: processed.variants.webp,
+            original: processed.variants.original,
+          } : {
+            thumbnail: getPublicUrl(process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || '', processed.variants.thumbnail),
+            medium: getPublicUrl(process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || '', processed.variants.medium),
+            large: getPublicUrl(process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || '', processed.variants.large),
+            webp: getPublicUrl(process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || '', processed.variants.webp),
+            original: getPublicUrl(process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID || '', processed.variants.original),
           }
         }
       });
@@ -489,7 +508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (article.content) {
-          const matches = article.content.matchAll(imageUrlPattern);
+          const matches = Array.from(article.content.matchAll(imageUrlPattern));
           for (const match of matches) {
             foundUrls.add(match[0]);
           }
@@ -521,7 +540,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return mimeMap[ext || ''] || 'image/jpeg';
       };
 
-      for (const url of foundUrls) {
+      for (const url of Array.from(foundUrls)) {
         if (existingUrls.has(url)) {
           skipped++;
           continue;

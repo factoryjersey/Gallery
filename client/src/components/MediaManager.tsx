@@ -106,6 +106,11 @@ export function MediaManager() {
       return media.objectPath;
     }
     
+    // If variants exist and medium is a URL, use it
+    if (media.variants?.medium && media.variants.medium.startsWith('http')) {
+      return media.variants.medium;
+    }
+    
     // For storage bucket files, use variants or objectPath with /objects prefix
     if (media.variants?.medium) {
       return `/objects/${media.variants.medium}`;
@@ -212,22 +217,58 @@ export function MediaManager() {
                             <p className="text-sm font-medium">Available Variants:</p>
                             <div className="flex flex-wrap gap-2">
                               {item.variants?.thumbnail && (
-                                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`/objects/${item.variants.thumbnail}`)}>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => {
+                                    const url = item.variants!.thumbnail!.startsWith('http') 
+                                      ? item.variants!.thumbnail! 
+                                      : `/objects/${item.variants!.thumbnail}`;
+                                    copyToClipboard(url);
+                                  }}
+                                >
                                   Thumbnail
                                 </Button>
                               )}
                               {item.variants?.medium && (
-                                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`/objects/${item.variants.medium}`)}>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => {
+                                    const url = item.variants!.medium!.startsWith('http') 
+                                      ? item.variants!.medium! 
+                                      : `/objects/${item.variants!.medium}`;
+                                    copyToClipboard(url);
+                                  }}
+                                >
                                   Medium
                                 </Button>
                               )}
                               {item.variants?.large && (
-                                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`/objects/${item.variants.large}`)}>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => {
+                                    const url = item.variants!.large!.startsWith('http') 
+                                      ? item.variants!.large! 
+                                      : `/objects/${item.variants!.large}`;
+                                    copyToClipboard(url);
+                                  }}
+                                >
                                   Large
                                 </Button>
                               )}
                               {item.variants?.original && (
-                                <Button variant="outline" size="sm" onClick={() => copyToClipboard(`/objects/${item.variants.original}`)}>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => {
+                                    const url = item.variants!.original!.startsWith('http') 
+                                      ? item.variants!.original! 
+                                      : `/objects/${item.variants!.original}`;
+                                    copyToClipboard(url);
+                                  }}
+                                >
                                   Original
                                 </Button>
                               )}
