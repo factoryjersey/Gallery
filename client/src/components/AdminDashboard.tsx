@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import ArticleEditor from "./ArticleEditor";
 import WordPressImporter from "./WordPressImporter";
+import { MediaIndexing } from "./MediaIndexing";
+import { ImageRationalization } from "./ImageRationalization";
 import { format } from "date-fns";
 
 export default function AdminDashboard() {
@@ -323,14 +325,20 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="media">
-            <Card>
-              <CardHeader>
-                <CardTitle>Media Library</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Media library coming soon.</p>
-              </CardContent>
-            </Card>
+            <Tabs defaultValue="indexing" className="space-y-6">
+              <TabsList>
+                <TabsTrigger value="indexing">Storage & Indexing</TabsTrigger>
+                <TabsTrigger value="rationalization">Image Rationalization</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="indexing">
+                <MediaIndexing />
+              </TabsContent>
+              
+              <TabsContent value="rationalization">
+                <ImageRationalization />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="analytics">
