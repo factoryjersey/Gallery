@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,7 +44,12 @@ const articleSchema = z.object({
 
 type ArticleFormData = z.infer<typeof articleSchema>;
 
-export default function ArticleEditor() {
+interface ArticleEditorProps {
+  articleId?: string;
+  onClose?: () => void;
+}
+
+export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -59,6 +64,12 @@ export default function ArticleEditor() {
     },
   });
 
+  // Load article data when editing
+  const { data: articleData } = useQuery({
+    queryKey: [`/api/articles/${articleId}`],
+    enabled: !!articleId,
+  });
+
   const { data: categoriesData } = useQuery({
     queryKey: ["/api/categories"],
   });
@@ -71,6 +82,27 @@ export default function ArticleEditor() {
     queryKey: ["/api/tags"],
   });
 
+  // Populate form when editing
+  useEffect(() => {
+    if (articleData?.article) {
+      const article = articleData.article;
+      form.reset({
+        title: article.title,
+        slug: article.slug,
+        excerpt: article.excerpt || "",
+        content: article.content,
+        categoryId: article.categoryId,
+        authorId: article.authorId,
+        status: article.status,
+        featuredImage: article.featuredImage || "",
+        metaTitle: article.metaTitle || "",
+        metaDescription: article.metaDescription || "",
+        readTime: article.readTime,
+      });
+      setSelectedTags(article.tags?.map((t: any) => t.id) || []);
+    }
+  }, [articleData, form]);
+
   const createArticleMutation = useMutation({
     mutationFn: async (data: ArticleFormData & { tags?: string[] }) => {
       const response = await apiRequest("POST", "/api/articles", data);
@@ -81,14 +113,49 @@ export default function ArticleEditor() {
         title: "Success!",
         description: "Article created successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      // Invalidate all article queries by matching keys that start with /api/articles
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/articles');
+        }
+      });
       form.reset();
       setSelectedTags([]);
+      onClose?.();
     },
     onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to create article",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateArticleMutation = useMutation({
+    mutationFn: async (data: ArticleFormData & { tags?: string[] }) => {
+      const response = await apiRequest("PATCH", `/api/articles/${articleId}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success!",
+        description: "Article updated successfully.",
+      });
+      // Invalidate all article queries by matching keys that start with /api/articles
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/articles');
+        }
+      });
+      onClose?.();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update article",
         variant: "destructive",
       });
     },
@@ -202,10 +269,17 @@ export default function ArticleEditor() {
   };
 
   const onSubmit = (data: ArticleFormData) => {
-    createArticleMutation.mutate({
-      ...data,
-      tags: selectedTags,
-    });
+    if (articleId) {
+      updateArticleMutation.mutate({
+        ...data,
+        tags: selectedTags,
+      });
+    } else {
+      createArticleMutation.mutate({
+        ...data,
+        tags: selectedTags,
+      });
+    }
   };
 
   const handleSaveAsDraft = () => {

@@ -75,9 +75,13 @@ export default function Article() {
               Back to Articles
             </Button>
           </Link>
-          {isAdmin && (
+          {isAdmin && article && (
             <Button
-              onClick={() => navigate('/admin')}
+              onClick={() => {
+                // Store the article ID in localStorage to be picked up by admin page
+                localStorage.setItem('editArticleId', article.id);
+                navigate('/admin?tab=articles&edit=true');
+              }}
               variant="default"
               size="sm"
               data-testid="button-edit-article"

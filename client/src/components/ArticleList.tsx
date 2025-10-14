@@ -36,7 +36,11 @@ import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-export default function ArticleList() {
+interface ArticleListProps {
+  onEditArticle?: (articleId: string) => void;
+}
+
+export default function ArticleList({ onEditArticle }: ArticleListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -271,8 +275,14 @@ export default function ArticleList() {
                         data-testid={`checkbox-${article.id}`}
                       />
                     </TableCell>
-                    <TableCell className="font-medium max-w-xs truncate">
-                      {article.title}
+                    <TableCell className="font-medium max-w-xs">
+                      <button
+                        onClick={() => onEditArticle?.(article.id)}
+                        className="truncate hover:text-primary hover:underline cursor-pointer text-left w-full"
+                        data-testid={`title-${article.id}`}
+                      >
+                        {article.title}
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" style={{ borderColor: article.category?.color }}>
@@ -307,7 +317,7 @@ export default function ArticleList() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setLocation(`/admin/articles/edit/${article.id}`)}
+                          onClick={() => onEditArticle?.(article.id)}
                           data-testid={`button-edit-${article.id}`}
                         >
                           <Edit className="h-4 w-4" />

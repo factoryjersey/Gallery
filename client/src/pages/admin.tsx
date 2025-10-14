@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,7 +31,19 @@ import { useAdmin } from "@/contexts/AdminContext";
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showArticleEditor, setShowArticleEditor] = useState(false);
+  const [editingArticleId, setEditingArticleId] = useState<string | undefined>(undefined);
   const { isAdmin, toggleAdmin } = useAdmin();
+
+  const handleEditArticle = useCallback((articleId: string) => {
+    setEditingArticleId(articleId);
+    setShowArticleEditor(true);
+    setActiveTab("articles");
+  }, []);
+
+  const handleCloseEditor = useCallback(() => {
+    setShowArticleEditor(false);
+    setEditingArticleId(undefined);
+  }, []);
 
   // Enable admin mode when entering admin page
   useEffect(() => {
@@ -39,6 +51,20 @@ export default function Admin() {
       toggleAdmin();
     }
   }, [isAdmin, toggleAdmin]);
+
+  // Check for article edit request from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('edit') === 'true' && params.get('tab') === 'articles') {
+      const articleId = localStorage.getItem('editArticleId');
+      if (articleId) {
+        handleEditArticle(articleId);
+        localStorage.removeItem('editArticleId');
+        // Clean up URL
+        window.history.replaceState({}, '', '/admin');
+      }
+    }
+  }, [handleEditArticle]);
 
   const { data: statsData } = useQuery({
     queryKey: ["/api/stats"],
@@ -271,7 +297,22 @@ export default function Admin() {
               )}
 
               {activeTab === "articles" && (
-                showArticleEditor ? <ArticleEditor /> : <ArticleList />
+                showArticleEditor ? (
+                  <div>
+                    <Button
+                      variant="ghost"
+                      onClick={handleCloseEditor}
+                      className="mb-4"
+                      data-testid="button-back-to-list"
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back to Articles
+                    </Button>
+                    <ArticleEditor articleId={editingArticleId} onClose={handleCloseEditor} />
+                  </div>
+                ) : (
+                  <ArticleList onEditArticle={handleEditArticle} />
+                )
               )}
 
               {activeTab === "import" && (
