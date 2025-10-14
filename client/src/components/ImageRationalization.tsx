@@ -40,9 +40,21 @@ interface R2Analysis {
   };
 }
 
+interface DimensionAnalysis {
+  totalFiles: number;
+  dimensionCounts: Array<{ suffix: string; count: number }>;
+  files: Array<{ key: string; width: number; height: number; suffix: string }>;
+  summary: {
+    totalR2Files: number;
+    filesWithDimensions: number;
+    uniqueDimensions: number;
+  };
+}
+
 export function ImageRationalization() {
   const { toast } = useToast();
   const [analysisData, setAnalysisData] = useState<R2Analysis | null>(null);
+  const [dimensionData, setDimensionData] = useState<DimensionAnalysis | null>(null);
 
   const analyzeMutation = useMutation({
     mutationFn: async () => {
@@ -90,6 +102,49 @@ export function ImageRationalization() {
       toast({
         title: "Error",
         description: error.message || "Failed to standardize URLs",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const analyzeDimensionsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/admin/analyze-dimension-suffixes");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setDimensionData(data);
+      toast({
+        title: "Analysis Complete!",
+        description: `Found ${data.totalFiles} files with WordPress dimension suffixes`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to analyze dimensions",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const normalizeDimensionsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/normalize-dimension-filenames", { updateArticles: true });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Normalization Complete!",
+        description: `Updated ${data.articlesUpdated} articles, normalized ${data.urlsFound} URLs`,
+      });
+      analyzeDimensionsMutation.mutate();
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to normalize filenames",
         variant: "destructive",
       });
     },
@@ -239,6 +294,98 @@ export function ImageRationalization() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </CardContent>
+      </Card>
+
+      {/* WordPress Dimension Normalization Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileImage className="h-5 w-5" />
+            WordPress Dimension Normalization
+          </CardTitle>
+          <CardDescription>
+            Analyze and normalize WordPress dimension-suffixed filenames (e.g., -1500x1000, -1200x800)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button 
+            onClick={() => analyzeDimensionsMutation.mutate()} 
+            disabled={analyzeDimensionsMutation.isPending}
+            data-testid="button-analyze-dimensions"
+          >
+            {analyzeDimensionsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <FileImage className="mr-2 h-4 w-4" />
+            Analyze Dimension Suffixes
+          </Button>
+
+          {dimensionData && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold">{dimensionData.totalFiles}</div>
+                  <div className="text-sm text-muted-foreground">Files with Dimensions</div>
+                </div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-2xl font-bold">{dimensionData.summary.uniqueDimensions}</div>
+                  <div className="text-sm text-muted-foreground">Unique Dimension Patterns</div>
+                </div>
+              </div>
+
+              {dimensionData.dimensionCounts.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium">Most Common Dimensions:</h4>
+                  <div className="space-y-1">
+                    {dimensionData.dimensionCounts.slice(0, 5).map(({ suffix, count }) => (
+                      <div key={suffix} className="flex justify-between text-sm">
+                        <span className="font-mono">{suffix}</span>
+                        <span className="text-muted-foreground">{count} files</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {dimensionData.totalFiles > 0 && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Found {dimensionData.totalFiles} WordPress files with dimension suffixes. 
+                    Normalizing will strip these dimensions from URLs to use base filenames.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    disabled={normalizeDimensionsMutation.isPending}
+                    data-testid="button-normalize-dimensions"
+                  >
+                    {normalizeDimensionsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Replace className="mr-2 h-4 w-4" />
+                    Normalize Filenames
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Normalize WordPress Dimensions?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will scan all articles and remove dimension suffixes (like -1500x1000, -1200x800) from image URLs,
+                      replacing them with base filenames. For example: "image-1500x1000.jpg" becomes "image.jpg". 
+                      This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => normalizeDimensionsMutation.mutate()}>
+                      Normalize Filenames
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
         </CardContent>
       </Card>
 

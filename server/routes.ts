@@ -1454,6 +1454,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Analyze WordPress dimension-suffixed filenames
+  app.get("/api/admin/analyze-dimension-suffixes", async (req, res) => {
+    try {
+      if (!r2Client) {
+        return res.status(500).json({ error: "R2 client not configured" });
+      }
+
+      const listCommand = new ListObjectsV2Command({
+        Bucket: process.env.R2_BUCKET_NAME,
+      });
+
+      const response = await r2Client.send(listCommand);
+      const objects = response.Contents || [];
+
+      // Pattern to match dimension suffixes like -1500x1000, -1200x800, etc.
+      const dimensionPattern = /-(\d{3,4})x(\d{3,4})\./i;
+      
+      const dimensionFiles: Array<{ key: string; width: number; height: number; suffix: string }> = [];
+      const dimensionCounts: Record<string, number> = {};
+
+      for (const obj of objects) {
+        if (!obj.Key) continue;
+        
+        const match = obj.Key.match(dimensionPattern);
+        if (match) {
+          const suffix = `${match[1]}x${match[2]}`;
+          const width = parseInt(match[1]);
+          const height = parseInt(match[2]);
+          
+          dimensionFiles.push({
+            key: obj.Key,
+            width,
+            height,
+            suffix
+          });
+
+          dimensionCounts[suffix] = (dimensionCounts[suffix] || 0) + 1;
+        }
+      }
+
+      // Sort by most common
+      const sortedDimensions = Object.entries(dimensionCounts)
+        .sort(([, a], [, b]) => b - a)
+        .map(([suffix, count]) => ({ suffix, count }));
+
+      res.json({
+        totalFiles: dimensionFiles.length,
+        dimensionCounts: sortedDimensions,
+        files: dimensionFiles.slice(0, 100), // First 100 for preview
+        summary: {
+          totalR2Files: objects.length,
+          filesWithDimensions: dimensionFiles.length,
+          uniqueDimensions: sortedDimensions.length
+        }
+      });
+    } catch (error) {
+      console.error("Error analyzing dimension suffixes:", error);
+      res.status(500).json({ error: "Failed to analyze dimension suffixes" });
+    }
+  });
+
+  // Normalize dimension-suffixed filenames by stripping dimensions
+  app.post("/api/admin/normalize-dimension-filenames", async (req, res) => {
+    try {
+      if (!r2Client) {
+        return res.status(500).json({ error: "R2 client not configured" });
+      }
+
+      const { updateArticles = false } = req.body;
+
+      // Get all articles to find and update dimension-suffixed URLs
+      const allArticles = await storage.getArticles({
+        status: undefined,
+        limit: 100000,
+        offset: 0,
+        orderBy: 'publishedAt',
+        orderDir: 'desc',
+      });
+
+      const dimensionPattern = /(https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^"'\s<>)]+)-(\d{3,4})x(\d{3,4})\.(jpg|jpeg|png|gif|webp)/gi;
+      
+      let articlesUpdated = 0;
+      let urlsReplaced = 0;
+
+      for (const article of allArticles.articles) {
+        let contentUpdated = false;
+        let newContent = article.content || '';
+        let newFeaturedImage = article.featuredImage;
+
+        // Replace dimension-suffixed URLs with base name (remove dimensions)
+        const replacedContent = newContent.replace(dimensionPattern, (match, baseUrl, width, height, ext) => {
+          urlsReplaced++;
+          return `${baseUrl}.${ext}`;
+        });
+
+        if (replacedContent !== newContent) {
+          newContent = replacedContent;
+          contentUpdated = true;
+        }
+
+        // Replace in featured image
+        if (newFeaturedImage) {
+          const replacedFeatured = newFeaturedImage.replace(dimensionPattern, (match, baseUrl, width, height, ext) => {
+            urlsReplaced++;
+            return `${baseUrl}.${ext}`;
+          });
+          if (replacedFeatured !== newFeaturedImage) {
+            newFeaturedImage = replacedFeatured;
+            contentUpdated = true;
+          }
+        }
+
+        // Update article if changed and user wants to update
+        if (contentUpdated && updateArticles) {
+          await storage.updateArticle(article.id, {
+            content: newContent,
+            featuredImage: newFeaturedImage
+          });
+          articlesUpdated++;
+        }
+      }
+
+      res.json({
+        success: true,
+        articlesUpdated: updateArticles ? articlesUpdated : 0,
+        urlsFound: urlsReplaced,
+        previewOnly: !updateArticles
+      });
+    } catch (error) {
+      console.error("Error normalizing filenames:", error);
+      res.status(500).json({ error: "Failed to normalize filenames" });
+    }
+  });
+
   // Clean up unused R2 variants
   app.post("/api/admin/cleanup-r2-variants", async (req, res) => {
     try {
