@@ -1690,6 +1690,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Debug: Check R2 storage for specific folder
+  app.get("/api/debug/r2-check", async (req, res) => {
+    try {
+      const prefix = req.query.prefix as string || '2011/';
+      const command = new ListObjectsV2Command({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Prefix: prefix,
+        MaxKeys: 10
+      });
+      const data = await r2Client.send(command);
+      res.json({
+        prefix,
+        count: data.Contents?.length || 0,
+        files: data.Contents?.map(f => f.Key) || []
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
