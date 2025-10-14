@@ -7,6 +7,8 @@ import { z } from "zod";
 import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
 import { processImage, getPublicUrl } from "./imageProcessor";
+import { r2Client } from "./r2Client";
+import { ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1223,6 +1225,211 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error analyzing image usage:", error);
       res.status(500).json({ error: "Failed to analyze image usage" });
+    }
+  });
+
+  // R2 Image Rationalization - Analyze variants vs originals
+  app.get("/api/admin/r2-usage-analysis", async (req, res) => {
+    try {
+      const allArticles = await storage.getArticles({
+        status: undefined,
+        limit: 100000,
+        offset: 0,
+        orderBy: 'publishedAt',
+        orderDir: 'desc',
+      });
+
+      const r2Pattern = /https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^\s"'<>)]+/gi;
+      const usedUrls = new Set<string>();
+
+      for (const article of allArticles.articles) {
+        if (article.featuredImage && article.featuredImage.includes('r2.dev')) {
+          usedUrls.add(article.featuredImage);
+        }
+        if (article.content) {
+          const matches = article.content.matchAll(r2Pattern);
+          for (const match of Array.from(matches)) {
+            usedUrls.add(match[0]);
+          }
+        }
+      }
+
+      const categorized = {
+        originals: [] as string[],
+        thumbnails: [] as string[],
+        medium: [] as string[],
+        large: [] as string[],
+        pdfs: [] as string[],
+        other: [] as string[]
+      };
+
+      for (const url of Array.from(usedUrls)) {
+        if (url.endsWith('.pdf')) {
+          categorized.pdfs.push(url);
+        } else if (url.includes('-thumbnail.')) {
+          categorized.thumbnails.push(url);
+        } else if (url.includes('-medium.')) {
+          categorized.medium.push(url);
+        } else if (url.includes('-large.')) {
+          categorized.large.push(url);
+        } else if (url.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+          categorized.originals.push(url);
+        } else {
+          categorized.other.push(url);
+        }
+      }
+
+      res.json({
+        totalArticles: allArticles.total,
+        totalUrls: usedUrls.size,
+        categorized,
+        summary: {
+          originals: categorized.originals.length,
+          variants: categorized.thumbnails.length + categorized.medium.length + categorized.large.length,
+          thumbnails: categorized.thumbnails.length,
+          medium: categorized.medium.length,
+          large: categorized.large.length,
+          pdfs: categorized.pdfs.length,
+          other: categorized.other.length
+        }
+      });
+    } catch (error) {
+      console.error("Error analyzing R2 usage:", error);
+      res.status(500).json({ error: "Failed to analyze R2 usage" });
+    }
+  });
+
+  // Standardize image URLs - replace variants with originals
+  app.post("/api/admin/standardize-image-urls", async (req, res) => {
+    try {
+      const allArticles = await storage.getArticles({
+        status: undefined,
+        limit: 100000,
+        offset: 0,
+        orderBy: 'publishedAt',
+        orderDir: 'desc',
+      });
+
+      let articlesUpdated = 0;
+      let urlsReplaced = 0;
+
+      for (const article of allArticles.articles) {
+        let contentUpdated = false;
+        let newContent = article.content || '';
+        let newFeaturedImage = article.featuredImage;
+
+        // Replace variant URLs with originals in content
+        const variantPattern = /(https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^"'\s<>)]+)-(thumbnail|medium|large)\.(jpg|jpeg|png|gif|webp)/gi;
+        
+        const replacedContent = newContent.replace(variantPattern, (match, baseUrl, variant, ext) => {
+          urlsReplaced++;
+          return `${baseUrl}.${ext}`;
+        });
+
+        if (replacedContent !== newContent) {
+          newContent = replacedContent;
+          contentUpdated = true;
+        }
+
+        // Replace variant in featured image
+        if (newFeaturedImage) {
+          const replacedFeatured = newFeaturedImage.replace(variantPattern, (match, baseUrl, variant, ext) => {
+            urlsReplaced++;
+            return `${baseUrl}.${ext}`;
+          });
+          if (replacedFeatured !== newFeaturedImage) {
+            newFeaturedImage = replacedFeatured;
+            contentUpdated = true;
+          }
+        }
+
+        // Update article if changed
+        if (contentUpdated) {
+          await storage.updateArticle(article.id, {
+            content: newContent,
+            featuredImage: newFeaturedImage
+          });
+          articlesUpdated++;
+        }
+      }
+
+      res.json({
+        success: true,
+        articlesUpdated,
+        urlsReplaced
+      });
+    } catch (error) {
+      console.error("Error standardizing URLs:", error);
+      res.status(500).json({ error: "Failed to standardize URLs" });
+    }
+  });
+
+  // Clean up unused R2 variants
+  app.post("/api/admin/cleanup-r2-variants", async (req, res) => {
+    try {
+      if (!r2Client) {
+        return res.status(500).json({ error: "R2 client not configured" });
+      }
+
+      const { variantTypes } = req.body; // ['thumbnail', 'medium', 'large']
+      
+      if (!Array.isArray(variantTypes) || variantTypes.length === 0) {
+        return res.status(400).json({ error: "Please specify variant types to delete" });
+      }
+
+      // List all R2 objects
+      const listCommand = new ListObjectsV2Command({
+        Bucket: process.env.R2_BUCKET_NAME,
+      });
+
+      const response = await r2Client.send(listCommand);
+      const objects = response.Contents || [];
+
+      const toDelete: string[] = [];
+
+      for (const obj of objects) {
+        if (!obj.Key) continue;
+
+        // Skip PDFs
+        if (obj.Key.endsWith('.pdf')) continue;
+
+        // Check if it's a variant to delete
+        for (const variant of variantTypes) {
+          if (obj.Key.includes(`-${variant}.`)) {
+            toDelete.push(obj.Key);
+            break;
+          }
+        }
+      }
+
+      // Delete in batches
+      let deleted = 0;
+      const batchSize = 1000; // R2 allows up to 1000 deletes per request
+
+      for (let i = 0; i < toDelete.length; i += batchSize) {
+        const batch = toDelete.slice(i, i + batchSize);
+        
+        const deleteCommand = new DeleteObjectsCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Delete: {
+            Objects: batch.map(key => ({ Key: key })),
+            Quiet: false
+          }
+        });
+
+        await r2Client.send(deleteCommand);
+        deleted += batch.length;
+      }
+
+      res.json({
+        success: true,
+        variantTypesDeleted: variantTypes,
+        filesDeleted: deleted,
+        totalScanned: objects.length
+      });
+    } catch (error) {
+      console.error("Error cleaning up R2 variants:", error);
+      res.status(500).json({ error: "Failed to cleanup R2 variants" });
     }
   });
 
