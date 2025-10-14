@@ -71,9 +71,17 @@ export function ImageRationalization() {
       return response.json();
     },
     onSuccess: (data) => {
+      const breakdown = data.breakdown || {};
+      const details = [
+        breakdown.usedOriginal > 0 && `${breakdown.usedOriginal} original`,
+        breakdown.usedLarge > 0 && `${breakdown.usedLarge} large`,
+        breakdown.usedMedium > 0 && `${breakdown.usedMedium} medium`,
+        breakdown.keptVariant > 0 && `${breakdown.keptVariant} kept as-is`
+      ].filter(Boolean).join(', ');
+      
       toast({
         title: "URLs Standardized!",
-        description: `Updated ${data.articlesUpdated} articles, replaced ${data.urlsReplaced} variant URLs with originals`,
+        description: `Updated ${data.articlesUpdated} articles, replaced ${data.urlsReplaced} URLs. Used: ${details || 'none'}`,
       });
       analyzeMutation.mutate();
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });

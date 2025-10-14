@@ -1338,7 +1338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Cache for file existence checks to avoid redundant API calls
       const existsCache = new Map<string, boolean>();
 
-      async function getBestAvailableUrl(baseUrl: string, currentVariant: string, ext: string): Promise<string> {
+      const getBestAvailableUrl = async (baseUrl: string, currentVariant: string, ext: string): Promise<string> => {
         const original = `${baseUrl}.${ext}`;
         const large = `${baseUrl}-large.${ext}`;
         const medium = `${baseUrl}-medium.${ext}`;
@@ -1375,7 +1375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // No better option found, keep current variant
         keptVariant++;
         return current;
-      }
+      };
 
       for (const article of allArticles.articles) {
         let contentUpdated = false;
