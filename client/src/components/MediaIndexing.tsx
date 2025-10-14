@@ -19,16 +19,16 @@ import {
 } from "@/components/ui/alert-dialog";
 
 interface StorageAnalysis {
-  totalFiles: number;
-  totalSize: number;
+  totalIndexed: number;
+  externalR2: number;
+  localGCS: number;
+  localGCSUnindexed: number;
   byType: {
     original: { count: number; size: number };
     thumbnail: { count: number; size: number };
     medium: { count: number; size: number };
     large: { count: number; size: number };
   };
-  indexed: number;
-  unindexed: number;
 }
 
 export function MediaIndexing() {
@@ -195,28 +195,28 @@ export function MediaIndexing() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Total Files</p>
-                  <p className="text-2xl font-bold">{analysisData.analysis.totalFiles}</p>
+                  <p className="text-sm text-muted-foreground">Total Indexed</p>
+                  <p className="text-2xl font-bold">{analysisData.analysis.totalIndexed}</p>
                 </div>
                 <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Total Size</p>
-                  <p className="text-2xl font-bold">{formatBytes(analysisData.analysis.totalSize)}</p>
+                  <p className="text-sm text-muted-foreground">External R2 Images</p>
+                  <p className="text-2xl font-bold">{analysisData.analysis.externalR2}</p>
                 </div>
                 <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Indexed in Library</p>
-                  <p className="text-2xl font-bold">{analysisData.analysis.indexed}</p>
+                  <p className="text-sm text-muted-foreground">Local GCS Images</p>
+                  <p className="text-2xl font-bold">{analysisData.analysis.localGCS}</p>
                 </div>
                 <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Unindexed</p>
-                  <p className="text-2xl font-bold">{analysisData.analysis.unindexed}</p>
+                  <p className="text-sm text-muted-foreground">Unindexed GCS Files</p>
+                  <p className="text-2xl font-bold">{analysisData.analysis.localGCSUnindexed}</p>
                 </div>
               </div>
 
-              {analysisData.analysis.unindexed > 0 && (
+              {analysisData.analysis.localGCSUnindexed > 0 && (
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    You have {analysisData.analysis.unindexed} unindexed images. Click "Index All Images" above to add them to the media library.
+                    You have {analysisData.analysis.localGCSUnindexed} unindexed files in local storage. Click "Index from Bucket" above to add them to the media library.
                   </AlertDescription>
                 </Alert>
               )}

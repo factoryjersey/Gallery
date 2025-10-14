@@ -621,7 +621,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             filename,
             originalName: filename,
             mimeType: metadata.contentType || 'image/jpeg',
-            size: parseInt(metadata.size || '0'),
+            size: parseInt(String(metadata.size || '0')),
             width: null,
             height: null,
             objectPath: file.name,
@@ -649,59 +649,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Storage analysis - get stats about storage usage
   app.get("/api/media/storage-analysis", async (req, res) => {
     try {
-      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
-      if (!bucketId) {
-        return res.status(500).json({ error: "Object storage not configured" });
-      }
-
-      const bucket = objectStorageClient.bucket(bucketId);
-      const [files] = await bucket.getFiles({ prefix: 'public/images/' });
+      // Get all indexed media from database
+      const allMedia = await storage.getAllMedia();
+      
+      // Separate URL-based (external R2) from path-based (local GCS)
+      const urlBasedMedia = allMedia.filter(m => m.objectPath?.startsWith('http'));
+      const pathBasedMedia = allMedia.filter(m => m.objectPath && !m.objectPath.startsWith('http'));
       
       const analysis = {
-        totalFiles: files.length,
-        totalSize: 0,
+        totalIndexed: allMedia.length,
+        externalR2: urlBasedMedia.length,
+        localGCS: pathBasedMedia.length,
+        localGCSUnindexed: 0,
         byType: {
           original: { count: 0, size: 0 },
           thumbnail: { count: 0, size: 0 },
           medium: { count: 0, size: 0 },
           large: { count: 0, size: 0 },
         },
-        indexed: 0,
-        unindexed: 0,
       };
 
-      const existingMedia = await storage.getAllMedia();
-      const existingPaths = new Set(existingMedia.map(m => m.objectPath));
-      
-      for (const file of files) {
-        const [metadata] = await file.getMetadata();
-        const size = parseInt(metadata.size || '0');
-        analysis.totalSize += size;
-
-        // Categorize by type
-        const isVariant = file.name.includes('-thumbnail.') || 
-                         file.name.includes('-medium.') || 
-                         file.name.includes('-large.');
-
-        if (file.name.includes('-thumbnail.')) {
-          analysis.byType.thumbnail.count++;
-          analysis.byType.thumbnail.size += size;
-        } else if (file.name.includes('-medium.')) {
-          analysis.byType.medium.count++;
-          analysis.byType.medium.size += size;
-        } else if (file.name.includes('-large.')) {
-          analysis.byType.large.count++;
-          analysis.byType.large.size += size;
-        } else {
-          analysis.byType.original.count++;
-          analysis.byType.original.size += size;
+      // Only scan GCS bucket if credentials are available
+      const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
+      if (bucketId) {
+        try {
+          const bucket = objectStorageClient.bucket(bucketId);
+          const [files] = await bucket.getFiles({ prefix: 'public/images/' });
           
-          // Only count original images for indexed/unindexed (not variants)
-          if (existingPaths.has(file.name)) {
-            analysis.indexed++;
-          } else {
-            analysis.unindexed++;
+          const existingPaths = new Set(pathBasedMedia.map(m => m.objectPath));
+          
+          for (const file of files) {
+            const [metadata] = await file.getMetadata();
+            const size = parseInt(String(metadata.size || '0'));
+
+            // Categorize by variant type
+            if (file.name.includes('-thumbnail.')) {
+              analysis.byType.thumbnail.count++;
+              analysis.byType.thumbnail.size += size;
+            } else if (file.name.includes('-medium.')) {
+              analysis.byType.medium.count++;
+              analysis.byType.medium.size += size;
+            } else if (file.name.includes('-large.')) {
+              analysis.byType.large.count++;
+              analysis.byType.large.size += size;
+            } else {
+              analysis.byType.original.count++;
+              analysis.byType.original.size += size;
+              
+              // Check if this original is unindexed
+              if (!existingPaths.has(file.name)) {
+                analysis.localGCSUnindexed++;
+              }
+            }
           }
+        } catch (bucketError) {
+          console.error("Error scanning GCS bucket:", bucketError);
+          // Continue even if bucket scan fails - we still have database stats
         }
       }
 
@@ -831,7 +834,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Create all categories from the map
-      for (const slug of categoryMap.keys()) {
+      for (const slug of Array.from(categoryMap.keys())) {
         await createCategoryHierarchy(slug);
       }
 
@@ -1180,7 +1183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check content for images
         if (article.content) {
           const matches = article.content.matchAll(imageUrlPattern);
-          for (const match of matches) {
+          for (const match of Array.from(matches)) {
             usedImages.add(match[0]);
           }
         }
