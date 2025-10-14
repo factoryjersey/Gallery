@@ -8,7 +8,7 @@ import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
 import { processImage, getPublicUrl } from "./imageProcessor";
 import { r2Client } from "./r2Client";
-import { ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1299,7 +1299,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Standardize image URLs - replace variants with originals
+  // Helper function to check if R2 file exists
+  async function checkR2FileExists(url: string): Promise<boolean> {
+    if (!r2Client) return false;
+    
+    try {
+      const urlObj = new URL(url);
+      const key = urlObj.pathname.substring(1); // Remove leading slash
+      
+      await r2Client.send(new HeadObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: key
+      }));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Standardize image URLs - replace variants with best available version
   app.post("/api/admin/standardize-image-urls", async (req, res) => {
     try {
       const allArticles = await storage.getArticles({
@@ -1312,34 +1330,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let articlesUpdated = 0;
       let urlsReplaced = 0;
+      let usedOriginal = 0;
+      let usedLarge = 0;
+      let usedMedium = 0;
+      let keptVariant = 0;
+
+      // Cache for file existence checks to avoid redundant API calls
+      const existsCache = new Map<string, boolean>();
+
+      async function getBestAvailableUrl(baseUrl: string, currentVariant: string, ext: string): Promise<string> {
+        const original = `${baseUrl}.${ext}`;
+        const large = `${baseUrl}-large.${ext}`;
+        const medium = `${baseUrl}-medium.${ext}`;
+        const thumbnail = `${baseUrl}-thumbnail.${ext}`;
+        const current = `${baseUrl}-${currentVariant}.${ext}`;
+
+        // Check in order: original → large → medium → thumbnail → keep current
+        const candidates = [
+          { url: original, type: 'original' },
+          { url: large, type: 'large' },
+          { url: medium, type: 'medium' },
+          { url: thumbnail, type: 'thumbnail' }
+        ];
+
+        for (const candidate of candidates) {
+          // Skip if it's the same as current
+          if (candidate.url === current) continue;
+
+          // Check cache first
+          if (!existsCache.has(candidate.url)) {
+            existsCache.set(candidate.url, await checkR2FileExists(candidate.url));
+          }
+
+          if (existsCache.get(candidate.url)) {
+            // Track which type we used
+            if (candidate.type === 'original') usedOriginal++;
+            else if (candidate.type === 'large') usedLarge++;
+            else if (candidate.type === 'medium') usedMedium++;
+            
+            return candidate.url;
+          }
+        }
+
+        // No better option found, keep current variant
+        keptVariant++;
+        return current;
+      }
 
       for (const article of allArticles.articles) {
         let contentUpdated = false;
         let newContent = article.content || '';
         let newFeaturedImage = article.featuredImage;
 
-        // Replace variant URLs with originals in content
         const variantPattern = /(https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^"'\s<>)]+)-(thumbnail|medium|large)\.(jpg|jpeg|png|gif|webp)/gi;
         
-        const replacedContent = newContent.replace(variantPattern, (match, baseUrl, variant, ext) => {
-          urlsReplaced++;
-          return `${baseUrl}.${ext}`;
-        });
-
-        if (replacedContent !== newContent) {
-          newContent = replacedContent;
-          contentUpdated = true;
+        // Collect all matches first to process them with async calls
+        const matches: Array<{ match: string, baseUrl: string, variant: string, ext: string }> = [];
+        let match;
+        
+        // Reset regex
+        variantPattern.lastIndex = 0;
+        while ((match = variantPattern.exec(newContent)) !== null) {
+          matches.push({
+            match: match[0],
+            baseUrl: match[1],
+            variant: match[2],
+            ext: match[3]
+          });
         }
 
-        // Replace variant in featured image
-        if (newFeaturedImage) {
-          const replacedFeatured = newFeaturedImage.replace(variantPattern, (match, baseUrl, variant, ext) => {
-            urlsReplaced++;
-            return `${baseUrl}.${ext}`;
-          });
-          if (replacedFeatured !== newFeaturedImage) {
-            newFeaturedImage = replacedFeatured;
+        // Process replacements
+        for (const m of matches) {
+          const bestUrl = await getBestAvailableUrl(m.baseUrl, m.variant, m.ext);
+          if (bestUrl !== m.match) {
+            newContent = newContent.replace(m.match, bestUrl);
             contentUpdated = true;
+            urlsReplaced++;
+          }
+        }
+
+        // Process featured image
+        if (newFeaturedImage) {
+          variantPattern.lastIndex = 0;
+          const featuredMatch = variantPattern.exec(newFeaturedImage);
+          if (featuredMatch) {
+            const bestUrl = await getBestAvailableUrl(
+              featuredMatch[1], 
+              featuredMatch[2], 
+              featuredMatch[3]
+            );
+            if (bestUrl !== featuredMatch[0]) {
+              newFeaturedImage = bestUrl;
+              contentUpdated = true;
+              urlsReplaced++;
+            }
           }
         }
 
@@ -1356,7 +1440,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         articlesUpdated,
-        urlsReplaced
+        urlsReplaced,
+        breakdown: {
+          usedOriginal,
+          usedLarge,
+          usedMedium,
+          keptVariant
+        }
       });
     } catch (error) {
       console.error("Error standardizing URLs:", error);
