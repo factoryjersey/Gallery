@@ -40,21 +40,9 @@ interface R2Analysis {
   };
 }
 
-interface DimensionAnalysis {
-  totalFiles: number;
-  dimensionCounts: Array<{ suffix: string; count: number }>;
-  files: Array<{ key: string; width: number; height: number; suffix: string }>;
-  summary: {
-    totalR2Files: number;
-    filesWithDimensions: number;
-    uniqueDimensions: number;
-  };
-}
-
 export function ImageRationalization() {
   const { toast } = useToast();
   const [analysisData, setAnalysisData] = useState<R2Analysis | null>(null);
-  const [dimensionData, setDimensionData] = useState<DimensionAnalysis | null>(null);
 
   const analyzeMutation = useMutation({
     mutationFn: async () => {
@@ -107,44 +95,24 @@ export function ImageRationalization() {
     },
   });
 
-  const analyzeDimensionsMutation = useMutation({
+  const resolveToLargestMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/admin/analyze-dimension-suffixes");
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setDimensionData(data);
-      toast({
-        title: "Analysis Complete!",
-        description: `Found ${data.totalFiles} files with WordPress dimension suffixes`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to analyze dimensions",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const normalizeDimensionsMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/admin/normalize-dimension-filenames", { updateArticles: true });
+      const response = await apiRequest("POST", "/api/admin/resolve-to-largest-dimensions");
       return response.json();
     },
     onSuccess: (data) => {
       toast({
-        title: "Normalization Complete!",
-        description: `Updated ${data.articlesUpdated} articles, normalized ${data.urlsFound} URLs`,
+        title: "Resolution Complete!",
+        description: `Updated ${data.articlesUpdated} articles to use largest versions. Indexed ${data.imagesIndexed} new images.`,
       });
-      analyzeDimensionsMutation.mutate();
+      analyzeMutation.mutate();
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/media"] });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to normalize filenames",
+        description: error.message || "Failed to resolve to largest versions",
         variant: "destructive",
       });
     },
@@ -297,95 +265,59 @@ export function ImageRationalization() {
         </CardContent>
       </Card>
 
-      {/* WordPress Dimension Normalization Section */}
+      {/* Resolve to Largest Dimensions Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileImage className="h-5 w-5" />
-            WordPress Dimension Normalization
+            Resolve to Largest Image Versions
           </CardTitle>
           <CardDescription>
-            Analyze and normalize WordPress dimension-suffixed filenames (e.g., -1500x1000, -1200x800)
+            Find the largest version of each image (including WordPress dimension suffixes) and update all articles to use it
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button 
-            onClick={() => analyzeDimensionsMutation.mutate()} 
-            disabled={analyzeDimensionsMutation.isPending}
-            data-testid="button-analyze-dimensions"
-          >
-            {analyzeDimensionsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <FileImage className="mr-2 h-4 w-4" />
-            Analyze Dimension Suffixes
-          </Button>
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              This will scan R2 for all image variants (including -1500x1000, -1200x800, etc.), 
+              identify the largest version of each image, update article URLs to use it, and index it in the media library.
+            </AlertDescription>
+          </Alert>
 
-          {dimensionData && (
-            <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold">{dimensionData.totalFiles}</div>
-                  <div className="text-sm text-muted-foreground">Files with Dimensions</div>
-                </div>
-                <div className="p-4 bg-muted rounded-lg">
-                  <div className="text-2xl font-bold">{dimensionData.summary.uniqueDimensions}</div>
-                  <div className="text-sm text-muted-foreground">Unique Dimension Patterns</div>
-                </div>
-              </div>
-
-              {dimensionData.dimensionCounts.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Most Common Dimensions:</h4>
-                  <div className="space-y-1">
-                    {dimensionData.dimensionCounts.slice(0, 5).map(({ suffix, count }) => (
-                      <div key={suffix} className="flex justify-between text-sm">
-                        <span className="font-mono">{suffix}</span>
-                        <span className="text-muted-foreground">{count} files</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {dimensionData.totalFiles > 0 && (
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Found {dimensionData.totalFiles} WordPress files with dimension suffixes. 
-                    Normalizing will strip these dimensions from URLs to use base filenames.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    disabled={normalizeDimensionsMutation.isPending}
-                    data-testid="button-normalize-dimensions"
-                  >
-                    {normalizeDimensionsMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Replace className="mr-2 h-4 w-4" />
-                    Normalize Filenames
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Normalize WordPress Dimensions?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will scan all articles and remove dimension suffixes (like -1500x1000, -1200x800) from image URLs,
-                      replacing them with base filenames. For example: "image-1500x1000.jpg" becomes "image.jpg". 
-                      This cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => normalizeDimensionsMutation.mutate()}>
-                      Normalize Filenames
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button 
+                disabled={resolveToLargestMutation.isPending}
+                data-testid="button-resolve-largest"
+              >
+                {resolveToLargestMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <FileImage className="mr-2 h-4 w-4" />
+                Resolve to Largest Versions
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Resolve to Largest Image Versions?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will:
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li>Scan R2 bucket for all image variants</li>
+                    <li>Identify the largest version of each image (by pixel dimensions)</li>
+                    <li>Update all article URLs to use the largest version</li>
+                    <li>Index the largest versions in your media library</li>
+                  </ul>
+                  <p className="mt-2">This process may take several minutes for thousands of images.</p>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => resolveToLargestMutation.mutate()}>
+                  Resolve to Largest
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
 

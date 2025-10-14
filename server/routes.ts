@@ -1454,77 +1454,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Analyze WordPress dimension-suffixed filenames
-  app.get("/api/admin/analyze-dimension-suffixes", async (req, res) => {
+  // Smart dimension resolver - find largest version of each image and update articles
+  app.post("/api/admin/resolve-to-largest-dimensions", async (req, res) => {
     try {
       if (!r2Client) {
         return res.status(500).json({ error: "R2 client not configured" });
       }
 
+      // Step 1: Get all R2 objects
       const listCommand = new ListObjectsV2Command({
         Bucket: process.env.R2_BUCKET_NAME,
       });
+      const r2Response = await r2Client.send(listCommand);
+      const r2Objects = r2Response.Contents || [];
 
-      const response = await r2Client.send(listCommand);
-      const objects = response.Contents || [];
+      // Step 2: Build map of base images to all their dimension variants
+      const imageVariants = new Map<string, Array<{ key: string; width: number; height: number; url: string }>>();
 
-      // Pattern to match dimension suffixes like -1500x1000, -1200x800, etc.
-      const dimensionPattern = /-(\d{3,4})x(\d{3,4})\./i;
-      
-      const dimensionFiles: Array<{ key: string; width: number; height: number; suffix: string }> = [];
-      const dimensionCounts: Record<string, number> = {};
-
-      for (const obj of objects) {
+      for (const obj of r2Objects) {
         if (!obj.Key) continue;
         
-        const match = obj.Key.match(dimensionPattern);
-        if (match) {
-          const suffix = `${match[1]}x${match[2]}`;
-          const width = parseInt(match[1]);
-          const height = parseInt(match[2]);
-          
-          dimensionFiles.push({
-            key: obj.Key,
-            width,
-            height,
-            suffix
-          });
+        // Skip non-image files
+        if (!obj.Key.match(/\.(jpg|jpeg|png|gif|webp)$/i)) continue;
 
-          dimensionCounts[suffix] = (dimensionCounts[suffix] || 0) + 1;
+        // Extract base name and dimensions
+        const dimensionMatch = obj.Key.match(/^(.+?)-(\d{3,4})x(\d{3,4})\.(jpg|jpeg|png|gif|webp)$/i);
+        const standardMatch = obj.Key.match(/^(.+?)-(thumbnail|medium|large)\.(webp)$/i);
+        
+        let baseName: string;
+        let width = 0;
+        let height = 0;
+
+        if (dimensionMatch) {
+          // WordPress dimension suffix like "image-1500x1000.jpg"
+          baseName = `${dimensionMatch[1]}.${dimensionMatch[4]}`;
+          width = parseInt(dimensionMatch[2]);
+          height = parseInt(dimensionMatch[3]);
+        } else if (standardMatch) {
+          // Standard variant like "image-large.webp"
+          baseName = `${standardMatch[1]}.${standardMatch[3]}`;
+          width = standardMatch[2] === 'thumbnail' ? 300 : standardMatch[2] === 'medium' ? 800 : 1200;
+        } else {
+          // Original file like "image.jpg"
+          baseName = obj.Key;
+          // Assume original is large if no dimensions
+          width = 2000;
+          height = 2000;
         }
+
+        if (!imageVariants.has(baseName)) {
+          imageVariants.set(baseName, []);
+        }
+
+        const url = `https://pub-${process.env.R2_ACCOUNT_ID}.r2.dev/${obj.Key}`;
+        imageVariants.get(baseName)!.push({ key: obj.Key, width, height, url });
       }
 
-      // Sort by most common
-      const sortedDimensions = Object.entries(dimensionCounts)
-        .sort(([, a], [, b]) => b - a)
-        .map(([suffix, count]) => ({ suffix, count }));
-
-      res.json({
-        totalFiles: dimensionFiles.length,
-        dimensionCounts: sortedDimensions,
-        files: dimensionFiles.slice(0, 100), // First 100 for preview
-        summary: {
-          totalR2Files: objects.length,
-          filesWithDimensions: dimensionFiles.length,
-          uniqueDimensions: sortedDimensions.length
-        }
-      });
-    } catch (error) {
-      console.error("Error analyzing dimension suffixes:", error);
-      res.status(500).json({ error: "Failed to analyze dimension suffixes" });
-    }
-  });
-
-  // Normalize dimension-suffixed filenames by stripping dimensions
-  app.post("/api/admin/normalize-dimension-filenames", async (req, res) => {
-    try {
-      if (!r2Client) {
-        return res.status(500).json({ error: "R2 client not configured" });
+      // Step 3: For each base image, find the largest variant
+      const largestVersions = new Map<string, string>();
+      
+      for (const [baseName, variants] of Array.from(imageVariants.entries())) {
+        // Sort by total pixels (width * height) descending
+        const sorted = variants.sort((a: { width: number; height: number }, b: { width: number; height: number }) => 
+          (b.width * b.height) - (a.width * a.height)
+        );
+        const largest = sorted[0];
+        largestVersions.set(baseName, largest.url);
       }
 
-      const { updateArticles = false } = req.body;
-
-      // Get all articles to find and update dimension-suffixed URLs
+      // Step 4: Scan articles and build URL mapping
       const allArticles = await storage.getArticles({
         status: undefined,
         limit: 100000,
@@ -1533,41 +1531,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         orderDir: 'desc',
       });
 
-      const dimensionPattern = /(https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^"'\s<>)]+)-(\d{3,4})x(\d{3,4})\.(jpg|jpeg|png|gif|webp)/gi;
+      // Build map of any image URL variant to its largest version
+      const urlReplacements = new Map<string, string>();
       
+      for (const [baseName, largestUrl] of Array.from(largestVersions.entries())) {
+        const variants = imageVariants.get(baseName) || [];
+        for (const variant of variants) {
+          if (variant.url !== largestUrl) {
+            urlReplacements.set(variant.url, largestUrl);
+          }
+        }
+      }
+
+      // Step 5: Update articles
       let articlesUpdated = 0;
       let urlsReplaced = 0;
+      const indexedImages = new Set<string>();
 
       for (const article of allArticles.articles) {
         let contentUpdated = false;
         let newContent = article.content || '';
         let newFeaturedImage = article.featuredImage;
 
-        // Replace dimension-suffixed URLs with base name (remove dimensions)
-        const replacedContent = newContent.replace(dimensionPattern, (match, baseUrl, width, height, ext) => {
-          urlsReplaced++;
-          return `${baseUrl}.${ext}`;
-        });
-
-        if (replacedContent !== newContent) {
-          newContent = replacedContent;
-          contentUpdated = true;
-        }
-
-        // Replace in featured image
-        if (newFeaturedImage) {
-          const replacedFeatured = newFeaturedImage.replace(dimensionPattern, (match, baseUrl, width, height, ext) => {
-            urlsReplaced++;
-            return `${baseUrl}.${ext}`;
-          });
-          if (replacedFeatured !== newFeaturedImage) {
-            newFeaturedImage = replacedFeatured;
+        // Replace all variant URLs with largest versions in content
+        for (const [oldUrl, newUrl] of Array.from(urlReplacements.entries())) {
+          if (newContent.includes(oldUrl)) {
+            newContent = newContent.replace(new RegExp(oldUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), newUrl);
             contentUpdated = true;
+            urlsReplaced++;
+            indexedImages.add(newUrl);
           }
         }
 
-        // Update article if changed and user wants to update
-        if (contentUpdated && updateArticles) {
+        // Replace featured image
+        if (newFeaturedImage && urlReplacements.has(newFeaturedImage)) {
+          newFeaturedImage = urlReplacements.get(newFeaturedImage)!;
+          contentUpdated = true;
+          urlsReplaced++;
+          indexedImages.add(newFeaturedImage);
+        } else if (newFeaturedImage && newFeaturedImage.includes('r2.dev')) {
+          indexedImages.add(newFeaturedImage);
+        }
+
+        // Update article if changed
+        if (contentUpdated) {
           await storage.updateArticle(article.id, {
             content: newContent,
             featuredImage: newFeaturedImage
@@ -1576,15 +1583,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Step 6: Index the largest versions in media library
+      let newlyIndexed = 0;
+      for (const imageUrl of Array.from(indexedImages)) {
+        // Check if already indexed
+        const allMedia = await storage.getMedia({ limit: 100000 });
+        const existing = allMedia.media.find((m: any) => m.objectPath === imageUrl);
+        
+        if (!existing) {
+          const urlObj = new URL(imageUrl);
+          const filename = urlObj.pathname.split('/').pop() || 'unknown';
+          
+          await storage.createMedia({
+            filename,
+            originalName: filename,
+            mimeType: 'image/jpeg',
+            size: 0,
+            objectPath: imageUrl,
+            variants: { original: imageUrl }
+          });
+          newlyIndexed++;
+        }
+      }
+
       res.json({
         success: true,
-        articlesUpdated: updateArticles ? articlesUpdated : 0,
-        urlsFound: urlsReplaced,
-        previewOnly: !updateArticles
+        articlesUpdated,
+        urlsReplaced,
+        imagesIndexed: newlyIndexed,
+        totalVariants: imageVariants.size,
+        largestVersionsFound: largestVersions.size
       });
     } catch (error) {
-      console.error("Error normalizing filenames:", error);
-      res.status(500).json({ error: "Failed to normalize filenames" });
+      console.error("Error resolving to largest dimensions:", error);
+      res.status(500).json({ error: "Failed to resolve dimensions" });
     }
   });
 
