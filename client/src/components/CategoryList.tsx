@@ -23,7 +23,19 @@ export default function CategoryList() {
 
   const categories = categoriesData?.categories || [];
   
-  const filteredCategories = categories.filter((category: any) => {
+  // Build hierarchical structure
+  const buildHierarchy = (cats: any[], parentId: string | null = null, level: number = 0): any[] => {
+    const result: any[] = [];
+    cats.filter(c => c.parentId === parentId).forEach(cat => {
+      result.push({ ...cat, level });
+      result.push(...buildHierarchy(cats, cat.id, level + 1));
+    });
+    return result;
+  };
+  
+  const hierarchicalCategories = buildHierarchy(categories);
+  
+  const filteredCategories = hierarchicalCategories.filter((category: any) => {
     const searchLower = searchTerm.toLowerCase();
     return (
       (category.name ?? '').toLowerCase().includes(searchLower) ||
@@ -81,9 +93,14 @@ export default function CategoryList() {
                 {filteredCategories.map((category: any) => (
                   <TableRow key={category.id} data-testid={`row-category-${category.id}`}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2" style={{ paddingLeft: `${category.level * 24}px` }}>
                         <FolderOpen className="h-4 w-4" style={{ color: category.color }} />
                         <span>{category.name}</span>
+                        {category.level > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            Subcategory
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
