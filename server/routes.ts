@@ -1521,26 +1521,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allMedia = await storage.getAllMedia();
       const indexedUrls = new Set(allMedia.map(m => m.objectPath));
 
-      // Step 4: Index used images + their largest variants
+      // Step 4: Index used images + their largest variants (even if referenced image is missing)
       let indexedFromPosts = 0;
       let indexedLargestVariants = 0;
+      let foundMissingImageVariants = 0;
       const toIndex = new Set<string>();
 
-      // Add all used images
+      // Add all used images that exist
       for (const url of Array.from(usedImageUrls)) {
         if (!indexedUrls.has(url) && r2ImageMap.has(url)) {
           toIndex.add(url);
         }
       }
 
-      // For each used image with dimension suffix, also add the largest variant
+      // For each referenced URL (even if missing), look for variants
       for (const url of Array.from(usedImageUrls)) {
-        const imageData = r2ImageMap.get(url);
-        if (!imageData) continue;
-
-        const dimensionMatch = imageData.key.match(/^(.+?)-(\d{3,4})x(\d{3,4})\.(jpg|jpeg|png|gif|webp)$/i);
+        // Extract R2 key from URL (path after the domain)
+        const urlMatch = url.match(/https:\/\/pub-[a-f0-9]+\.r2\.dev\/(.+)$/i);
+        if (!urlMatch) continue;
+        
+        const key = urlMatch[1]; // e.g., "2024/05/photo-1500x1000.jpg"
+        const dimensionMatch = key.match(/^(.+?)-(\d{3,4})x(\d{3,4})\.(jpg|jpeg|png|gif|webp)$/i);
+        
         if (dimensionMatch) {
-          const baseName = `${dimensionMatch[1]}.${dimensionMatch[4]}`;
+          const baseName = `${dimensionMatch[1]}.${dimensionMatch[4]}`; // e.g., "2024/05/photo.jpg"
           const variants = variantGroups.get(baseName) || [];
           
           if (variants.length > 0) {
@@ -1548,6 +1552,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const largest = variants.reduce((max, v) => v.dimensions > max.dimensions ? v : max);
             if (!indexedUrls.has(largest.url)) {
               toIndex.add(largest.url);
+              
+              // Track if we found a variant for a missing image
+              if (!r2ImageMap.has(url)) {
+                foundMissingImageVariants++;
+              }
             }
           }
         }
@@ -1586,6 +1595,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         imagesInPosts: usedImageUrls.size,
         indexedFromPosts,
         indexedLargestVariants,
+        foundMissingImageVariants,
         totalIndexed: toIndex.size,
         alreadyIndexed: indexedUrls.size,
       });

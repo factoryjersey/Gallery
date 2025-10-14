@@ -101,9 +101,12 @@ export function ImageRationalization() {
       return response.json();
     },
     onSuccess: (data) => {
+      const missingMsg = data.foundMissingImageVariants > 0 
+        ? ` Found ${data.foundMissingImageVariants} variants for missing images!` 
+        : '';
       toast({
         title: "Indexing Complete!",
-        description: `Indexed ${data.indexedFromPosts} images from posts and ${data.indexedLargestVariants} largest variants. Found ${data.imagesInPosts} total images in posts. ${data.alreadyIndexed} already indexed.`,
+        description: `Indexed ${data.indexedFromPosts} images from posts and ${data.indexedLargestVariants} largest variants.${missingMsg} Found ${data.imagesInPosts} total images in posts. ${data.alreadyIndexed} already indexed.`,
       });
       analyzeMutation.mutate();
       queryClient.invalidateQueries({ queryKey: ["/api/media"] });
@@ -283,7 +286,8 @@ export function ImageRationalization() {
               <ul className="list-disc list-inside mt-2 space-y-1">
                 <li>Find all images currently used in your posts (with dimension suffixes like -1500x1000)</li>
                 <li>Index those images exactly as they are (your posts stay unchanged)</li>
-                <li>Also find and index the largest variant of each image for future use</li>
+                <li>Find and index the largest variant of each image for future use</li>
+                <li>If a referenced image is missing, look for other sizes in R2 and index those</li>
               </ul>
             </AlertDescription>
           </Alert>
