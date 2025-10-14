@@ -1,0 +1,165 @@
+Active / Wellness
+Edit | Quick Edit | Delete | View
+We profile local sportspeople and wellness professionals each month, highlighting those that excel, those that participate and those that support.
+
+active-wellbeing	148
+Select SPOTM	— SPOTM
+Edit | Quick Edit | Delete | View
+—No description	spotm	11
+Select Advice	Advice
+Edit | Quick Edit | Delete | View
+—No description	advice	2
+Select Agenda	Agenda
+Edit | Quick Edit | Delete | View
+Business updates from the island’s industry leaders. Whether it’s a mover and shaker placed in a new position, an acquisition or piece of work you’d like to impress your contemporaries with or a profile piece, get in touch to get featured.
+
+agenda_business	238
+Select Business News	— Business News
+Edit | Quick Edit | Delete | View
+—No description	business	104
+Select Gradu8	— — Gradu8
+Edit | Quick Edit | Delete | View
+—No description	gradu8	16
+Select IOD	— IOD
+Edit | Quick Edit | Delete | View
+—No description	iod	6
+Select movers and shakers	— movers and shakers
+Edit | Quick Edit | Delete | View
+—No description	movers-and-shakers	5
+Select Wealth	— Wealth
+Edit | Quick Edit | Delete | View
+—No description	wealth	12
+Select Women in Business	— Women in Business
+Edit | Quick Edit | Delete | View
+—No description	women-in-busines	10
+Select Appetite	Appetite
+Edit | Quick Edit | Delete | View
+Our annual food and drink guide, Appetite, is the widest coverage guide to eating out in Jersey, complete with features on chefs and those that make the hospitality industry tick.
+
+appetite-1	97
+Select Art	Art
+Edit | Quick Edit | Delete | View
+—No description	art	14
+Select Beauty and Wellbeing	Beauty and Wellbeing
+Edit | Quick Edit | Delete | View
+—No description	beauty-and-wellbeing	16
+Select bridal bible	bridal bible
+Edit | Quick Edit | Delete | View
+—No description	bridal-bible	2
+Select Culture	Culture
+Edit | Quick Edit | Delete | View
+We’re an island rich in art and creative minds. Our culture section is reflection of locally produced and visiting art and cultural attractions and creators.
+
+culture	233
+Select Culture Club	— Culture Club
+Edit | Quick Edit | Delete | View
+—No description	culture-club	5
+Select Music	— Music
+Edit | Quick Edit | Delete | View
+—No description	music	10
+Select Direction	Direction
+Edit | Quick Edit | Delete | View
+Our Direction annual and Gradu8 / Intern supplements highlight career options and development. Direction features focus on profiling professionals to highlight the variety of options open to job hunters and career switchers.
+
+direction	1
+Select Edito	Edito
+Edit | Quick Edit | Delete | View
+—No description	edito	50
+Select Events	Events
+Edit | Quick Edit | Delete | View
+We cover corporate, charity and client events for each addition of Gallery and publish a wider range of shots online. Contact paparazzi@factory.je
+
+events	284
+Select Fashion & Beauty	Fashion & Beauty
+Edit | Quick Edit | Delete | View
+We’ve spent more time than any other local magazine championing locally produced fashion shoots, highlighting local retailers and creative talent. Our fashion and beauty section features shoots, product picks, beauty selections and more.
+
+fashion	109
+Select Fashion Shoots	— Fashion Shoots
+Edit | Quick Edit | Delete | View
+—No description	fashion-shoots	61
+Select Style Stalker	— Style Stalker
+Edit | Quick Edit | Delete | View
+—No description	style-stalker	1
+ 	Features
+Edit | Quick Edit | View
+Our ‘upfront’ features are locally sourced and written, wry and incisive in good proportion. Centred around monthly themes they are intended to amuse, educate and entertain.
+
+features	755
+Select Cool Beans	— Cool Beans
+Edit | Quick Edit | Delete | View
+—No description	cool-beans	16
+Select My Jersey	— My Jersey
+Edit | Quick Edit | Delete | View
+—No description	my-jersey	4
+Select Relative Values	— Relative Values
+Edit | Quick Edit | Delete | View
+—No description	relative-values	5
+Select Rock It	— Rock It
+Edit | Quick Edit | Delete | View
+—No description	rock-it-features	1
+Select Genuine Articles	Genuine Articles
+Edit | Quick Edit | Delete | View
+—No description	genuine-articles	9
+Select Give	Give
+Edit | Quick Edit | Delete | View
+Our Give section profiles charitable work and Corporate and Social responsibility initiatives, alongside highlighting altruistic endeavours on-island and beyond.
+
+give-1	114
+Select meet the charity	— meet the charity
+Edit | Quick Edit | Delete | View
+—No description	meet-the-charity-give-1	4
+Select Hardware	Hardware
+Edit | Quick Edit | Delete | View
+Gadgets have become mainstream. Every one of us holds cutting edge technology in our palms. Our hardware section profiles tech, motoring and luxury durables your tech heart might desire.
+
+hardware-1	54
+Select Islander	Islander
+Edit | Quick Edit | Delete | View
+Islander is our property-centric magazine which we deliver to all homes in the Northern parishes, every out of town business, as well as every Distro stand & outlet islandwide.
+
+islander	6
+Select Interiors	— Interiors
+Edit | Quick Edit | Delete | View
+—No description	interiors	4
+Select meet the charity	meet the charity
+Edit | Quick Edit | Delete | View
+—No description	meet-the-charity	1
+Select Misc	Misc
+Edit | Quick Edit | Delete | View
+—No description	misc	8
+Select News	News
+Edit | Quick Edit | Delete | View
+—No description	news	40
+Select news in numbers	news in numbers
+Edit | Quick Edit | Delete | View
+—No description	news-in-numbers	6
+Select paparazzi	paparazzi
+Edit | Quick Edit | Delete | View
+—No description	paparazzi	6
+Select People	People
+Edit | Quick Edit | Delete | View
+—No description	people	28
+Select Places	Places
+Edit | Quick Edit | Delete | View
+Featuring roperty focused features that profile Jersey’s real estate industry, architecture and interior design, working alongside our places.je property portal
+
+places	53
+Select property review	— property review
+Edit | Quick Edit | Delete | View
+—No description	property-review	19
+Select POTM	POTM
+Edit | Quick Edit | Delete | View
+—No description	potm	31
+Select Rock it	Rock it
+Edit | Quick Edit | Delete | View
+—No description	rock-it	1
+Select Satire	Satire
+Edit | Quick Edit | Delete | View
+—No description	satire	13
+Select Travel	Travel
+Edit | Quick Edit | Delete | View
+—No description	travel-1	22
+Select Whats On	Whats On
+Edit | Quick Edit | Delete | View
+—No description	whats-on	3

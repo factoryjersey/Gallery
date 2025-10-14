@@ -213,6 +213,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/categories/update-hierarchy", async (req, res) => {
+    try {
+      const { hierarchyData } = req.body;
+      
+      if (!hierarchyData || typeof hierarchyData !== 'string') {
+        return res.status(400).json({ error: "Invalid hierarchy data" });
+      }
+
+      const lines = hierarchyData.split('\n').filter((line: string) => line.trim());
+      const categoryStack: { slug: string; level: number }[] = [];
+      let updated = 0;
+
+      for (const line of lines) {
+        const dashMatch = line.match(/^(—\s*)*/);
+        const level = dashMatch ? dashMatch[0].split('—').length - 1 : 0;
+        
+        const slugMatch = line.match(/\t([a-z0-9-]+)\t/);
+        if (!slugMatch) continue;
+        
+        const slug = slugMatch[1];
+        
+        // Pop categories from stack that are at same or deeper level
+        while (categoryStack.length > 0 && categoryStack[categoryStack.length - 1].level >= level) {
+          categoryStack.pop();
+        }
+        
+        // Get parent from stack (if exists)
+        const parentSlug = categoryStack.length > 0 ? categoryStack[categoryStack.length - 1].slug : null;
+        
+        // Update category parent
+        const category = await storage.getCategoryBySlug(slug);
+        if (category) {
+          const parentCategory = parentSlug ? await storage.getCategoryBySlug(parentSlug) : null;
+          await storage.updateCategoryParent(category.id, parentCategory?.id || null);
+          updated++;
+        }
+        
+        // Add current category to stack
+        categoryStack.push({ slug, level });
+      }
+
+      res.json({ message: `Updated ${updated} category parent relationships`, updated });
+    } catch (error) {
+      console.error("Error updating category hierarchy:", error);
+      res.status(500).json({ error: "Failed to update category hierarchy" });
+    }
+  });
+
   // Tags
   app.get("/api/tags", async (req, res) => {
     try {

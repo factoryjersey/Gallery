@@ -29,6 +29,7 @@ export interface IStorage {
   getCategoryBySlug(slug: string): Promise<Category | undefined>;
   createCategory(category: InsertCategory): Promise<Category>;
   updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category | undefined>;
+  updateCategoryParent(id: string, parentId: string | null): Promise<void>;
   getAllCategories(): Promise<Category[]>;
 
   // Tag methods
@@ -140,6 +141,10 @@ export class DatabaseStorage implements IStorage {
   async updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category | undefined> {
     const [updated] = await db.update(categories).set(category).where(eq(categories.id, id)).returning();
     return updated || undefined;
+  }
+
+  async updateCategoryParent(id: string, parentId: string | null): Promise<void> {
+    await db.update(categories).set({ parentId }).where(eq(categories.id, id));
   }
 
   async getAllCategories(): Promise<Category[]> {

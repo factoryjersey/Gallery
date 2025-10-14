@@ -20,6 +20,7 @@ import {
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
 import CategoryList from "@/components/CategoryList";
+import { CategoryHierarchyUpdater } from "@/components/CategoryHierarchyUpdater";
 import AuthorList from "@/components/AuthorList";
 import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
@@ -292,7 +293,10 @@ export default function Admin() {
               )}
 
               {activeTab === "categories" && (
-                <CategoryList />
+                <div className="space-y-6">
+                  <CategoryHierarchyUpdater />
+                  <CategoryList />
+                </div>
               )}
 
               {activeTab === "authors" && (
