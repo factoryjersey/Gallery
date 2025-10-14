@@ -1767,6 +1767,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Normalize image URL/path to R2 object key
   function normalizeToR2Key(urlOrPath: string): string | null {
     try {
+      // Handle old WordPress domain URLs (gallerymagazine.co.uk/v3/wp-content/YEAR/...)
+      // Extract everything from the year onwards
+      const wpDomainMatch = urlOrPath.match(/(?:gallerymagazine\.co\.uk|v3)\/wp-content\/(\d{4}\/.+)/i);
+      if (wpDomainMatch) {
+        return wpDomainMatch[1]; // Return YEAR/month/file.jpg
+      }
+      
       // Handle /objects/../wp-content/ paths
       if (urlOrPath.startsWith('/objects/../')) {
         const path = urlOrPath.replace('/objects/../', '');
@@ -1792,6 +1799,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (urlOrPath.includes('.r2.dev')) {
         const url = new URL(urlOrPath);
         return url.pathname.substring(1); // Remove leading /
+      }
+      
+      // Handle wp-content/ URLs with year pattern
+      const wpContentMatch = urlOrPath.match(/wp-content\/(\d{4}\/.+)/i);
+      if (wpContentMatch) {
+        return wpContentMatch[1]; // Return YEAR/month/file.jpg
       }
       
       // Handle relative paths
@@ -1831,8 +1844,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let content = article.content;
         let updated = false;
         
-        // Find all image references (GCS URLs, /objects/ paths, and img src attributes)
+        // Find all image references (old WordPress URLs, GCS URLs, /objects/ paths)
         const patterns = [
+          /https?:\/\/(?:www\.)?gallerymagazine\.co\.uk\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
           /https?:\/\/storage\.googleapis\.com\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
           /\/objects\/\.\.\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
           /\/objects\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
