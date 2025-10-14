@@ -1,16 +1,19 @@
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Calendar, Clock, Eye, User, ArrowLeft } from "lucide-react";
+import { Calendar, Clock, Eye, User, ArrowLeft, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
 import ArticleGallery from "@/components/ArticleGallery";
+import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
   const { slug } = useParams();
+  const [, navigate] = useLocation();
+  const { isAdmin } = useAdmin();
 
   const { data, isLoading, error } = useQuery({
     queryKey: [`/api/articles/by-slug/${slug}`],
@@ -64,13 +67,26 @@ export default function Article() {
       <Header />
       
       <article className="max-w-4xl mx-auto px-4 py-12">
-        {/* Back Button */}
-        <Link href="/">
-          <Button variant="ghost" className="mb-6" data-testid="back-button">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Articles
-          </Button>
-        </Link>
+        {/* Back Button and Admin Edit */}
+        <div className="flex justify-between items-center mb-6">
+          <Link href="/">
+            <Button variant="ghost" data-testid="back-button">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Articles
+            </Button>
+          </Link>
+          {isAdmin && (
+            <Button
+              onClick={() => navigate('/admin')}
+              variant="default"
+              size="sm"
+              data-testid="button-edit-article"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Article
+            </Button>
+          )}
+        </div>
 
         {/* Article Header */}
         <header className="mb-8">

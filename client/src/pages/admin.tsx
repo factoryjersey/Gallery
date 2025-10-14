@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,11 +25,20 @@ import AuthorList from "@/components/AuthorList";
 import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
 import WordPressAuthorUpdater from "@/components/WordPressAuthorUpdater";
-import { ImageAnalysis } from "@/components/ImageAnalysis";
+import { MediaManager } from "@/components/MediaManager";
+import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showArticleEditor, setShowArticleEditor] = useState(false);
+  const { isAdmin, toggleAdmin } = useAdmin();
+
+  // Enable admin mode when entering admin page
+  useEffect(() => {
+    if (!isAdmin) {
+      toggleAdmin();
+    }
+  }, [isAdmin, toggleAdmin]);
 
   const { data: statsData } = useQuery({
     queryKey: ["/api/stats"],
@@ -304,7 +313,7 @@ export default function Admin() {
               )}
 
               {activeTab === "media" && (
-                <ImageAnalysis />
+                <MediaManager />
               )}
             </div>
           </div>
