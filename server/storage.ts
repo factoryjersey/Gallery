@@ -61,7 +61,7 @@ export interface IStorage {
   incrementArticleViews(id: string): Promise<void>;
 
   // Media methods
-  createMedia(media: InsertMedia): Promise<Media>;
+  createMedia(mediaData: InsertMedia): Promise<Media>;
   getMedia(id: string): Promise<Media | undefined>;
   getAllMedia(): Promise<Media[]>;
   deleteMedia(id: string): Promise<boolean>;
@@ -472,8 +472,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Media methods
-  async createMedia(media: InsertMedia): Promise<Media> {
-    const [newMedia] = await db.insert(media).values(media).returning();
+  async createMedia(mediaData: InsertMedia): Promise<Media> {
+    const [newMedia] = await db.insert(media).values(mediaData).returning();
     return newMedia;
   }
 
