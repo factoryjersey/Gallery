@@ -396,8 +396,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/media", async (req, res) => {
     try {
-      const media = await storage.getAllMedia();
-      res.json({ media });
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const search = req.query.search as string || '';
+      
+      const offset = (page - 1) * limit;
+      
+      const result = await storage.getAllMedia({
+        search: search || undefined,
+        limit,
+        offset
+      });
+      
+      res.json({ 
+        media: result.media,
+        total: result.total,
+        page,
+        totalPages: Math.ceil(result.total / limit)
+      });
     } catch (error) {
       console.error("Error fetching media:", error);
       res.status(500).json({ error: "Failed to fetch media" });
@@ -518,7 +534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const existingMedia = await storage.getAllMedia();
-      const existingUrls = new Set(existingMedia.map(m => {
+      const existingUrls = new Set(existingMedia.media.map(m => {
         // Check both objectPath and if it's a URL
         if (m.objectPath.startsWith('http')) {
           return m.objectPath;
@@ -597,7 +613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const indexedCount = { total: 0, skipped: 0, indexed: 0, errors: 0 };
       const existingMedia = await storage.getAllMedia();
-      const existingPaths = new Set(existingMedia.map(m => m.objectPath));
+      const existingPaths = new Set(existingMedia.media.map(m => m.objectPath));
 
       for (const file of files) {
         indexedCount.total++;
@@ -655,11 +671,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allMedia = await storage.getAllMedia();
       
       // Separate URL-based (external R2) from path-based (local GCS)
-      const urlBasedMedia = allMedia.filter(m => m.objectPath?.startsWith('http'));
-      const pathBasedMedia = allMedia.filter(m => m.objectPath && !m.objectPath.startsWith('http'));
+      const urlBasedMedia = allMedia.media.filter(m => m.objectPath?.startsWith('http'));
+      const pathBasedMedia = allMedia.media.filter(m => m.objectPath && !m.objectPath.startsWith('http'));
       
       const analysis = {
-        totalIndexed: allMedia.length,
+        totalIndexed: allMedia.media.length,
         externalR2: urlBasedMedia.length,
         localGCS: pathBasedMedia.length,
         localGCSUnindexed: 0,
@@ -1519,7 +1535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Step 3: Get already indexed media
       const allMedia = await storage.getAllMedia();
-      const indexedUrls = new Set(allMedia.map(m => m.objectPath));
+      const indexedUrls = new Set(allMedia.media.map(m => m.objectPath));
 
       // Step 4: Index used images + their largest variants (even if referenced image is missing)
       let indexedFromPosts = 0;

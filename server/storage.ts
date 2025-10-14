@@ -8,7 +8,7 @@ import {
   articles, authors, categories, tags, articleTags, media, users
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, like, and, or, inArray, count, sql } from "drizzle-orm";
+import { eq, desc, asc, like, ilike, and, or, inArray, count, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User methods (legacy)
@@ -63,7 +63,11 @@ export interface IStorage {
   // Media methods
   createMedia(mediaData: InsertMedia): Promise<Media>;
   getMedia(id: string): Promise<Media | undefined>;
-  getAllMedia(): Promise<Media[]>;
+  getAllMedia(options?: {
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ media: Media[]; total: number }>;
   deleteMedia(id: string): Promise<boolean>;
 
   // Statistics
@@ -309,7 +313,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteArticle(id: string): Promise<boolean> {
     const result = await db.delete(articles).where(eq(articles.id, id));
-    return result.rowCount > 0;
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   async getArticles(options: {
@@ -482,13 +486,49 @@ export class DatabaseStorage implements IStorage {
     return mediaItem || undefined;
   }
 
-  async getAllMedia(): Promise<Media[]> {
-    return await db.select().from(media).orderBy(desc(media.createdAt));
+  async getAllMedia(options?: {
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ media: Media[]; total: number }> {
+    const { search, limit = 20, offset = 0 } = options || {};
+    
+    // Build query conditions
+    const conditions = [];
+    
+    if (search) {
+      conditions.push(
+        or(
+          ilike(media.filename, `%${search}%`),
+          ilike(media.originalName, `%${search}%`)
+        )
+      );
+    }
+    
+    // Get total count
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(media)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
+    
+    // Get paginated results
+    const results = await db
+      .select()
+      .from(media)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(media.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return {
+      media: results,
+      total: totalResult.count
+    };
   }
 
   async deleteMedia(id: string): Promise<boolean> {
     const result = await db.delete(media).where(eq(media.id, id));
-    return result.rowCount > 0;
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   // Statistics
@@ -512,7 +552,7 @@ export class DatabaseStorage implements IStorage {
       .from(articles)
       .where(eq(articles.status, 'draft'));
 
-    const [viewsResult] = await db
+    const viewsResult = await db
       .select({ total: sql<number>`sum(${articles.views})` })
       .from(articles);
 
