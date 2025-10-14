@@ -15,7 +15,8 @@ import {
   Upload,
   Settings,
   Home,
-  Eye
+  Eye,
+  ArrowLeft
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
