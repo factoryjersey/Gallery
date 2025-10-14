@@ -143,7 +143,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllCategories(): Promise<Category[]> {
-    return await db.select().from(categories).orderBy(asc(categories.name));
+    // Order by parentId first (nulls first for top-level), then by name
+    return await db.select().from(categories).orderBy(asc(categories.parentId), asc(categories.name));
   }
 
   // Tag methods
