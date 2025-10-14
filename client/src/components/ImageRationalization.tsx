@@ -103,7 +103,7 @@ export function ImageRationalization() {
     onSuccess: (data) => {
       toast({
         title: "Indexing Complete!",
-        description: `Indexed ${data.newlyIndexed} new images. ${data.alreadyIndexed} were already indexed. Total R2 images: ${data.totalR2Images}`,
+        description: `Indexed ${data.indexedFromPosts} images from posts and ${data.indexedLargestVariants} largest variants. Found ${data.imagesInPosts} total images in posts. ${data.alreadyIndexed} already indexed.`,
       });
       analyzeMutation.mutate();
       queryClient.invalidateQueries({ queryKey: ["/api/media"] });
@@ -264,23 +264,27 @@ export function ImageRationalization() {
         </CardContent>
       </Card>
 
-      {/* Simple R2 Indexing Section */}
+      {/* Smart R2 Indexing Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileImage className="h-5 w-5" />
-            Index All R2 Images
+            Index Images from Posts + Largest Variants
           </CardTitle>
           <CardDescription>
-            Index all images from R2 bucket into your media library (including WordPress dimension suffixes like -1500x1000)
+            Keep all images currently in posts AND index the largest version of each for future optimization
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              This will scan your R2 bucket and add any images that aren't already in your media library. 
-              Files are indexed exactly as they are, including dimension suffixes.
+              This will:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Find all images currently used in your posts (with dimension suffixes like -1500x1000)</li>
+                <li>Index those images exactly as they are (your posts stay unchanged)</li>
+                <li>Also find and index the largest variant of each image for future use</li>
+              </ul>
             </AlertDescription>
           </Alert>
 
@@ -291,7 +295,7 @@ export function ImageRationalization() {
           >
             {indexR2Mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <FileImage className="mr-2 h-4 w-4" />
-            Index All R2 Images
+            Index Images
           </Button>
         </CardContent>
       </Card>

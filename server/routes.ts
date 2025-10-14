@@ -1454,71 +1454,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Simple R2 indexing - index all R2 images as-is into media library
+  // Index images from posts + largest variants
   app.post("/api/admin/index-r2-images", async (req, res) => {
     try {
       if (!r2Client) {
         return res.status(500).json({ error: "R2 client not configured" });
       }
 
-      // Step 1: Get all R2 objects
+      // Step 1: Get all R2 objects and build variant map
       const listCommand = new ListObjectsV2Command({
         Bucket: process.env.R2_BUCKET_NAME,
       });
       const r2Response = await r2Client.send(listCommand);
       const r2Objects = r2Response.Contents || [];
+      const imageExtensions = /\.(jpg|jpeg|png|gif|webp)$/i;
 
-      // Step 2: Get all existing media
+      // Build map of all R2 images
+      const r2ImageMap = new Map<string, { size: number; key: string; url: string }>();
+      const variantGroups = new Map<string, Array<{ key: string; url: string; dimensions: number }>>();
+
+      for (const obj of r2Objects) {
+        if (!obj.Key || !imageExtensions.test(obj.Key)) continue;
+        
+        const url = `https://pub-${process.env.R2_ACCOUNT_ID}.r2.dev/${obj.Key}`;
+        r2ImageMap.set(url, { size: obj.Size || 0, key: obj.Key, url });
+
+        // Group by base name for finding largest variants
+        const dimensionMatch = obj.Key.match(/^(.+?)-(\d{3,4})x(\d{3,4})\.(jpg|jpeg|png|gif|webp)$/i);
+        if (dimensionMatch) {
+          const baseName = `${dimensionMatch[1]}.${dimensionMatch[4]}`;
+          const width = parseInt(dimensionMatch[2]);
+          const height = parseInt(dimensionMatch[3]);
+          const dimensions = width * height;
+          
+          if (!variantGroups.has(baseName)) {
+            variantGroups.set(baseName, []);
+          }
+          variantGroups.get(baseName)!.push({ key: obj.Key, url, dimensions });
+        }
+      }
+
+      // Step 2: Find all images used in posts
+      const allArticles = await storage.getArticles({
+        status: undefined,
+        limit: 100000,
+        offset: 0,
+        orderBy: 'publishedAt',
+        orderDir: 'desc',
+      });
+
+      const usedImageUrls = new Set<string>();
+      const r2Pattern = /https:\/\/pub-[a-f0-9]+\.r2\.dev\/[^\s"'<>]+\.(jpg|jpeg|png|gif|webp)/gi;
+
+      for (const article of allArticles.articles) {
+        // Extract from content
+        const contentMatches = article.content?.match(r2Pattern) || [];
+        contentMatches.forEach(url => usedImageUrls.add(url));
+
+        // Add featured image
+        if (article.featuredImage?.includes('r2.dev')) {
+          usedImageUrls.add(article.featuredImage);
+        }
+      }
+
+      // Step 3: Get already indexed media
       const allMedia = await storage.getAllMedia();
       const indexedUrls = new Set(allMedia.map(m => m.objectPath));
 
-      // Step 3: Index each R2 image that isn't already indexed
-      let newlyIndexed = 0;
-      let skipped = 0;
-      const imageExtensions = /\.(jpg|jpeg|png|gif|webp)$/i;
+      // Step 4: Index used images + their largest variants
+      let indexedFromPosts = 0;
+      let indexedLargestVariants = 0;
+      const toIndex = new Set<string>();
 
-      for (const obj of r2Objects) {
-        if (!obj.Key) continue;
-        
-        // Only process image files
-        if (!imageExtensions.test(obj.Key)) continue;
-
-        const url = `https://pub-${process.env.R2_ACCOUNT_ID}.r2.dev/${obj.Key}`;
-        
-        // Skip if already indexed
-        if (indexedUrls.has(url)) {
-          skipped++;
-          continue;
+      // Add all used images
+      for (const url of Array.from(usedImageUrls)) {
+        if (!indexedUrls.has(url) && r2ImageMap.has(url)) {
+          toIndex.add(url);
         }
+      }
 
-        // Extract filename
-        const filename = obj.Key.split('/').pop() || obj.Key;
-        
-        // Determine mime type from extension
-        const ext = obj.Key.split('.').pop()?.toLowerCase();
+      // For each used image with dimension suffix, also add the largest variant
+      for (const url of Array.from(usedImageUrls)) {
+        const imageData = r2ImageMap.get(url);
+        if (!imageData) continue;
+
+        const dimensionMatch = imageData.key.match(/^(.+?)-(\d{3,4})x(\d{3,4})\.(jpg|jpeg|png|gif|webp)$/i);
+        if (dimensionMatch) {
+          const baseName = `${dimensionMatch[1]}.${dimensionMatch[4]}`;
+          const variants = variantGroups.get(baseName) || [];
+          
+          if (variants.length > 0) {
+            // Find largest by dimensions
+            const largest = variants.reduce((max, v) => v.dimensions > max.dimensions ? v : max);
+            if (!indexedUrls.has(largest.url)) {
+              toIndex.add(largest.url);
+            }
+          }
+        }
+      }
+
+      // Create media records
+      for (const url of Array.from(toIndex)) {
+        const imageData = r2ImageMap.get(url);
+        if (!imageData) continue;
+
+        const filename = imageData.key.split('/').pop() || imageData.key;
+        const ext = imageData.key.split('.').pop()?.toLowerCase();
         const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
                         ext === 'png' ? 'image/png' :
                         ext === 'gif' ? 'image/gif' :
                         ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
-        // Create media record
         await storage.createMedia({
           filename,
           originalName: filename,
           mimeType,
-          size: obj.Size || 0,
+          size: imageData.size,
           objectPath: url,
           variants: { original: url }
         });
-        
-        newlyIndexed++;
+
+        if (usedImageUrls.has(url)) {
+          indexedFromPosts++;
+        } else {
+          indexedLargestVariants++;
+        }
       }
 
       res.json({
         success: true,
-        totalR2Images: r2Objects.filter(obj => obj.Key && imageExtensions.test(obj.Key)).length,
-        newlyIndexed,
-        alreadyIndexed: skipped,
+        imagesInPosts: usedImageUrls.size,
+        indexedFromPosts,
+        indexedLargestVariants,
+        totalIndexed: toIndex.size,
+        alreadyIndexed: indexedUrls.size,
       });
     } catch (error) {
       console.error("Error indexing R2 images:", error);
