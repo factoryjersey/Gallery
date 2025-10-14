@@ -44,11 +44,6 @@ export function ImageRationalization() {
   const { toast } = useToast();
   const [analysisData, setAnalysisData] = useState<R2Analysis | null>(null);
 
-  const { isLoading: isAnalyzing, refetch: runAnalysis } = useQuery<{ analysis: R2Analysis }>({
-    queryKey: ["/api/admin/r2-usage-analysis"],
-    enabled: false,
-  });
-
   const analyzeMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/admin/r2-usage-analysis");

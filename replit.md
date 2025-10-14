@@ -131,6 +131,20 @@ Preferred communication style: Simple, everyday language.
 - **Admin Interface:** Dedicated "Storage & Indexing" tab in admin dashboard for all storage management tasks
 - **Use Cases:** Indexing WordPress-imported R2 images, cleaning up unnecessary variant sizes, storage optimization
 
+**Image Rationalization System (NEW - October 2025):**
+- **R2 Usage Analysis:** Scans all 2,823 articles to identify which R2 images are actually used and categorizes them
+- **Image Categorization:** Separates originals, thumbnails (300px), medium (800px), large (1200px), PDFs, and other files
+- **URL Standardization:** Replaces all variant image URLs with original/full-size versions across article content and featured images
+- **Smart Cleanup:** Batch deletes unused image variants from R2 bucket while preserving originals and PDFs
+- **Storage Optimization:** Reduces ~19k files down to only what's needed by eliminating redundant responsive variants
+- **Workflow:** 
+  1. Analyze R2 usage to identify variants vs originals
+  2. Standardize article URLs to use only full-size images
+  3. Delete unused variants (thumbnails, medium, large) from R2 bucket
+  4. Keep originals and PDFs intact
+- **Admin Interface:** Dedicated "Image Rationalization" sub-tab in Media dashboard with analysis, standardization, and cleanup controls
+- **Benefits:** Faster migration, reduced storage costs, simplified image management without re-downloading or re-uploading
+
 **Design Decisions:**
 - R2 chosen as primary storage for cost-effectiveness and performance (Cloudflare CDN)
 - Dual storage approach supports both legacy GCS content and new R2 uploads
