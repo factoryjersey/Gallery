@@ -95,24 +95,23 @@ export function ImageRationalization() {
     },
   });
 
-  const resolveToLargestMutation = useMutation({
+  const indexR2Mutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/admin/resolve-to-largest-dimensions");
+      const response = await apiRequest("POST", "/api/admin/index-r2-images");
       return response.json();
     },
     onSuccess: (data) => {
       toast({
-        title: "Resolution Complete!",
-        description: `Updated ${data.articlesUpdated} articles to use largest versions. Indexed ${data.imagesIndexed} new images.`,
+        title: "Indexing Complete!",
+        description: `Indexed ${data.newlyIndexed} new images. ${data.alreadyIndexed} were already indexed. Total R2 images: ${data.totalR2Images}`,
       });
       analyzeMutation.mutate();
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/media"] });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to resolve to largest versions",
+        description: error.message || "Failed to index R2 images",
         variant: "destructive",
       });
     },
@@ -265,59 +264,35 @@ export function ImageRationalization() {
         </CardContent>
       </Card>
 
-      {/* Resolve to Largest Dimensions Section */}
+      {/* Simple R2 Indexing Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileImage className="h-5 w-5" />
-            Resolve to Largest Image Versions
+            Index All R2 Images
           </CardTitle>
           <CardDescription>
-            Find the largest version of each image (including WordPress dimension suffixes) and update all articles to use it
+            Index all images from R2 bucket into your media library (including WordPress dimension suffixes like -1500x1000)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              This will scan R2 for all image variants (including -1500x1000, -1200x800, etc.), 
-              identify the largest version of each image, update article URLs to use it, and index it in the media library.
+              This will scan your R2 bucket and add any images that aren't already in your media library. 
+              Files are indexed exactly as they are, including dimension suffixes.
             </AlertDescription>
           </Alert>
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button 
-                disabled={resolveToLargestMutation.isPending}
-                data-testid="button-resolve-largest"
-              >
-                {resolveToLargestMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                <FileImage className="mr-2 h-4 w-4" />
-                Resolve to Largest Versions
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Resolve to Largest Image Versions?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will:
-                  <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>Scan R2 bucket for all image variants</li>
-                    <li>Identify the largest version of each image (by pixel dimensions)</li>
-                    <li>Update all article URLs to use the largest version</li>
-                    <li>Index the largest versions in your media library</li>
-                  </ul>
-                  <p className="mt-2">This process may take several minutes for thousands of images.</p>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => resolveToLargestMutation.mutate()}>
-                  Resolve to Largest
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button 
+            onClick={() => indexR2Mutation.mutate()}
+            disabled={indexR2Mutation.isPending}
+            data-testid="button-index-r2"
+          >
+            {indexR2Mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <FileImage className="mr-2 h-4 w-4" />
+            Index All R2 Images
+          </Button>
         </CardContent>
       </Card>
 
