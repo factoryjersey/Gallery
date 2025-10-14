@@ -434,6 +434,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errors: [] as string[],
       };
 
+      // Parse category hierarchy from XML header first
+      const wpCategoryElements = doc.getElementsByTagName('wp:category');
+      const categoryMap = new Map<string, { name: string; slug: string; parent: string | null }>();
+      
+      for (let i = 0; i < wpCategoryElements.length; i++) {
+        const catEl = wpCategoryElements[i];
+        const slug = getTextContent(catEl, 'wp:category_nicename');
+        const name = getTextContent(catEl, 'wp:cat_name');
+        const parent = getTextContent(catEl, 'wp:category_parent') || null;
+        
+        if (slug && name) {
+          categoryMap.set(slug, { name, slug, parent });
+        }
+      }
+
+      // Create categories in hierarchical order (parents first, then children)
+      const categoryCache = new Map<string, any>(); // slug -> created category
+      
+      // Helper function to create category with parent
+      const createCategoryHierarchy = async (slug: string): Promise<any> => {
+        if (categoryCache.has(slug)) {
+          return categoryCache.get(slug);
+        }
+        
+        const catData = categoryMap.get(slug);
+        if (!catData) return null;
+        
+        // Check if category already exists in database
+        let existingCat = await storage.getCategoryBySlug(slug);
+        if (existingCat) {
+          categoryCache.set(slug, existingCat);
+          return existingCat;
+        }
+        
+        // If has parent, create parent first
+        let parentCat = null;
+        if (catData.parent) {
+          parentCat = await createCategoryHierarchy(catData.parent);
+        }
+        
+        // Create this category
+        const newCat = await storage.createCategory({
+          name: catData.name,
+          slug: catData.slug,
+          description: `Imported from WordPress`,
+          parentId: parentCat?.id || undefined,
+        });
+        
+        categoryCache.set(slug, newCat);
+        importResults.categories++;
+        return newCat;
+      };
+      
+      // Create all categories from the map
+      for (const slug of categoryMap.keys()) {
+        await createCategoryHierarchy(slug);
+      }
+
       // Cache for WordPress authors to avoid duplicates
       const authorCache = new Map<string, any>();
 
@@ -484,7 +542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Only import posts (not pages or other post types)
           if (postType !== 'post') continue;
 
-          // Parse WordPress categories
+          // Parse WordPress categories from post
           const categoryElements = item.getElementsByTagName('category');
           let category = null;
           
@@ -494,21 +552,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const domain = catEl.getAttribute('domain');
             
             if (domain === 'category') {
-              const categoryName = catEl.textContent?.trim() || '';
-              const categorySlug = catEl.getAttribute('nicename') || categoryName.toLowerCase().replace(/\s+/g, '-');
+              const categorySlug = catEl.getAttribute('nicename') || '';
               
-              if (categoryName) {
-                // Check if category exists
-                category = await storage.getCategoryBySlug(categorySlug);
-                
+              if (categorySlug) {
+                // Use cached category (already created with hierarchy)
+                category = categoryCache.get(categorySlug);
                 if (!category) {
-                  // Create new category from WordPress
-                  category = await storage.createCategory({
-                    name: categoryName,
-                    slug: categorySlug,
-                    description: `Imported from WordPress`,
-                  });
-                  importResults.categories++;
+                  // Fallback: check database
+                  category = await storage.getCategoryBySlug(categorySlug);
                 }
                 
                 break; // Use first category found
@@ -518,14 +569,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Fallback to Uncategorized if no category found
           if (!category) {
-            category = await storage.getCategoryBySlug('uncategorized');
-            if (!category) {
-              category = await storage.createCategory({
-                name: 'Uncategorized',
-                slug: 'uncategorized',
-                description: 'Posts without a category',
-              });
-              importResults.categories++;
+            if (categoryCache.has('uncategorized')) {
+              category = categoryCache.get('uncategorized');
+            } else {
+              category = await storage.getCategoryBySlug('uncategorized');
+              if (!category) {
+                category = await storage.createCategory({
+                  name: 'Uncategorized',
+                  slug: 'uncategorized',
+                  description: 'Posts without a category',
+                });
+                importResults.categories++;
+                categoryCache.set('uncategorized', category);
+              }
             }
           }
 
