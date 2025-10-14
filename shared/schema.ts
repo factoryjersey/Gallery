@@ -18,6 +18,7 @@ export const categories = pgTable("categories", {
   slug: text("slug").notNull().unique(),
   description: text("description"),
   color: text("color").default("#3B82F6"),
+  parentId: varchar("parent_id").references((): any => categories.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -77,8 +78,16 @@ export const authorsRelations = relations(authors, ({ many }) => ({
   articles: many(articles),
 }));
 
-export const categoriesRelations = relations(categories, ({ many }) => ({
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
   articles: many(articles),
+  parent: one(categories, {
+    fields: [categories.parentId],
+    references: [categories.id],
+    relationName: "categoryHierarchy",
+  }),
+  children: many(categories, {
+    relationName: "categoryHierarchy",
+  }),
 }));
 
 export const tagsRelations = relations(tags, ({ many }) => ({
