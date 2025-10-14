@@ -107,12 +107,21 @@ Preferred communication style: Simple, everyday language.
 - **Lazy Loading:** IntersectionObserver-based lazy loading with progressive blur-to-sharp transitions
 - **Performance:** Images load only when near viewport with 50px rootMargin for preloading
 
+**Media Indexing & Cleanup (NEW - October 2025):**
+- **Bucket Indexing:** Scans R2/GCS bucket to index unindexed images into media library
+- **Storage Analysis:** Breakdown of storage usage by variant type (original, thumbnail, medium, large)
+- **Indexing Stats:** Tracks indexed vs unindexed original images (variants excluded from count)
+- **Variant Cleanup:** Selective deletion of specific variant types (thumbnail/medium/large) with confirmation dialogs
+- **Admin Interface:** Dedicated "Storage & Indexing" tab in admin dashboard for all storage management tasks
+- **Use Cases:** Indexing WordPress-imported images, cleaning up unnecessary variant sizes, storage optimization
+
 **Design Decisions:**
 - Uppy chosen for robust, customizable file upload experience with progress tracking
 - Direct-to-GCS uploads reduce server load and improve performance
 - ACL policy framework prepared for fine-grained access control
 - Multer middleware for server-side file handling when needed
 - Sharp for image processing provides excellent performance and format support
+- Storage analysis only counts original images (not variants) for indexed/unindexed metrics to avoid inflated counts
 
 ### Content Import
 
