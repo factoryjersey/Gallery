@@ -155,6 +155,28 @@ export function MediaManager() {
     },
   });
 
+  const connectR2Mutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/media/connect-to-r2");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Success!",
+        description: `Updated ${data.imagesReplaced} images in ${data.updates.length} articles. Used ${data.variantsUsed} largest variants.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/media"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to connect to R2",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="space-y-6">
       <Card>
@@ -208,6 +230,27 @@ export function MediaManager() {
             {indexR2Mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <FileImage className="mr-2 h-4 w-4" />
             {indexR2Mutation.isPending ? 'Indexing Images...' : 'Index Images from Posts'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Connect All Images to R2</CardTitle>
+          <CardDescription>
+            Replace all GCS paths with R2 URLs. If exact image not found, uses the largest available variant (e.g., Waste2-scaled.jpg instead of Waste2-scaled-150x150.jpg).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button 
+            onClick={() => connectR2Mutation.mutate()}
+            disabled={connectR2Mutation.isPending}
+            variant="secondary"
+            data-testid="button-connect-r2"
+          >
+            {connectR2Mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <ExternalLink className="mr-2 h-4 w-4" />
+            {connectR2Mutation.isPending ? 'Connecting to R2...' : 'Connect to R2 Storage'}
           </Button>
         </CardContent>
       </Card>

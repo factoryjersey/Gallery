@@ -1710,6 +1710,198 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Find largest variant of an image in R2
+  async function findLargestVariantInR2(imagePath: string): Promise<string | null> {
+    try {
+      // Extract base name by removing size suffix patterns like -150x150, -300x426, etc.
+      const baseName = imagePath.replace(/-\d+x\d+(\.(jpg|jpeg|png|gif|webp))?$/i, '$1');
+      
+      // Extract directory and filename
+      const lastSlash = baseName.lastIndexOf('/');
+      const dir = lastSlash > 0 ? baseName.substring(0, lastSlash + 1) : '';
+      const filename = lastSlash > 0 ? baseName.substring(lastSlash + 1) : baseName;
+      
+      // Remove extension to get base filename
+      const filenameParts = filename.split('.');
+      const ext = filenameParts.length > 1 ? '.' + filenameParts.pop() : '';
+      const baseFilename = filenameParts.join('.');
+      
+      // List all variants in the directory
+      const listCommand = new ListObjectsV2Command({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Prefix: dir,
+        MaxKeys: 1000
+      });
+      
+      const data = await r2Client.send(listCommand);
+      const variants = data.Contents?.filter(obj => {
+        const key = obj.Key || '';
+        const keyFilename = key.substring(key.lastIndexOf('/') + 1);
+        return keyFilename.startsWith(baseFilename) && keyFilename.endsWith(ext);
+      }) || [];
+      
+      if (variants.length === 0) return null;
+      
+      // Find the largest variant by size (original has no dimensions in name)
+      let largest = variants[0];
+      for (const variant of variants) {
+        const key = variant.Key || '';
+        // Prefer files without dimension suffix (original)
+        if (!key.match(/-\d+x\d+\.(jpg|jpeg|png|gif|webp)$/i)) {
+          largest = variant;
+          break;
+        }
+        // Otherwise compare sizes
+        if ((variant.Size || 0) > (largest.Size || 0)) {
+          largest = variant;
+        }
+      }
+      
+      return largest.Key || null;
+    } catch (error) {
+      console.error('Error finding variant:', error);
+      return null;
+    }
+  }
+
+  // Normalize image URL/path to R2 object key
+  function normalizeToR2Key(urlOrPath: string): string | null {
+    try {
+      // Handle /objects/../wp-content/ paths
+      if (urlOrPath.startsWith('/objects/../')) {
+        const path = urlOrPath.replace('/objects/../', '');
+        return path.replace(/^wp-content\//, '');
+      }
+      
+      // Handle /objects/ paths
+      if (urlOrPath.startsWith('/objects/')) {
+        const path = urlOrPath.replace('/objects/', '');
+        return path.replace(/^wp-content\//, '');
+      }
+      
+      // Handle full GCS URLs
+      if (urlOrPath.includes('storage.googleapis.com')) {
+        const url = new URL(urlOrPath);
+        const pathParts = url.pathname.split('/').filter(p => p);
+        // Skip bucket name (first part) and remove wp-content prefix
+        const path = pathParts.slice(1).join('/');
+        return path.replace(/^wp-content\//, '');
+      }
+      
+      // Handle R2 URLs (already correct, extract key)
+      if (urlOrPath.includes('.r2.dev')) {
+        const url = new URL(urlOrPath);
+        return url.pathname.substring(1); // Remove leading /
+      }
+      
+      // Handle relative paths
+      if (urlOrPath.startsWith('/')) {
+        return urlOrPath.substring(1).replace(/^wp-content\//, '');
+      }
+      
+      // Direct path
+      return urlOrPath.replace(/^wp-content\//, '');
+    } catch (error) {
+      console.error('Error normalizing path:', urlOrPath, error);
+      return null;
+    }
+  }
+
+  // Connect articles to R2 storage with variant fallback
+  app.post("/api/media/connect-to-r2", async (req, res) => {
+    try {
+      const allArticles = await storage.getArticles({ 
+        status: 'all', 
+        limit: 10000,
+        offset: 0 
+      });
+      
+      const results = {
+        articlesScanned: allArticles.articles.length,
+        imagesFound: 0,
+        imagesReplaced: 0,
+        variantsUsed: 0,
+        skipped: 0,
+        updates: [] as any[]
+      };
+      
+      const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
+      
+      for (const article of allArticles.articles) {
+        let content = article.content;
+        let updated = false;
+        
+        // Find all image references (GCS URLs, /objects/ paths, and img src attributes)
+        const patterns = [
+          /https?:\/\/storage\.googleapis\.com\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
+          /\/objects\/\.\.\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
+          /\/objects\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
+        ];
+        
+        const imageMatches: string[] = [];
+        for (const pattern of patterns) {
+          const matches = Array.from(content.matchAll(pattern));
+          imageMatches.push(...matches.map(m => m[0]));
+        }
+        
+        // Remove duplicates
+        const uniqueImages = Array.from(new Set(imageMatches));
+        
+        for (const originalMatch of uniqueImages) {
+          results.imagesFound++;
+          
+          // Normalize to R2 key
+          const r2Key = normalizeToR2Key(originalMatch);
+          if (!r2Key) {
+            results.skipped++;
+            continue;
+          }
+          
+          // Check if exact file exists in R2
+          let finalKey = r2Key;
+          try {
+            const headCommand = new HeadObjectCommand({
+              Bucket: process.env.R2_BUCKET_NAME,
+              Key: r2Key
+            });
+            await r2Client.send(headCommand);
+          } catch (error) {
+            // File not found, look for largest variant
+            const variantKey = await findLargestVariantInR2(r2Key);
+            if (variantKey) {
+              finalKey = variantKey;
+              results.variantsUsed++;
+            } else {
+              results.skipped++;
+              continue; // Skip if no variant found
+            }
+          }
+          
+          // Replace with R2 URL
+          const r2Url = `${R2_PUBLIC_URL}/${finalKey}`;
+          const escapedMatch = originalMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          content = content.replace(new RegExp(escapedMatch, 'g'), r2Url);
+          updated = true;
+          results.imagesReplaced++;
+        }
+        
+        // Update article if content changed
+        if (updated) {
+          await storage.updateArticle(article.id, { content });
+          results.updates.push({
+            articleId: article.id,
+            title: article.title
+          });
+        }
+      }
+      
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error connecting to R2:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
