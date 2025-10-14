@@ -93,35 +93,51 @@ Preferred communication style: Simple, everyday language.
 
 ### File Upload & Storage
 
-**Object Storage System:**
-- **Provider:** Google Cloud Storage
-- **Authentication:** External account credentials via Replit sidecar
-- **Upload Strategy:** Client-side direct uploads using Uppy dashboard
-- **ACL System:** Custom access control with group-based permissions (defined but not fully implemented)
+**Dual Storage System:**
+- **Primary (R2):** Cloudflare R2 for new uploads - S3-compatible object storage
+- **Secondary (GCS):** Google Cloud Storage - legacy/fallback system for Replit-hosted uploads
+- **Authentication:** 
+  - R2: API credentials (access key, secret key, account ID)
+  - GCS: External account credentials via Replit sidecar
+- **Upload Strategy:** Server-side processing with Multer for file handling
 
-**Image Optimization (NEW - October 2025):**
+**R2 Integration (NEW - October 2025):**
+- **Provider:** Cloudflare R2 (S3-compatible)
+- **SDK:** AWS SDK for JavaScript v3 (@aws-sdk/client-s3, @aws-sdk/lib-storage)
+- **Upload Flow:** 
+  1. Multer receives file upload
+  2. Sharp processes and generates variants
+  3. R2 client uploads all variants to Cloudflare bucket
+  4. Returns full R2 public URLs (stored as absolute URLs in database)
+- **URL Structure:** `https://pub-{account-id}.r2.dev/{key-path}`
+- **Fallback:** If R2 credentials missing, falls back to GCS with `/objects/` prefix
+
+**Image Optimization (October 2025):**
 - **Processing:** Sharp library for server-side image processing
 - **Responsive Variants:** Automatic generation of thumbnail (300px), medium (800px), and large (1200px) sizes
 - **WebP Conversion:** All images converted to WebP format for better compression
-- **Storage:** All variants stored in GCS with paths tracked in media.variants JSON field
+- **Storage:** 
+  - R2 uploads: All variants stored with full public URLs in media.variants JSON field
+  - GCS uploads: Paths stored with /objects/ prefix for local serving
 - **Lazy Loading:** IntersectionObserver-based lazy loading with progressive blur-to-sharp transitions
 - **Performance:** Images load only when near viewport with 50px rootMargin for preloading
 
-**Media Indexing & Cleanup (NEW - October 2025):**
-- **Bucket Indexing:** Scans R2/GCS bucket to index unindexed images into media library
+**Media Indexing & Cleanup (October 2025):**
+- **URL-Based Indexing:** Scans all articles (published, draft, archived) to extract and index external R2 image URLs
+- **Bucket Indexing:** Scans Replit GCS bucket to index unindexed local images into media library
 - **Storage Analysis:** Breakdown of storage usage by variant type (original, thumbnail, medium, large)
 - **Indexing Stats:** Tracks indexed vs unindexed original images (variants excluded from count)
 - **Variant Cleanup:** Selective deletion of specific variant types (thumbnail/medium/large) with confirmation dialogs
 - **Admin Interface:** Dedicated "Storage & Indexing" tab in admin dashboard for all storage management tasks
-- **Use Cases:** Indexing WordPress-imported images, cleaning up unnecessary variant sizes, storage optimization
+- **Use Cases:** Indexing WordPress-imported R2 images, cleaning up unnecessary variant sizes, storage optimization
 
 **Design Decisions:**
-- Uppy chosen for robust, customizable file upload experience with progress tracking
-- Direct-to-GCS uploads reduce server load and improve performance
-- ACL policy framework prepared for fine-grained access control
-- Multer middleware for server-side file handling when needed
-- Sharp for image processing provides excellent performance and format support
+- R2 chosen as primary storage for cost-effectiveness and performance (Cloudflare CDN)
+- Dual storage approach supports both legacy GCS content and new R2 uploads
+- MediaManager detects URL vs path-based images and handles display accordingly
+- Multer middleware for server-side file handling and Sharp for processing
 - Storage analysis only counts original images (not variants) for indexed/unindexed metrics to avoid inflated counts
+- URL-based indexing solves WordPress migration issue where images are in external R2 bucket
 
 ### Content Import
 
