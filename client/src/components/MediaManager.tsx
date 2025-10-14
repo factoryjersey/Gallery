@@ -101,6 +101,12 @@ export function MediaManager() {
   };
 
   const getImageUrl = (media: Media) => {
+    // If objectPath is a full URL (external CDN/R2), use it directly
+    if (media.objectPath.startsWith('http')) {
+      return media.objectPath;
+    }
+    
+    // For storage bucket files, use variants or objectPath with /objects prefix
     if (media.variants?.medium) {
       return `/objects/${media.variants.medium}`;
     }

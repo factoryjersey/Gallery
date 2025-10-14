@@ -461,6 +461,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Index images from article URLs (for external R2/CDN images)
+  app.post("/api/media/index-from-articles", async (req, res) => {
+    try {
+      // Fetch all articles regardless of status
+      const statuses = ['published', 'draft', 'archived'];
+      const allArticlesArrays = await Promise.all(
+        statuses.map(status => 
+          storage.getArticles({
+            status,
+            limit: 10000,
+            offset: 0,
+            orderBy: 'createdAt',
+            orderDir: 'desc',
+          })
+        )
+      );
+      
+      const allArticles = allArticlesArrays.flatMap(result => result.articles);
+
+      const imageUrlPattern = /https:\/\/[^\s"'<>)]+\.(jpg|jpeg|png|gif|webp)/gi;
+      const foundUrls = new Set<string>();
+
+      for (const article of allArticles) {
+        if (article.featuredImage) {
+          foundUrls.add(article.featuredImage);
+        }
+
+        if (article.content) {
+          const matches = article.content.matchAll(imageUrlPattern);
+          for (const match of matches) {
+            foundUrls.add(match[0]);
+          }
+        }
+      }
+
+      const existingMedia = await storage.getAllMedia();
+      const existingUrls = new Set(existingMedia.map(m => {
+        // Check both objectPath and if it's a URL
+        if (m.objectPath.startsWith('http')) {
+          return m.objectPath;
+        }
+        return null;
+      }).filter(Boolean));
+
+      let indexed = 0;
+      let skipped = 0;
+
+      // Helper to get MIME type from URL extension
+      const getMimeType = (url: string): string => {
+        const ext = url.split('.').pop()?.toLowerCase();
+        const mimeMap: Record<string, string> = {
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'png': 'image/png',
+          'gif': 'image/gif',
+          'webp': 'image/webp',
+        };
+        return mimeMap[ext || ''] || 'image/jpeg';
+      };
+
+      for (const url of foundUrls) {
+        if (existingUrls.has(url)) {
+          skipped++;
+          continue;
+        }
+
+        try {
+          const filename = url.split('/').pop() || 'unknown.jpg';
+          
+          await storage.createMedia({
+            filename,
+            originalName: filename,
+            mimeType: getMimeType(url),
+            size: 0,
+            width: null,
+            height: null,
+            objectPath: url,
+            variants: null,
+            alt: '',
+          });
+          
+          indexed++;
+        } catch (error) {
+          console.error(`Error indexing URL ${url}:`, error);
+        }
+      }
+
+      res.json({
+        success: true,
+        stats: {
+          total: foundUrls.size,
+          indexed,
+          skipped,
+          existing: existingUrls.size
+        }
+      });
+    } catch (error) {
+      console.error("Error indexing from articles:", error);
+      res.status(500).json({ error: "Failed to index from articles" });
+    }
+  });
+
   // Media indexing - scan bucket and index unindexed images
   app.post("/api/media/index-bucket", async (req, res) => {
     try {

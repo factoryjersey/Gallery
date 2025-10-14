@@ -39,6 +39,29 @@ export function MediaIndexing() {
     queryKey: ["/api/media/storage-analysis"],
   });
 
+  const indexFromArticlesMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/media/index-from-articles");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setIndexingStats(data.stats);
+      toast({
+        title: "Indexing Complete!",
+        description: `Found ${data.stats.total} images, indexed ${data.stats.indexed} new ones, skipped ${data.stats.skipped} existing`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/media"] });
+      refetchAnalysis();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to index from articles",
+        variant: "destructive",
+      });
+    },
+  });
+
   const indexBucketMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/media/index-bucket");
@@ -98,10 +121,10 @@ export function MediaIndexing() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
-            Index R2/GCS Images
+            Index Images into Media Library
           </CardTitle>
           <CardDescription>
-            Scan your cloud storage bucket and add unindexed images to the media library
+            Add images to the media library from articles or cloud storage
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -109,21 +132,46 @@ export function MediaIndexing() {
             <Alert>
               <CheckCircle className="h-4 w-4" />
               <AlertDescription>
-                Last indexing: Scanned {indexingStats.total} files, indexed {indexingStats.indexed} new images, 
-                skipped {indexingStats.skipped}, errors: {indexingStats.errors}
+                Last indexing: Found {indexingStats.total} images, indexed {indexingStats.indexed} new ones, 
+                skipped {indexingStats.skipped} existing{indexingStats.errors !== undefined && `, errors: ${indexingStats.errors}`}
               </AlertDescription>
             </Alert>
           )}
           
-          <Button 
-            onClick={() => indexBucketMutation.mutate()} 
-            disabled={indexBucketMutation.isPending}
-            data-testid="button-index-bucket"
-          >
-            {indexBucketMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            <Database className="mr-2 h-4 w-4" />
-            Index All Images
-          </Button>
+          <div className="space-y-3">
+            <div>
+              <h4 className="font-medium mb-2">Index from Articles (Recommended)</h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                Scans all articles and indexes any image URLs found (works for R2/CDN images)
+              </p>
+              <Button 
+                onClick={() => indexFromArticlesMutation.mutate()} 
+                disabled={indexFromArticlesMutation.isPending}
+                data-testid="button-index-from-articles"
+              >
+                {indexFromArticlesMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Database className="mr-2 h-4 w-4" />
+                Index from Articles
+              </Button>
+            </div>
+
+            <div className="border-t pt-3">
+              <h4 className="font-medium mb-2">Index from Storage Bucket</h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                Scans Replit storage bucket for uploaded images
+              </p>
+              <Button 
+                onClick={() => indexBucketMutation.mutate()} 
+                disabled={indexBucketMutation.isPending}
+                variant="outline"
+                data-testid="button-index-bucket"
+              >
+                {indexBucketMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Database className="mr-2 h-4 w-4" />
+                Index from Bucket
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
