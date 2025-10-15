@@ -27,7 +27,7 @@ export default function Header({ onSearch }: HeaderProps) {
   const [searchCategory, setSearchCategory] = useState<string>("all");
   const [searchYear, setSearchYear] = useState<string>("all");
 
-  const { data: categoriesData } = useQuery({
+  const { data: categoriesData } = useQuery<{ categories: any[] }>({
     queryKey: ["/api/categories"],
   });
 
@@ -59,7 +59,7 @@ export default function Header({ onSearch }: HeaderProps) {
   };
 
   // Filter to show only top-level categories (no parent)
-  const topLevelCategories = categoriesData?.categories?.filter(cat => !cat.parentId) || [];
+  const topLevelCategories = categoriesData?.categories?.filter((cat: any) => !cat.parentId) || [];
   const categories = topLevelCategories.slice(0, 6);
   const allCategories = categoriesData?.categories || [];
 

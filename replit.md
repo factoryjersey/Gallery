@@ -56,6 +56,11 @@ Preferred communication style: Simple, everyday language.
 - **Article Editor:** Author dropdown selection integrated into article creation/editing workflow
 - **Email Generation:** Auto-generates unique emails for imported WordPress authors (@imported.local domain)
 
+**Navigation Menu (October 2025):**
+- **Top-Level Categories Only:** Main navigation menu displays only top-level categories (parentId = null)
+- **Cleaner Interface:** Subcategories are filtered out from the navigation bar for a simpler menu structure
+- **Auto-Detection:** Automatically filters categories based on parent relationship
+
 ### Backend Architecture
 
 **Technology Stack:**
@@ -111,6 +116,7 @@ Preferred communication style: Simple, everyday language.
   4. Returns full R2 public URLs (stored as absolute URLs in database)
 - **URL Structure:** `https://pub-{account-id}.r2.dev/{key-path}`
 - **Fallback:** If R2 credentials missing, falls back to GCS with `/objects/` prefix
+- **Article Editor Upload:** Featured image upload uses server-side R2 upload via `/api/media/upload` endpoint (replaced broken GCS presigned URL approach)
 
 **Image Optimization (October 2025):**
 - **Processing:** Sharp library for server-side image processing
@@ -148,6 +154,13 @@ Preferred communication style: Simple, everyday language.
   4. Keep originals and PDFs intact
 - **Admin Interface:** Dedicated "Image Rationalization" sub-tab in Media dashboard with analysis, standardization, and cleanup controls
 - **Benefits:** Faster migration, reduced storage costs, simplified image management, intelligent fallback prevents broken images
+
+**URL Normalization & R2 Connection (October 2025):**
+- **WordPress Domain URLs:** Handles old WordPress URLs (gallerymagazine.co.uk/v3/wp-content/YEAR/...) by extracting year onwards
+- **GCS Path Normalization:** Converts /objects/../wp-content/ and /objects/ paths to R2 keys
+- **R2 URL Extraction:** Properly extracts keys from R2 URLs for variant lookup
+- **Smart Variant Fallback:** When exact file missing, strips size suffixes (-150x150, -300x426) to find base filename and selects largest available variant
+- **Connect to R2 Tool:** Admin interface scans all articles, normalizes multiple URL formats, finds largest image variants, and updates content with working R2 URLs
 
 **Design Decisions:**
 - R2 chosen as primary storage for cost-effectiveness and performance (Cloudflare CDN)

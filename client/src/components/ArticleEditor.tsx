@@ -24,9 +24,7 @@ import {
   Heading
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ObjectUploader } from "./ObjectUploader";
 import { apiRequest } from "@/lib/queryClient";
-import type { UploadResult } from "@uppy/core";
 
 const articleSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -65,20 +63,20 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   });
 
   // Load article data when editing
-  const { data: articleData } = useQuery({
+  const { data: articleData } = useQuery<{ article: any }>({
     queryKey: [`/api/articles/${articleId}`],
     enabled: !!articleId,
   });
 
-  const { data: categoriesData } = useQuery({
+  const { data: categoriesData } = useQuery<{ categories: any[] }>({
     queryKey: ["/api/categories"],
   });
 
-  const { data: authorsData } = useQuery({
+  const { data: authorsData } = useQuery<{ authors: any[] }>({
     queryKey: ["/api/authors"],
   });
 
-  const { data: tagsData } = useQuery({
+  const { data: tagsData } = useQuery<{ tags: any[] }>({
     queryKey: ["/api/tags"],
   });
 
@@ -232,38 +230,36 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     setSelectedTags(selectedTags.filter(tag => tag !== tagToRemove));
   };
 
-  const handleImageUpload = async () => {
-    return {
-      method: "PUT" as const,
-      url: await fetch("/api/objects/upload", { method: "POST" })
-        .then(res => res.json())
-        .then(data => data.uploadURL)
-    };
-  };
-
-  const handleImageUploadComplete = (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
-    if (result.successful && result.successful.length > 0) {
-      const uploadedFile = result.successful[0];
-      const imageUrl = uploadedFile.uploadURL;
+  const handleImageUpload = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
       
-      // Set as featured image if none is set
-      if (!form.getValues("featuredImage")) {
-        form.setValue("featuredImage", imageUrl);
-      }
-
-      // Create media record
-      createMediaMutation.mutate({
-        filename: uploadedFile.name,
-        originalName: uploadedFile.name,
-        mimeType: uploadedFile.type,
-        size: uploadedFile.size,
-        objectPath: imageUrl,
-        alt: uploadedFile.name,
+      const response = await fetch("/api/media/upload", {
+        method: "POST",
+        body: formData,
       });
-
+      
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+      
+      const data = await response.json();
+      const imageUrl = data.media.urls.original;
+      
+      // Set as featured image
+      form.setValue("featuredImage", imageUrl);
+      
       toast({
         title: "Image uploaded",
-        description: "Image has been uploaded and set as featured image.",
+        description: "Featured image has been uploaded successfully.",
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload image. Please try again.",
+        variant: "destructive",
       });
     }
   };
@@ -400,16 +396,17 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
             <div className="space-y-2">
               <Label>Featured Image</Label>
               <div className="flex gap-4 items-start">
-                <ObjectUploader
-                  maxNumberOfFiles={1}
-                  maxFileSize={10485760}
-                  onGetUploadParameters={handleImageUpload}
-                  onComplete={handleImageUploadComplete}
-                  buttonClassName="flex items-center gap-2"
-                >
-                  <ImageIcon className="h-4 w-4" />
-                  Upload Featured Image
-                </ObjectUploader>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageUpload(file);
+                    }
+                  }}
+                  data-testid="featured-image-input"
+                />
                 {form.watch("featuredImage") && (
                   <div className="text-sm text-muted-foreground">
                     ✓ Featured image uploaded
@@ -476,7 +473,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   ref={contentRef}
                   placeholder="Start writing your article..."
                   className="min-h-[300px] border-0 focus-visible:ring-0"
-                  {...form.register("content")}
+                  value={form.watch("content") || ""}
                   onChange={handleContentChange}
                   data-testid="article-content-textarea"
                 />
