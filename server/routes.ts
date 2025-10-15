@@ -474,6 +474,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const media = await storage.createMedia(mediaData);
       
       // Return media with URLs (R2 URLs are already absolute)
+      res.setHeader('Content-Type', 'application/json');
       res.json({
         media: {
           ...media,

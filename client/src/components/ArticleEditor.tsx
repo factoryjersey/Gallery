@@ -254,12 +254,17 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       }
       
       const data = await response.json();
-      const imageUrl = data.media?.urls?.original || data.media?.objectPath;
+      // Try multiple paths to get the image URL
+      const imageUrl = data.media?.urls?.original || 
+                       data.media?.variants?.original || 
+                       data.media?.objectPath;
       
       if (!imageUrl) {
         console.error("No image URL in response:", data);
         throw new Error("No image URL returned");
       }
+      
+      console.log("Setting featured image:", imageUrl);
       
       // Set as featured image
       form.setValue("featuredImage", imageUrl);
