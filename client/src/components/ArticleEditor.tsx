@@ -241,11 +241,25 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       });
       
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Upload failed:", errorText);
         throw new Error("Upload failed");
       }
       
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const responseText = await response.text();
+        console.error("Expected JSON, got:", responseText.substring(0, 200));
+        throw new Error("Invalid response format");
+      }
+      
       const data = await response.json();
-      const imageUrl = data.media.urls.original;
+      const imageUrl = data.media?.urls?.original || data.media?.objectPath;
+      
+      if (!imageUrl) {
+        console.error("No image URL in response:", data);
+        throw new Error("No image URL returned");
+      }
       
       // Set as featured image
       form.setValue("featuredImage", imageUrl);
@@ -258,7 +272,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       console.error("Upload error:", error);
       toast({
         title: "Upload failed",
-        description: "Failed to upload image. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to upload image. Please try again.",
         variant: "destructive",
       });
     }
