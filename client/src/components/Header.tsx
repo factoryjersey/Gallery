@@ -58,7 +58,9 @@ export default function Header({ onSearch }: HeaderProps) {
     setIsSearchExpanded(false);
   };
 
-  const categories = categoriesData?.categories?.slice(0, 6) || [];
+  // Filter to show only top-level categories (no parent)
+  const topLevelCategories = categoriesData?.categories?.filter(cat => !cat.parentId) || [];
+  const categories = topLevelCategories.slice(0, 6);
   const allCategories = categoriesData?.categories || [];
 
   return (
