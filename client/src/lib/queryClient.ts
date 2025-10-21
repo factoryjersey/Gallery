@@ -29,7 +29,8 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const url = queryKey.join("/") as string;
+    const res = await fetch(url, {
       credentials: "include",
     });
 
@@ -38,6 +39,16 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
+    
+    // Check content type before parsing JSON
+    const contentType = res.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      console.error(`Query for ${url} returned non-JSON response:`, contentType);
+      const text = await res.text();
+      console.error("Response text:", text.substring(0, 200));
+      throw new Error(`Expected JSON from ${url}, got ${contentType}`);
+    }
+    
     return await res.json();
   };
 
