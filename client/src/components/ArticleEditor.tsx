@@ -231,6 +231,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   };
 
   const handleImageUpload = async (file: File) => {
+    let uploadSucceeded = false;
     try {
       const formData = new FormData();
       formData.append('image', file);
@@ -268,6 +269,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       
       // Set as featured image
       form.setValue("featuredImage", imageUrl);
+      uploadSucceeded = true;
       
       toast({
         title: "Image uploaded",
@@ -275,11 +277,14 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       });
     } catch (error) {
       console.error("Upload error:", error);
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload image. Please try again.",
-        variant: "destructive",
-      });
+      // Only show error toast if upload actually failed
+      if (!uploadSucceeded) {
+        toast({
+          title: "Upload failed",
+          description: error instanceof Error ? error.message : "Failed to upload image. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
