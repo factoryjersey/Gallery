@@ -1822,6 +1822,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Connect articles to R2 storage with variant fallback
+  // WordPress formatting cleanup
+  app.post("/api/articles/cleanup-wordpress", async (req, res) => {
+    try {
+      const options = req.body;
+      
+      const allArticles = await storage.getArticles({ 
+        status: 'all', 
+        limit: 10000,
+        offset: 0 
+      });
+      
+      const results = {
+        articlesProcessed: 0,
+        articlesUpdated: 0,
+        classesRemoved: 0,
+        stylesRemoved: 0,
+        shortcodesRemoved: 0,
+        emptyTagsRemoved: 0,
+      };
+      
+      for (const article of allArticles.articles) {
+        let content = article.content;
+        const originalContent = content;
+        let stats = {
+          classes: 0,
+          styles: 0,
+          shortcodes: 0,
+          emptyTags: 0,
+        };
+        
+        results.articlesProcessed++;
+        
+        // Remove WordPress CSS classes
+        if (options.removeWpClasses) {
+          const classPatterns = [
+            /\s*class="[^"]*\b(wp-[^\s"]+)[^"]*"/gi,
+            /\s*class="[^"]*\b(align(?:left|right|center|none))[^"]*"/gi,
+            /\s*class="[^"]*\b(size-(?:full|large|medium|thumbnail))[^"]*"/gi,
+            /\s*class="[^"]*\b(has-[^\s"]+)[^"]*"/gi,
+            /\s*class="[^"]*\b(attachment-[^\s"]+)[^"]*"/gi,
+          ];
+          
+          for (const pattern of classPatterns) {
+            const matches = content.match(pattern);
+            if (matches) {
+              stats.classes += matches.length;
+              content = content.replace(pattern, (match) => {
+                // Extract and rebuild class attribute without WP classes
+                const classMatch = match.match(/class="([^"]*)"/);
+                if (!classMatch) return match;
+                
+                const classes = classMatch[1].split(/\s+/).filter(cls => {
+                  return !cls.match(/^(wp-|align(?:left|right|center|none)|size-|has-|attachment-)/);
+                });
+                
+                return classes.length > 0 ? ` class="${classes.join(' ')}"` : '';
+              });
+            }
+          }
+          
+          // Remove empty class attributes
+          content = content.replace(/\s*class=""\s*/g, ' ');
+        }
+        
+        // Remove inline styles (except text-align)
+        if (options.removeInlineStyles) {
+          const stylePattern = /\s*style="([^"]*)"/gi;
+          const matches = content.match(stylePattern);
+          if (matches) {
+            content = content.replace(stylePattern, (match, styles) => {
+              // Keep only text-align
+              const textAlign = styles.match(/text-align:\s*[^;]+/);
+              if (textAlign) {
+                return ` style="${textAlign[0]}"`;
+              }
+              stats.styles++;
+              return '';
+            });
+          }
+        }
+        
+        // Remove WordPress shortcodes
+        if (options.removeShortcodes) {
+          // First, handle paired shortcodes (keep content for caption)
+          const pairedShortcodes = [
+            { pattern: /\[caption[^\]]*\]([\s\S]*?)\[\/caption\]/gi, keepContent: true },
+            { pattern: /\[embed[^\]]*\]([\s\S]*?)\[\/embed\]/gi, keepContent: false },
+            // Generic paired shortcode pattern
+            { pattern: /\[([a-zA-Z_][a-zA-Z0-9_-]*)[^\]]*\]([\s\S]*?)\[\/\1\]/gi, keepContent: false },
+          ];
+          
+          for (const { pattern, keepContent } of pairedShortcodes) {
+            const matches = content.match(pattern);
+            if (matches) {
+              stats.shortcodes += matches.length;
+              if (keepContent) {
+                content = content.replace(pattern, '$1');
+              } else {
+                content = content.replace(pattern, '');
+              }
+            }
+          }
+          
+          // Then handle self-closing and unpaired shortcodes
+          const singleShortcodes = [
+            /\[gallery[^\]]*\]/gi,
+            /\[[a-zA-Z_][a-zA-Z0-9_-]*[^\]]*\]/g,  // Opening tags
+            /\[\/[a-zA-Z_][a-zA-Z0-9_-]*\]/g,      // Closing tags (cleanup orphans)
+          ];
+          
+          for (const pattern of singleShortcodes) {
+            const matches = content.match(pattern);
+            if (matches) {
+              stats.shortcodes += matches.length;
+              content = content.replace(pattern, '');
+            }
+          }
+        }
+        
+        // Remove empty HTML tags
+        if (options.removeEmptyTags) {
+          const emptyTagPatterns = [
+            /<p[^>]*>\s*<\/p>/gi,
+            /<span[^>]*>\s*<\/span>/gi,
+            /<div[^>]*>\s*<\/div>/gi,
+            /<strong[^>]*>\s*<\/strong>/gi,
+            /<em[^>]*>\s*<\/em>/gi,
+          ];
+          
+          for (const pattern of emptyTagPatterns) {
+            const matches = content.match(pattern);
+            if (matches) {
+              stats.emptyTags += matches.length;
+              content = content.replace(pattern, '');
+            }
+          }
+        }
+        
+        // Normalize whitespace
+        if (options.normalizeWhitespace) {
+          // Remove excessive line breaks (more than 2)
+          content = content.replace(/(\r?\n){3,}/g, '\n\n');
+          // Remove trailing whitespace
+          content = content.replace(/[ \t]+$/gm, '');
+          // Remove excessive spaces
+          content = content.replace(/[ ]{2,}/g, ' ');
+        }
+        
+        // Update article if content changed
+        if (content !== originalContent) {
+          await storage.updateArticle(article.id, { content });
+          results.articlesUpdated++;
+          results.classesRemoved += stats.classes;
+          results.stylesRemoved += stats.styles;
+          results.shortcodesRemoved += stats.shortcodes;
+          results.emptyTagsRemoved += stats.emptyTags;
+        }
+      }
+      
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error cleaning WordPress formatting:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/media/connect-to-r2", async (req, res) => {
     try {
       const allArticles = await storage.getArticles({ 

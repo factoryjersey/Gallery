@@ -49,6 +49,17 @@ Preferred communication style: Simple, everyday language.
 - **Preserved Styles:** text-align for intentional alignment
 - **Result:** Consistent typography across all body copy using global CSS styles
 
+**WordPress Formatting Cleanup (NEW - November 2025):**
+- **Admin Tool:** Dedicated cleanup interface in Admin Dashboard > Media > WordPress Cleanup tab
+- **WordPress CSS Classes:** Removes wp-*, align*, size-*, has-*, attachment-* classes
+- **Inline Styles:** Strips font styling (except text-align for intentional alignment)
+- **Shortcodes:** Removes WordPress shortcodes ([caption], [gallery], [embed], etc.) with paired tag matching
+- **Empty Tags:** Cleans up empty HTML tags (p, span, div, strong, em)
+- **Whitespace Normalization:** Removes excessive line breaks and whitespace
+- **Configurable Options:** Each cleanup type can be toggled on/off before running
+- **Bulk Processing:** Processes all articles (published, draft, archived) in a single operation
+- **Detailed Reporting:** Shows stats for classes removed, styles removed, shortcodes removed, etc.
+
 **Author Management (NEW - October 2025):**
 - **WordPress Import:** Automatically extracts and creates individual authors from `dc:creator` XML tags
 - **Admin Dashboard:** Full CRUD operations (Create, Read, Update, Delete) for managing authors

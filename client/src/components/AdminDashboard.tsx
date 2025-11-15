@@ -24,6 +24,7 @@ import ArticleEditor from "./ArticleEditor";
 import WordPressImporter from "./WordPressImporter";
 import { MediaIndexing } from "./MediaIndexing";
 import { ImageRationalization } from "./ImageRationalization";
+import { WordPressCleanup } from "./WordPressCleanup";
 import { format } from "date-fns";
 
 export default function AdminDashboard() {
@@ -329,6 +330,7 @@ export default function AdminDashboard() {
               <TabsList>
                 <TabsTrigger value="indexing">Storage & Indexing</TabsTrigger>
                 <TabsTrigger value="rationalization">Image Rationalization</TabsTrigger>
+                <TabsTrigger value="cleanup">WordPress Cleanup</TabsTrigger>
               </TabsList>
               
               <TabsContent value="indexing">
@@ -337,6 +339,10 @@ export default function AdminDashboard() {
               
               <TabsContent value="rationalization">
                 <ImageRationalization />
+              </TabsContent>
+              
+              <TabsContent value="cleanup">
+                <WordPressCleanup />
               </TabsContent>
             </Tabs>
           </TabsContent>
