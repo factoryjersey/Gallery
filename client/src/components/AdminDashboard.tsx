@@ -367,7 +367,7 @@ export default function AdminDashboard() {
       {/* Article Editor Modal */}
       {showEditor && (
         <ArticleEditor
-          article={editingArticle}
+          articleId={editingArticle ?? undefined}
           onClose={() => {
             setShowEditor(false);
             setEditingArticle(null);
