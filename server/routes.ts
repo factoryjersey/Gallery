@@ -7,8 +7,8 @@ import { z } from "zod";
 import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
 import { processImage, getPublicUrl } from "./imageProcessor";
-import { r2Client } from "./r2Client";
-import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { r2Client, uploadToR2, getR2PublicUrl } from "./r2Client";
+import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -2008,7 +2008,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
       
       // Helper: resolve a single URL to R2, returns r2Url string or null
-      async function resolveToR2(originalUrl: string): Promise<string | null> {
+      const resolveToR2 = async (originalUrl: string): Promise<string | null> => {
         const r2Key = normalizeToR2Key(originalUrl);
         if (!r2Key) return null;
         let finalKey = r2Key;
@@ -2095,6 +2095,205 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error connecting to R2:", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // WordPress REST API Live Sync (SSE streaming)
+  app.get("/api/wp-sync/stream", async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const send = (data: object) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const WP_API = 'https://www.gallery.je/wp-json/wp/v2';
+    const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
+    const afterDate = (req.query.after as string) || '2025-10-08T00:00:00';
+
+    try {
+      send({ type: 'progress', message: 'Fetching WordPress categories...' });
+      const wpCatsRes = await fetch(`${WP_API}/categories?per_page=100`);
+      const wpCats: any[] = await wpCatsRes.json();
+      const wpCatMap = new Map<number, { name: string; slug: string }>();
+      for (const cat of wpCats) wpCatMap.set(cat.id, { name: cat.name, slug: cat.slug });
+
+      send({ type: 'progress', message: 'Fetching WordPress tags...' });
+      const wpTagsRes = await fetch(`${WP_API}/tags?per_page=100`);
+      const wpTags: any[] = await wpTagsRes.json();
+      const wpTagMap = new Map<number, { name: string; slug: string }>();
+      for (const tag of wpTags) wpTagMap.set(tag.id, { name: tag.name, slug: tag.slug });
+
+      send({ type: 'progress', message: 'Fetching WordPress authors...' });
+      const wpUsersRes = await fetch(`${WP_API}/users?per_page=100`);
+      const wpUserMap = new Map<number, string>();
+      if (wpUsersRes.ok) {
+        const wpUsers: any[] = await wpUsersRes.json();
+        for (const u of wpUsers) wpUserMap.set(u.id, u.name);
+      }
+
+      send({ type: 'progress', message: 'Fetching new posts from gallery.je...' });
+      let page = 1;
+      const allPosts: any[] = [];
+      while (true) {
+        const postsRes = await fetch(
+          `${WP_API}/posts?per_page=100&after=${afterDate}&page=${page}&orderby=date&order=asc`
+        );
+        if (!postsRes.ok) break;
+        const posts: any[] = await postsRes.json();
+        if (!posts.length) break;
+        allPosts.push(...posts);
+        const total = parseInt(postsRes.headers.get('x-wp-total') || '0');
+        if (allPosts.length >= total) break;
+        page++;
+      }
+
+      send({ type: 'total', total: allPosts.length, message: `Found ${allPosts.length} new posts` });
+
+      const results = { imported: 0, skipped: 0, imagesUploaded: 0, errors: [] as string[] };
+      const categoryCache = new Map<string, string>();
+      const tagCache = new Map<string, string>();
+      const authorCache = new Map<string, string>();
+
+      const downloadAndUploadToR2 = async (imageUrl: string): Promise<string | null> => {
+        try {
+          const urlObj = new URL(imageUrl);
+          const match = urlObj.pathname.match(/\/wp-content\/uploads\/(\d{4}\/\d{2}\/.+)/);
+          const key = match ? `wp-content/${match[1]}` : `wp-content/synced${urlObj.pathname}`;
+
+          try {
+            await r2Client.send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }));
+            return `${R2_PUBLIC_URL}/${key}`;
+          } catch { /* not in R2 yet */ }
+
+          const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(20000) } as any);
+          if (!imgRes.ok) return null;
+          const buffer = Buffer.from(await imgRes.arrayBuffer());
+          const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+          await uploadToR2(buffer, key, contentType);
+          results.imagesUploaded++;
+          return `${R2_PUBLIC_URL}/${key}`;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      for (let i = 0; i < allPosts.length; i++) {
+        const post = allPosts[i];
+        try {
+          const existing = await storage.getArticleByWpId(post.id);
+          if (existing) {
+            results.skipped++;
+            send({ type: 'post', index: i + 1, total: allPosts.length, title: post.title?.rendered, status: 'skipped' });
+            continue;
+          }
+
+          send({ type: 'post', index: i + 1, total: allPosts.length, title: post.title?.rendered, status: 'processing' });
+
+          // Resolve author
+          const authorName = wpUserMap.get(post.author) || 'Gallery Team';
+          let authorDbId = authorCache.get(authorName);
+          if (!authorDbId) {
+            const authorEmail = `${authorName.toLowerCase().replace(/[^a-z0-9]/g, '.')}@imported.local`;
+            let author = await storage.getAuthorByEmail(authorEmail);
+            if (!author) author = await storage.createAuthor({ name: authorName, email: authorEmail, bio: '' });
+            authorDbId = author.id;
+            authorCache.set(authorName, authorDbId);
+          }
+
+          // Resolve category
+          const wpCat = post.categories?.[0] ? wpCatMap.get(post.categories[0]) : null;
+          const catSlug = wpCat?.slug || 'uncategorised';
+          const catName = wpCat?.name || 'Uncategorised';
+          let categoryDbId = categoryCache.get(catSlug);
+          if (!categoryDbId) {
+            let cat = await storage.getCategoryBySlug(catSlug);
+            if (!cat) cat = await storage.createCategory({ name: catName, slug: catSlug, color: '#3B82F6' });
+            categoryDbId = cat.id;
+            categoryCache.set(catSlug, categoryDbId);
+          }
+
+          // Resolve tags
+          const tagDbIds: string[] = [];
+          for (const wpTagId of (post.tags || [])) {
+            const wpTag = wpTagMap.get(wpTagId);
+            if (!wpTag) continue;
+            let tagDbId = tagCache.get(wpTag.slug);
+            if (!tagDbId) {
+              let tag = await storage.getTagBySlug(wpTag.slug);
+              if (!tag) tag = await storage.createTag({ name: wpTag.name, slug: wpTag.slug });
+              tagDbId = tag.id;
+              tagCache.set(wpTag.slug, tagDbId);
+            }
+            tagDbIds.push(tagDbId);
+          }
+
+          // Fetch & upload featured image
+          let featuredImageUrl = '';
+          if (post.featured_media) {
+            const mediaRes = await fetch(`${WP_API}/media/${post.featured_media}`);
+            if (mediaRes.ok) {
+              const mediaData: any = await mediaRes.json();
+              const sourceUrl = mediaData.source_url || mediaData.guid?.rendered;
+              if (sourceUrl) {
+                const r2Url = await downloadAndUploadToR2(sourceUrl);
+                if (r2Url) featuredImageUrl = r2Url;
+              }
+            }
+          }
+
+          // Process content: download & replace image URLs
+          let content = post.content?.rendered || '';
+          const imgPattern = /https?:\/\/(?:www\.)?gallery\.je\/wp-content\/uploads\/[^"'\s<>]+\.(?:jpg|jpeg|png|gif|webp)/gi;
+          const imgUrls = Array.from(new Set(content.match(imgPattern) || [])) as string[];
+          for (const imgUrl of imgUrls) {
+            const r2Url = await downloadAndUploadToR2(imgUrl);
+            if (r2Url) content = content.split(imgUrl).join(r2Url);
+          }
+
+          // Clean up title HTML entities
+          const title = (post.title?.rendered || 'Untitled')
+            .replace(/&amp;/g, '&').replace(/&#8211;/g, '–')
+            .replace(/&#8217;/g, "'").replace(/&#8220;/g, '"').replace(/&#8221;/g, '"');
+
+          const excerpt = (post.excerpt?.rendered || '').replace(/<[^>]*>/g, '').substring(0, 500);
+
+          // Ensure unique slug
+          let slug = post.slug;
+          const slugExists = await storage.getArticleBySlug(slug);
+          if (slugExists) slug = `${slug}-${post.id}`;
+
+          await storage.createArticle({
+            title,
+            slug,
+            excerpt,
+            content,
+            featuredImage: featuredImageUrl || undefined,
+            status: 'published',
+            authorId: authorDbId!,
+            categoryId: categoryDbId!,
+            publishedAt: new Date(post.date),
+            readTime: Math.max(1, Math.ceil(content.length / 1000)),
+            wpId: post.id,
+            wpData: { originalLink: post.link, originalStatus: post.status },
+          }, tagDbIds);
+
+          results.imported++;
+          send({ type: 'post', index: i + 1, total: allPosts.length, title, status: 'done' });
+        } catch (err: any) {
+          const errMsg = err instanceof Error ? err.message : 'Unknown error';
+          results.errors.push(`Post ${post.id}: ${errMsg}`);
+          send({ type: 'post', index: i + 1, total: allPosts.length, title: post.title?.rendered, status: 'error', error: errMsg });
+        }
+      }
+
+      send({ type: 'complete', results });
+      res.end();
+    } catch (err: any) {
+      send({ type: 'error', message: err.message });
+      res.end();
     }
   });
 

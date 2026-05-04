@@ -18,13 +18,15 @@ import {
   Image,
   FileDown,
   Filter,
-  TrendingUp
+  TrendingUp,
+  RefreshCw
 } from "lucide-react";
 import ArticleEditor from "./ArticleEditor";
 import WordPressImporter from "./WordPressImporter";
 import { MediaIndexing } from "./MediaIndexing";
 import { ImageRationalization } from "./ImageRationalization";
 import { WordPressCleanup } from "./WordPressCleanup";
+import { WPSync } from "./WPSync";
 import { format } from "date-fns";
 
 export default function AdminDashboard() {
@@ -84,7 +86,7 @@ export default function AdminDashboard() {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="dashboard" className="flex items-center">
               <BarChart3 className="w-4 h-4 mr-2" />
               Dashboard
@@ -112,6 +114,10 @@ export default function AdminDashboard() {
             <TabsTrigger value="import" className="flex items-center">
               <FileDown className="w-4 h-4 mr-2" />
               Import
+            </TabsTrigger>
+            <TabsTrigger value="sync" className="flex items-center">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Sync
             </TabsTrigger>
           </TabsList>
 
@@ -360,6 +366,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="import">
             <WordPressImporter />
+          </TabsContent>
+
+          <TabsContent value="sync">
+            <WPSync />
           </TabsContent>
         </Tabs>
       </div>
