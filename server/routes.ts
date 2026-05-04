@@ -2007,13 +2007,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
       
+      // Helper: resolve a single URL to R2, returns r2Url string or null
+      async function resolveToR2(originalUrl: string): Promise<string | null> {
+        const r2Key = normalizeToR2Key(originalUrl);
+        if (!r2Key) return null;
+        let finalKey = r2Key;
+        try {
+          const headCommand = new HeadObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: r2Key
+          });
+          await r2Client.send(headCommand);
+        } catch {
+          const variantKey = await findLargestVariantInR2(r2Key);
+          if (variantKey) {
+            finalKey = variantKey;
+            results.variantsUsed++;
+          } else {
+            results.skipped++;
+            return null;
+          }
+        }
+        return `${R2_PUBLIC_URL}/${finalKey}`;
+      }
+
       for (const article of allArticles.articles) {
         let content = article.content;
+        let featuredImage = article.featuredImage || '';
         let updated = false;
-        
-        // Find all image references (old WordPress URLs, GCS URLs, /objects/ paths)
+
+        // --- Fix featured image ---
+        const isNonR2Featured = featuredImage &&
+          !featuredImage.includes('.r2.dev') &&
+          (featuredImage.includes('gallerymagazine.co.uk') ||
+           featuredImage.includes('gallery.je') ||
+           featuredImage.includes('storage.googleapis.com') ||
+           featuredImage.startsWith('/objects/'));
+
+        if (isNonR2Featured) {
+          results.imagesFound++;
+          const r2Url = await resolveToR2(featuredImage);
+          if (r2Url) {
+            featuredImage = r2Url;
+            updated = true;
+            results.imagesReplaced++;
+          }
+        }
+
+        // --- Fix content images ---
         const patterns = [
           /https?:\/\/(?:www\.)?gallerymagazine\.co\.uk\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
+          /https?:\/\/(?:www\.)?gallery\.je\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
           /https?:\/\/storage\.googleapis\.com\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
           /\/objects\/\.\.\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
           /\/objects\/[^"'\s]+\.(jpg|jpeg|png|gif|webp)/gi,
@@ -2025,50 +2069,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           imageMatches.push(...matches.map(m => m[0]));
         }
         
-        // Remove duplicates
         const uniqueImages = Array.from(new Set(imageMatches));
         
         for (const originalMatch of uniqueImages) {
           results.imagesFound++;
-          
-          // Normalize to R2 key
-          const r2Key = normalizeToR2Key(originalMatch);
-          if (!r2Key) {
-            results.skipped++;
-            continue;
-          }
-          
-          // Check if exact file exists in R2
-          let finalKey = r2Key;
-          try {
-            const headCommand = new HeadObjectCommand({
-              Bucket: process.env.R2_BUCKET_NAME,
-              Key: r2Key
-            });
-            await r2Client.send(headCommand);
-          } catch (error) {
-            // File not found, look for largest variant
-            const variantKey = await findLargestVariantInR2(r2Key);
-            if (variantKey) {
-              finalKey = variantKey;
-              results.variantsUsed++;
-            } else {
-              results.skipped++;
-              continue; // Skip if no variant found
-            }
-          }
-          
-          // Replace with R2 URL
-          const r2Url = `${R2_PUBLIC_URL}/${finalKey}`;
+          const r2Url = await resolveToR2(originalMatch);
+          if (!r2Url) continue;
           const escapedMatch = originalMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           content = content.replace(new RegExp(escapedMatch, 'g'), r2Url);
           updated = true;
           results.imagesReplaced++;
         }
         
-        // Update article if content changed
+        // Update article if anything changed
         if (updated) {
-          await storage.updateArticle(article.id, { content });
+          await storage.updateArticle(article.id, { content, featuredImage });
           results.updates.push({
             articleId: article.id,
             title: article.title
