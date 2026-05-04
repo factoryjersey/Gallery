@@ -16,7 +16,8 @@ import {
   Settings,
   Home,
   Eye,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
@@ -28,6 +29,7 @@ import WordPressDBMigration from "@/components/WordPressDBMigration";
 import WordPressAuthorUpdater from "@/components/WordPressAuthorUpdater";
 import { MediaManager } from "@/components/MediaManager";
 import { MediaIndexing } from "@/components/MediaIndexing";
+import { WPSync } from "@/components/WPSync";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
@@ -201,6 +203,18 @@ export default function Admin() {
                   <Upload className="w-5 h-5 mr-3" />
                   WordPress Import
                 </button>
+                <button
+                  onClick={() => setActiveTab("sync")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "sync" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-sync"
+                >
+                  <RefreshCw className="w-5 h-5 mr-3" />
+                  Live Sync
+                </button>
               </nav>
             </div>
 
@@ -373,6 +387,10 @@ export default function Admin() {
 
               {activeTab === "storage" && (
                 <MediaIndexing />
+              )}
+
+              {activeTab === "sync" && (
+                <WPSync />
               )}
             </div>
           </div>
