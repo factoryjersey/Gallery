@@ -1,13 +1,11 @@
 import { useState, useMemo } from "react";
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
+import { Link, useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Search, 
-  Menu, 
-  X, 
-  Calendar,
+import {
+  Search,
+  Menu,
+  X,
   Facebook,
   Twitter,
   Instagram,
@@ -26,199 +24,203 @@ export default function Header({ onSearch }: HeaderProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchCategory, setSearchCategory] = useState<string>("all");
   const [searchYear, setSearchYear] = useState<string>("all");
+  const [location] = useLocation();
 
   const { data: categoriesData } = useQuery<{ categories: any[] }>({
     queryKey: ["/api/categories"],
   });
 
-  const currentDate = new Date().toLocaleDateString("en-US", {
+  const currentDate = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
-    year: "numeric",
+    day: "numeric",
     month: "long",
-    day: "numeric"
+    year: "numeric",
   });
 
-  // Generate available years (2008-2025)
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const years: number[] = [];
-    for (let year = 2008; year <= currentYear; year++) {
-      years.push(year);
-    }
-    return years.reverse(); // Show newest first
+    for (let year = 2008; year <= currentYear; year++) years.push(year);
+    return years.reverse();
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     onSearch?.(
-      searchTerm, 
+      searchTerm,
       searchCategory === "all" ? undefined : searchCategory,
       searchYear === "all" ? undefined : searchYear
     );
     setIsSearchExpanded(false);
   };
 
-  // Filter to show only top-level categories (no parent)
   const topLevelCategories = categoriesData?.categories?.filter((cat: any) => !cat.parentId) || [];
-  const categories = topLevelCategories.slice(0, 6);
+  const navCategories = topLevelCategories.slice(0, 7);
   const allCategories = categoriesData?.categories || [];
 
   return (
-    <header className="bg-background border-b border-border sticky top-0 z-50 shadow-sm">
-      {/* Top Bar */}
-      <div className="bg-primary text-primary-foreground py-2 border-b border-border/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center text-sm">
-            <div className="flex items-center space-x-4">
-              <span className="flex items-center" data-testid="current-date">
-                <Calendar className="w-4 h-4 mr-2" />
-                {currentDate}
-              </span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <a href="#" className="hover:text-secondary transition-colors" data-testid="social-facebook">
-                <Facebook className="w-4 h-4" />
-              </a>
-              <a href="#" className="hover:text-secondary transition-colors" data-testid="social-twitter">
-                <Twitter className="w-4 h-4" />
-              </a>
-              <a href="#" className="hover:text-secondary transition-colors" data-testid="social-instagram">
-                <Instagram className="w-4 h-4" />
-              </a>
-              <a href="#" className="hover:text-secondary transition-colors" data-testid="social-youtube">
-                <Youtube className="w-4 h-4" />
-              </a>
-            </div>
+    <header className="bg-white border-b border-border sticky top-0 z-50">
+
+      {/* Thin top bar: date + socials */}
+      <div className="border-b border-border">
+        <div className="max-w-[1296px] mx-auto px-6 py-2 flex justify-between items-center"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
+          <span data-testid="current-date">{currentDate}</span>
+          <div className="flex items-center gap-4">
+            <a href="https://www.facebook.com/gallery.je" target="_blank" rel="noreferrer"
+              className="hover:text-foreground transition-colors" data-testid="social-facebook">
+              <Facebook className="w-3.5 h-3.5" />
+            </a>
+            <a href="https://twitter.com/galleryje" target="_blank" rel="noreferrer"
+              className="hover:text-foreground transition-colors" data-testid="social-twitter">
+              <Twitter className="w-3.5 h-3.5" />
+            </a>
+            <a href="https://www.instagram.com/gallery.je" target="_blank" rel="noreferrer"
+              className="hover:text-foreground transition-colors" data-testid="social-instagram">
+              <Instagram className="w-3.5 h-3.5" />
+            </a>
+            <a href="#" className="hover:text-foreground transition-colors" data-testid="social-youtube">
+              <Youtube className="w-3.5 h-3.5" />
+            </a>
           </div>
         </div>
       </div>
 
-      {/* Main Header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center py-4">
-          {/* Logo */}
-          <div className="flex items-center">
-            <Link href="/">
-              <h1 className="text-3xl font-bold font-serif text-primary cursor-pointer" data-testid="site-logo">
-                Modern Magazine
-              </h1>
-            </Link>
-          </div>
+      {/* Main masthead row */}
+      <div className="max-w-[1296px] mx-auto px-6 py-4 flex justify-between items-center">
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/" className="nav-link text-foreground hover:text-secondary font-medium" data-testid="nav-home">
-              Home
-            </Link>
-            {categories.map((category) => (
-              <Link key={category.id} href={`/category/${category.slug}`} className="nav-link text-foreground hover:text-secondary font-medium" data-testid={`nav-${category.slug}`}>
-                {category.name}
+        {/* Left: hamburger (mobile) */}
+        <button
+          className="text-foreground hover:opacity-70 transition-opacity"
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          data-testid="mobile-menu-toggle"
+          aria-label="Menu"
+        >
+          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+
+        {/* Centre: GALLERY wordmark */}
+        <Link href="/">
+          <span
+            className="cursor-pointer select-none"
+            style={{
+              fontFamily: "Arial, Helvetica, sans-serif",
+              fontSize: 28,
+              fontWeight: 700,
+              letterSpacing: "0.32em",
+              textTransform: "uppercase",
+              color: "hsl(0 0% 4%)",
+            }}
+            data-testid="site-logo"
+          >
+            Gallery
+          </span>
+        </Link>
+
+        {/* Right: search + admin */}
+        <div className="flex items-center gap-5" style={{ fontFamily: "Arial, sans-serif", fontSize: 13 }}>
+          <button
+            onClick={() => setIsSearchExpanded(!isSearchExpanded)}
+            className="flex items-center gap-1.5 text-foreground hover:text-secondary transition-colors"
+            data-testid="search-toggle"
+            aria-label="Search"
+          >
+            Search <Search className="w-4 h-4" />
+          </button>
+          <Link href="/admin">
+            <span className="hidden md:flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="admin-link">
+              <UserCircle className="w-4 h-4" />
+              Admin
+            </span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Desktop category nav */}
+      <div className="hidden md:block border-t border-border bg-white">
+        <div className="max-w-[1296px] mx-auto px-6">
+          <nav className="flex justify-center gap-8" style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 13 }}>
+            {navCategories.map((category) => (
+              <Link key={category.id} href={`/category/${category.slug}`}>
+                <span
+                  className={`nav-link inline-block py-3 cursor-pointer hover:text-secondary transition-colors ${location === `/category/${category.slug}` ? "active text-secondary" : "text-foreground"}`}
+                  data-testid={`nav-${category.slug}`}
+                >
+                  {category.name}
+                </span>
               </Link>
             ))}
           </nav>
-
-          {/* Search and Mobile Menu */}
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="hidden md:flex"
-              onClick={() => setIsSearchExpanded(!isSearchExpanded)}
-              data-testid="search-toggle"
-            >
-              <Search className="h-4 w-4" />
-            </Button>
-            
-            <Link href="/admin">
-              <Button variant="ghost" size="sm" className="hidden md:flex" data-testid="admin-link">
-                <UserCircle className="h-4 w-4 mr-2" />
-                Admin
-              </Button>
-            </Link>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              data-testid="mobile-menu-toggle"
-            >
-              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
-          </div>
         </div>
-
-        {/* Search Bar */}
-        {isSearchExpanded && (
-          <div className="pb-4" data-testid="search-bar">
-            <form onSubmit={handleSearch} className="max-w-4xl mx-auto space-y-3">
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <Input
-                    type="text"
-                    placeholder="Search articles by title or content..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    data-testid="search-input"
-                  />
-                </div>
-                <Select value={searchCategory} onValueChange={setSearchCategory}>
-                  <SelectTrigger className="w-[180px]" data-testid="search-category-filter">
-                    <SelectValue placeholder="All Categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    {allCategories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={searchYear} onValueChange={setSearchYear}>
-                  <SelectTrigger className="w-[140px]" data-testid="search-year-filter">
-                    <SelectValue placeholder="All Years" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Years</SelectItem>
-                    {availableYears.map((year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="submit"
-                  data-testid="search-submit"
-                >
-                  <Search className="h-4 w-4 mr-2" />
-                  Search
-                </Button>
-              </div>
-            </form>
-          </div>
-        )}
       </div>
 
-      {/* Mobile Menu */}
+      {/* Expandable search panel */}
+      {isSearchExpanded && (
+        <div className="border-t border-border bg-white py-4 px-6" data-testid="search-bar">
+          <form onSubmit={handleSearch} className="max-w-3xl mx-auto flex gap-3">
+            <Input
+              type="text"
+              placeholder="Search articles…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1 rounded-none border-border"
+              data-testid="search-input"
+              autoFocus
+            />
+            <Select value={searchCategory} onValueChange={setSearchCategory}>
+              <SelectTrigger className="w-44 rounded-none" data-testid="search-category-filter">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {allCategories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={searchYear} onValueChange={setSearchYear}>
+              <SelectTrigger className="w-36 rounded-none" data-testid="search-year-filter">
+                <SelectValue placeholder="All Years" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Years</SelectItem>
+                {availableYears.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <button
+              type="submit"
+              className="bg-foreground text-white px-6 py-2 hover:bg-secondary hover:text-foreground transition-colors"
+              style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}
+              data-testid="search-submit"
+            >
+              Search
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Mobile menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-background border-t border-border" data-testid="mobile-menu">
-          <nav className="px-4 py-4 space-y-2">
-            <Link href="/" className="block py-2 text-foreground hover:text-secondary font-medium" data-testid="mobile-nav-home">
-              Home
+        <div className="md:hidden border-t border-border bg-white" data-testid="mobile-menu">
+          <nav className="px-6 py-4 space-y-0" style={{ fontFamily: "Arial, sans-serif", fontSize: 14 }}>
+            <Link href="/">
+              <span className="block py-3 border-b border-border text-foreground hover:text-secondary cursor-pointer" data-testid="mobile-nav-home">Home</span>
             </Link>
-            {categories.map((category) => (
-              <Link key={category.id} href={`/category/${category.slug}`} className="block py-2 text-foreground hover:text-secondary font-medium" data-testid={`mobile-nav-${category.slug}`}>
-                {category.name}
+            {navCategories.map((category) => (
+              <Link key={category.id} href={`/category/${category.slug}`}>
+                <span className="block py-3 border-b border-border text-foreground hover:text-secondary cursor-pointer" data-testid={`mobile-nav-${category.slug}`}>
+                  {category.name}
+                </span>
               </Link>
             ))}
-            <div className="pt-2 border-t border-border">
-              <Link href="/admin" className="flex items-center py-2 text-foreground hover:text-secondary font-medium" data-testid="mobile-admin-link">
-                <UserCircle className="w-4 h-4 mr-2" />
+            <Link href="/admin">
+              <span className="flex items-center gap-2 py-3 text-muted-foreground hover:text-foreground cursor-pointer" data-testid="mobile-admin-link">
+                <UserCircle className="w-4 h-4" />
                 Admin Dashboard
-              </Link>
-            </div>
+              </span>
+            </Link>
           </nav>
         </div>
       )}

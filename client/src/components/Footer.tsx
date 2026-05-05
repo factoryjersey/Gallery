@@ -1,98 +1,116 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Facebook, Twitter, Instagram, Linkedin } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Footer() {
   const [email, setEmail] = useState("");
   const { toast } = useToast();
 
+  const { data: categoriesData } = useQuery<{ categories: any[] }>({
+    queryKey: ["/api/categories"],
+  });
+
+  const topCategories = (categoriesData?.categories || [])
+    .filter((c: any) => !c.parentId)
+    .slice(0, 6);
+
   const handleNewsletterSignup = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
-    
-    // TODO: Implement newsletter signup API
-    toast({
-      title: "Success!",
-      description: "Thank you for subscribing to our newsletter.",
-    });
+    toast({ title: "Subscribed!", description: "Thanks — we'll be in touch." });
     setEmail("");
   };
 
   return (
-    <footer className="bg-primary text-primary-foreground py-12 border-t border-border/20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+    <footer className="bg-white border-t-[3px] border-foreground">
+      <div className="max-w-[1296px] mx-auto px-6 py-12">
+
+        {/* Top: wordmark + tagline */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-8 border-b border-border">
+          <Link href="/">
+            <span
+              className="cursor-pointer"
+              style={{
+                fontFamily: "Arial, Helvetica, sans-serif",
+                fontSize: 22,
+                fontWeight: 700,
+                letterSpacing: "0.3em",
+                textTransform: "uppercase",
+                color: "hsl(0 0% 4%)",
+              }}
+              data-testid="footer-title"
+            >
+              Gallery
+            </span>
+          </Link>
+          <p style={{ fontFamily: "Georgia, serif", fontSize: 14, color: "hsl(0 0% 43%)", fontStyle: "italic" }}>
+            Life &amp; style in Jersey.
+          </p>
+          <div className="flex items-center gap-4">
+            <a href="https://www.facebook.com/gallery.je" target="_blank" rel="noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-facebook-footer">
+              <Facebook className="w-4 h-4" />
+            </a>
+            <a href="https://twitter.com/galleryje" target="_blank" rel="noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-twitter-footer">
+              <Twitter className="w-4 h-4" />
+            </a>
+            <a href="https://www.instagram.com/gallery.je" target="_blank" rel="noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-instagram-footer">
+              <Instagram className="w-4 h-4" />
+            </a>
+            <a href="#" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-linkedin-footer">
+              <Linkedin className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+
+        {/* Grid: links + newsletter */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 py-8 border-b border-border"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 13 }}>
+
           {/* About */}
           <div>
-            <h3 className="text-xl font-bold font-serif mb-4" data-testid="footer-title">
-              Modern Magazine
-            </h3>
-            <p className="text-sm opacity-90 mb-4">
-              Your trusted source for in-depth journalism and compelling stories from around the world.
-            </p>
-            <div className="flex space-x-3">
-              <a
-                href="#"
-                className="w-8 h-8 bg-primary-foreground/10 rounded-full flex items-center justify-center hover:bg-primary-foreground/20 transition-colors"
-                data-testid="social-facebook-footer"
-              >
-                <Facebook className="w-4 h-4" />
-              </a>
-              <a
-                href="#"
-                className="w-8 h-8 bg-primary-foreground/10 rounded-full flex items-center justify-center hover:bg-primary-foreground/20 transition-colors"
-                data-testid="social-twitter-footer"
-              >
-                <Twitter className="w-4 h-4" />
-              </a>
-              <a
-                href="#"
-                className="w-8 h-8 bg-primary-foreground/10 rounded-full flex items-center justify-center hover:bg-primary-foreground/20 transition-colors"
-                data-testid="social-instagram-footer"
-              >
-                <Instagram className="w-4 h-4" />
-              </a>
-              <a
-                href="#"
-                className="w-8 h-8 bg-primary-foreground/10 rounded-full flex items-center justify-center hover:bg-primary-foreground/20 transition-colors"
-                data-testid="social-linkedin-footer"
-              >
-                <Linkedin className="w-4 h-4" />
-              </a>
-            </div>
+            <h4 className="font-bold mb-4 uppercase tracking-widest text-xs text-foreground">About</h4>
+            <ul className="space-y-2.5 text-muted-foreground">
+              {[["About Us", "#"], ["Contact", "#"], ["Advertise", "#"], ["Careers", "#"]].map(([label, href]) => (
+                <li key={label}><a href={href} className="hover:text-foreground transition-colors">{label}</a></li>
+              ))}
+            </ul>
           </div>
 
-          {/* Quick Links */}
+          {/* Legal */}
           <div>
-            <h4 className="font-semibold mb-4">Quick Links</h4>
-            <ul className="space-y-2 text-sm opacity-90">
-              <li><a href="#" className="hover:text-secondary transition-colors" data-testid="footer-about">About Us</a></li>
-              <li><a href="#" className="hover:text-secondary transition-colors" data-testid="footer-contact">Contact</a></li>
-              <li><a href="#" className="hover:text-secondary transition-colors" data-testid="footer-advertise">Advertise</a></li>
-              <li><a href="#" className="hover:text-secondary transition-colors" data-testid="footer-careers">Careers</a></li>
-              <li><a href="#" className="hover:text-secondary transition-colors" data-testid="footer-privacy">Privacy Policy</a></li>
+            <h4 className="font-bold mb-4 uppercase tracking-widest text-xs text-foreground">Legal</h4>
+            <ul className="space-y-2.5 text-muted-foreground">
+              {[["Privacy Policy", "#"], ["Terms of Service", "#"], ["Cookie Policy", "#"], ["Sitemap", "#"]].map(([label, href]) => (
+                <li key={label}><a href={href} className="hover:text-foreground transition-colors">{label}</a></li>
+              ))}
             </ul>
           </div>
 
           {/* Categories */}
           <div>
-            <h4 className="font-semibold mb-4">Categories</h4>
-            <ul className="space-y-2 text-sm opacity-90">
-              <li><a href="/category/politics" className="hover:text-secondary transition-colors" data-testid="footer-politics">Politics</a></li>
-              <li><a href="/category/technology" className="hover:text-secondary transition-colors" data-testid="footer-technology">Technology</a></li>
-              <li><a href="/category/business" className="hover:text-secondary transition-colors" data-testid="footer-business">Business</a></li>
-              <li><a href="/category/culture" className="hover:text-secondary transition-colors" data-testid="footer-culture">Culture</a></li>
-              <li><a href="/category/sports" className="hover:text-secondary transition-colors" data-testid="footer-sports">Sports</a></li>
+            <h4 className="font-bold mb-4 uppercase tracking-widest text-xs text-foreground">Sections</h4>
+            <ul className="space-y-2.5 text-muted-foreground">
+              {topCategories.map((cat: any) => (
+                <li key={cat.id}>
+                  <Link href={`/category/${cat.slug}`}>
+                    <span className="hover:text-foreground transition-colors cursor-pointer">{cat.name}</span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
           {/* Newsletter */}
           <div>
-            <h4 className="font-semibold mb-4">Newsletter</h4>
-            <p className="text-sm opacity-90 mb-3">
-              Subscribe to get our latest articles delivered to your inbox.
+            <h4 className="font-bold mb-4 uppercase tracking-widest text-xs text-foreground">Newsletter</h4>
+            <p className="text-muted-foreground mb-3" style={{ fontSize: 13, lineHeight: 1.5 }}>
+              The best of Gallery, delivered weekly.
             </p>
             <form onSubmit={handleNewsletterSignup} className="space-y-2" data-testid="newsletter-form">
               <Input
@@ -100,32 +118,35 @@ export default function Footer() {
                 placeholder="Your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground placeholder:text-primary-foreground/60"
+                className="rounded-none border-border"
                 required
                 data-testid="newsletter-email"
               />
-              <Button 
-                type="submit" 
-                className="w-full bg-secondary hover:bg-secondary/90 text-white"
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-foreground text-white hover:bg-secondary hover:text-foreground transition-colors"
+                style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}
                 data-testid="newsletter-submit"
               >
                 Subscribe
-              </Button>
+              </button>
             </form>
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="pt-8 border-t border-primary-foreground/20 flex flex-col md:flex-row justify-between items-center text-sm opacity-75">
-          <p data-testid="footer-copyright">
-            &copy; 2024 Modern Magazine. All rights reserved.
-          </p>
-          <div className="flex space-x-4 mt-4 md:mt-0">
-            <a href="#" className="hover:text-secondary transition-colors" data-testid="footer-terms">Terms of Service</a>
-            <a href="#" className="hover:text-secondary transition-colors" data-testid="footer-cookies">Cookie Policy</a>
-            <a href="#" className="hover:text-secondary transition-colors" data-testid="footer-sitemap">Sitemap</a>
+        {/* Bottom bar */}
+        <div
+          className="pt-6 flex flex-col md:flex-row justify-between items-center gap-3"
+          style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}
+        >
+          <p data-testid="footer-copyright">© {new Date().getFullYear()} Gallery Magazine. All rights reserved.</p>
+          <div className="flex gap-5">
+            <a href="#" className="hover:text-foreground transition-colors" data-testid="footer-terms">Terms</a>
+            <a href="#" className="hover:text-foreground transition-colors" data-testid="footer-cookies">Cookies</a>
+            <a href="#" className="hover:text-foreground transition-colors" data-testid="footer-sitemap">Sitemap</a>
           </div>
         </div>
+
       </div>
     </footer>
   );

@@ -1,148 +1,160 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Flame, Mail, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+
+function SidebarSection({ title, teal = false, children }: { title: string; teal?: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-5">
+        <span className={`gallery-section-label${teal ? " gallery-section-label--teal" : ""}`}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export default function Sidebar() {
   const [email, setEmail] = useState("");
   const { toast } = useToast();
 
-  const { data: trendingData } = useQuery({
-    queryKey: ["/api/articles/trending"],
-  });
-
-  const { data: categoriesData } = useQuery({
-    queryKey: ["/api/categories"],
-  });
+  const { data: trendingData } = useQuery({ queryKey: ["/api/articles/trending"] });
+  const { data: categoriesData } = useQuery({ queryKey: ["/api/categories"] });
 
   const handleNewsletterSignup = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
-    
-    // TODO: Implement newsletter signup API call
-    toast({
-      title: "Success!",
-      description: "Thank you for subscribing to our newsletter.",
-    });
+    toast({ title: "Subscribed!", description: "Thanks — we'll be in touch." });
     setEmail("");
   };
 
   const trendingArticles = trendingData?.articles || [];
-  const categories = categoriesData?.categories || [];
+  const categories = (categoriesData?.categories || []).filter((c: any) => !c.parentId).slice(0, 7);
 
   return (
-    <aside className="space-y-6">
-      {/* Trending Stories */}
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle className="flex items-center text-foreground" data-testid="trending-title">
-            <Flame className="h-5 w-5 text-secondary mr-2" />
-            Trending Now
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4" data-testid="trending-articles">
-            {trendingArticles.length > 0 ? (
-              trendingArticles.map((article, index) => (
-                <Link key={article.id} href={`/article/${article.slug}`}>
-                  <div className="flex items-start space-x-3 pb-4 border-b border-border last:border-0 last:pb-0 cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors" data-testid={`trending-article-${index}`}>
-                    <span className="text-2xl font-bold text-muted-foreground min-w-[2rem]" data-testid={`trending-rank-${index}`}>
-                      {index + 1}
-                    </span>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-foreground text-sm mb-1 hover:text-secondary line-clamp-2" data-testid={`trending-title-${index}`}>
-                        {article.title}
-                      </h4>
-                      <div className="text-xs text-muted-foreground">
-                        <span data-testid={`trending-read-time-${index}`}>{article.readTime} min read</span>
-                        <span className="mx-1">•</span>
-                        <span data-testid={`trending-views-${index}`}>{article.views.toLocaleString()} views</span>
-                      </div>
+    <aside className="space-y-10">
+
+      {/* Trending Now */}
+      <SidebarSection title="Trending Now" teal>
+        <div data-testid="trending-articles">
+          {trendingArticles.length > 0 ? (
+            trendingArticles.map((article: any, index: number) => (
+              <Link key={article.id} href={`/article/${article.slug}`}>
+                <div
+                  className="flex items-start gap-4 py-4 border-b border-border last:border-0 cursor-pointer group"
+                  data-testid={`trending-article-${index}`}
+                >
+                  <span
+                    className="font-bold min-w-[1.5rem] text-right shrink-0"
+                    style={{ fontFamily: "Arial, sans-serif", fontSize: 22, color: "hsl(0 0% 85%)", lineHeight: 1 }}
+                    data-testid={`trending-rank-${index}`}
+                  >
+                    {index + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <h4
+                      className="group-hover:text-secondary transition-colors line-clamp-2 mb-1"
+                      style={{ fontFamily: "Georgia, serif", fontSize: 15, fontWeight: 400, lineHeight: 1.4, color: "hsl(0 0% 4%)" }}
+                      data-testid={`trending-title-${index}`}
+                    >
+                      {article.title}
+                    </h4>
+                    <div style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
+                      <span data-testid={`trending-read-time-${index}`}>{article.readTime} min</span>
+                      <span className="mx-1.5">·</span>
+                      <span data-testid={`trending-views-${index}`}>{article.views.toLocaleString()} views</span>
                     </div>
                   </div>
-                </Link>
-              ))
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <TrendingUp className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-sm">No trending articles yet</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className="py-10 text-center">
+              <TrendingUp className="w-8 h-8 mx-auto mb-3 text-border" />
+              <p style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 43%)" }}>
+                No trending articles yet
+              </p>
+            </div>
+          )}
+        </div>
+      </SidebarSection>
 
-      {/* Newsletter Signup */}
-      <Card className="bg-primary text-primary-foreground shadow-md">
-        <CardHeader>
-          <CardTitle className="flex items-center" data-testid="newsletter-title">
-            <Mail className="h-5 w-5 mr-2" />
+      {/* Newsletter */}
+      <div className="bg-foreground text-white p-6">
+        <div className="mb-1">
+          <span
+            style={{
+              fontFamily: "Arial, sans-serif",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              borderBottom: "3px solid hsl(52 97% 56%)",
+              paddingBottom: 6,
+              display: "inline-block",
+            }}
+            data-testid="newsletter-title"
+          >
             Stay Informed
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm mb-4 opacity-90">
-            Get the latest stories delivered to your inbox.
-          </p>
-          <form onSubmit={handleNewsletterSignup} className="space-y-3" data-testid="sidebar-newsletter-form">
-            <Input
-              type="email"
-              placeholder="Your email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="bg-primary-foreground/10 border-primary-foreground/20 text-primary-foreground placeholder:text-primary-foreground/60 focus:ring-secondary"
-              required
-              data-testid="sidebar-newsletter-email"
-            />
-            <Button 
-              type="submit" 
-              className="w-full bg-secondary hover:bg-secondary/90 text-white font-semibold"
-              data-testid="sidebar-newsletter-submit"
-            >
-              Subscribe Now
-            </Button>
-          </form>
-          <p className="text-xs mt-3 opacity-75">
-            We respect your privacy. Unsubscribe anytime.
-          </p>
-        </CardContent>
-      </Card>
+          </span>
+        </div>
+        <p className="text-sm mt-4 mb-4 opacity-80" style={{ fontFamily: "Georgia, serif", fontSize: 15, lineHeight: 1.5 }}>
+          Get the latest stories from Gallery delivered to your inbox.
+        </p>
+        <form onSubmit={handleNewsletterSignup} className="space-y-3" data-testid="sidebar-newsletter-form">
+          <Input
+            type="email"
+            placeholder="Your email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="rounded-none bg-white/10 border-white/20 text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:border-accent"
+            required
+            data-testid="sidebar-newsletter-email"
+          />
+          <button
+            type="submit"
+            className="w-full py-2.5 bg-accent text-foreground transition-opacity hover:opacity-90"
+            style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}
+            data-testid="sidebar-newsletter-submit"
+          >
+            Subscribe Now
+          </button>
+        </form>
+        <p className="text-xs mt-3 opacity-50" style={{ fontFamily: "Arial, sans-serif" }}>
+          We respect your privacy. Unsubscribe anytime.
+        </p>
+      </div>
 
-      {/* Popular Categories */}
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle className="text-foreground" data-testid="popular-categories-title">
-            Popular Topics
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2" data-testid="popular-categories">
-            {categories.length > 0 ? (
-              categories.slice(0, 6).map((category) => (
-                <Link key={category.id} href={`/category/${category.slug}`}>
-                  <div className="flex items-center justify-between py-2 px-3 rounded hover:bg-muted transition-colors group cursor-pointer" data-testid={`category-${category.slug}`}>
-                    <span className="text-foreground group-hover:text-secondary font-medium">
-                      {category.name}
-                    </span>
-                    <Badge variant="secondary" className="text-xs">
-                      Popular
-                    </Badge>
-                  </div>
-                </Link>
-              ))
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p className="text-sm">No categories available</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Popular Topics */}
+      <SidebarSection title="Popular Topics">
+        <div data-testid="popular-categories">
+          {categories.length > 0 ? (
+            categories.map((category: any) => (
+              <Link key={category.id} href={`/category/${category.slug}`}>
+                <div
+                  className="flex items-center justify-between py-3 border-b border-border cursor-pointer group"
+                  data-testid={`category-${category.slug}`}
+                >
+                  <span
+                    className="group-hover:text-secondary transition-colors"
+                    style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 4%)" }}
+                  >
+                    {category.name}
+                  </span>
+                  <span style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "hsl(182 55% 56%)" }}>→</span>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <p style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 43%)" }}>
+              No categories available
+            </p>
+          )}
+        </div>
+      </SidebarSection>
+
     </aside>
   );
 }
