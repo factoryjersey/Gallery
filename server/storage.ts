@@ -413,12 +413,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFeaturedArticles(limit = 4): Promise<ArticleWithDetails[]> {
-    return (await this.getArticles({
+    // Fetch a larger pool then sort: articles with images first, then by views
+    const pool = (await this.getArticles({
       status: 'published',
-      limit,
-      orderBy: 'views',
+      limit: limit * 6,
+      orderBy: 'publishedAt',
       orderDir: 'desc',
     })).articles;
+
+    const withImage = pool.filter(a => a.featuredImage);
+    const withoutImage = pool.filter(a => !a.featuredImage);
+
+    return [...withImage, ...withoutImage].slice(0, limit);
   }
 
   async getTrendingArticles(limit = 5): Promise<ArticleWithDetails[]> {
