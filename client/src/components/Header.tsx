@@ -101,20 +101,13 @@ export default function Header({ onSearch }: HeaderProps) {
 
         {/* Centre: GALLERY wordmark */}
         <Link href="/">
-          <span
-            className="cursor-pointer select-none"
-            style={{
-              fontFamily: "Arial, Helvetica, sans-serif",
-              fontSize: 28,
-              fontWeight: 700,
-              letterSpacing: "0.32em",
-              textTransform: "uppercase",
-              color: "hsl(0 0% 4%)",
-            }}
+          <img
+            src="/gallery-logo.png"
+            alt="Gallery"
+            className="cursor-pointer"
+            style={{ height: 28, width: "auto" }}
             data-testid="site-logo"
-          >
-            Gallery
-          </span>
+          />
         </Link>
 
         {/* Right: search + admin */}
