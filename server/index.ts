@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import http from "http";
 
 const app = express();
 
@@ -47,6 +48,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Proxy /__mockup/ to the mockup sandbox dev server on port 23636
+  app.use('/__mockup', (req: Request, res: Response) => {
+    const target = `http://127.0.0.1:23636/__mockup${req.url}`;
+    const proxyReq = http.request(target, { method: req.method, headers: req.headers }, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on('error', () => res.status(502).send('Mockup sandbox not available'));
+    req.pipe(proxyReq);
+  });
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
