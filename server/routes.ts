@@ -2139,7 +2139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allPosts: any[] = [];
       while (true) {
         const postsRes = await fetch(
-          `${WP_API}/posts?per_page=100&after=${afterDate}&page=${page}&orderby=date&order=asc`
+          `${WP_API}/posts?per_page=100&after=${afterDate}&page=${page}&orderby=date&order=asc&_embed=wp:featuredmedia`
         );
         if (!postsRes.ok) break;
         const posts: any[] = await postsRes.json();
@@ -2168,7 +2168,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return `${R2_PUBLIC_URL}/${key}`;
           } catch { /* not in R2 yet */ }
 
-          const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(20000) } as any);
+          const imgRes = await fetch(imageUrl, {
+            signal: AbortSignal.timeout(30000),
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; GalleryCMS/1.0)',
+              'Accept': 'image/webp,image/jpeg,image/png,image/*',
+            },
+          } as any);
           if (!imgRes.ok) return null;
           const buffer = Buffer.from(await imgRes.arrayBuffer());
           const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
@@ -2230,18 +2236,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             tagDbIds.push(tagDbId);
           }
 
-          // Fetch & upload featured image
+          // Fetch & upload featured image (use _embed data to avoid separate /media/{id} call which 404s)
           let featuredImageUrl = '';
-          if (post.featured_media) {
-            const mediaRes = await fetch(`${WP_API}/media/${post.featured_media}`);
-            if (mediaRes.ok) {
-              const mediaData: any = await mediaRes.json();
-              const sourceUrl = mediaData.source_url || mediaData.guid?.rendered;
-              if (sourceUrl) {
-                const r2Url = await downloadAndUploadToR2(sourceUrl);
-                if (r2Url) featuredImageUrl = r2Url;
-              }
-            }
+          const embeddedMedia = post._embedded?.['wp:featuredmedia']?.[0];
+          const featuredSourceUrl = embeddedMedia?.source_url || embeddedMedia?.guid?.rendered;
+          if (featuredSourceUrl) {
+            const r2Url = await downloadAndUploadToR2(featuredSourceUrl);
+            if (r2Url) featuredImageUrl = r2Url;
           }
 
           // Process content: download & replace image URLs
