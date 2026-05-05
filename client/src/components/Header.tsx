@@ -203,7 +203,7 @@ export default function Header({ onSearch }: HeaderProps) {
 
       {/* Mobile menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden border-t border-border bg-white" data-testid="mobile-menu">
+        <div className="border-t border-border bg-white" data-testid="mobile-menu">
           <nav className="px-6 py-4 space-y-0" style={{ fontFamily: "Arial, sans-serif", fontSize: 14 }}>
             <Link href="/">
               <span className="block py-3 border-b border-border text-foreground hover:text-secondary cursor-pointer" data-testid="mobile-nav-home">Home</span>
