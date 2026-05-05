@@ -6,10 +6,6 @@ import {
   Search,
   Menu,
   X,
-  Facebook,
-  Twitter,
-  Instagram,
-  Youtube,
   UserCircle
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -66,30 +62,12 @@ export default function Header({ onSearch }: HeaderProps) {
         <div className="max-w-[1296px] mx-auto px-6 py-2 flex justify-between items-center"
           style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
           <span data-testid="current-date">{currentDate}</span>
-          <div className="flex items-center gap-4">
-            <a href="https://www.facebook.com/gallery.je" target="_blank" rel="noreferrer"
-              className="hover:text-foreground transition-colors" data-testid="social-facebook">
-              <Facebook className="w-3.5 h-3.5" />
-            </a>
-            <a href="https://twitter.com/galleryje" target="_blank" rel="noreferrer"
-              className="hover:text-foreground transition-colors" data-testid="social-twitter">
-              <Twitter className="w-3.5 h-3.5" />
-            </a>
-            <a href="https://www.instagram.com/gallery.je" target="_blank" rel="noreferrer"
-              className="hover:text-foreground transition-colors" data-testid="social-instagram">
-              <Instagram className="w-3.5 h-3.5" />
-            </a>
-            <a href="#" className="hover:text-foreground transition-colors" data-testid="social-youtube">
-              <Youtube className="w-3.5 h-3.5" />
-            </a>
-            <span className="w-px h-3 bg-border inline-block" />
-            <Link href="/admin">
-              <span className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" data-testid="admin-link">
-                <UserCircle className="w-3.5 h-3.5" />
-                Admin
-              </span>
-            </Link>
-          </div>
+          <Link href="/admin">
+            <span className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" data-testid="admin-link">
+              <UserCircle className="w-3.5 h-3.5" />
+              Admin
+            </span>
+          </Link>
         </div>
       </div>
 

@@ -1,5 +1,4 @@
 import { Input } from "@/components/ui/input";
-import { Facebook, Twitter, Instagram, Linkedin } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -49,23 +48,6 @@ export default function Footer() {
           <p style={{ fontFamily: "Georgia, serif", fontSize: 14, color: "hsl(0 0% 43%)", fontStyle: "italic" }}>
             Life &amp; style in Jersey.
           </p>
-          <div className="flex items-center gap-4">
-            <a href="https://www.facebook.com/gallery.je" target="_blank" rel="noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-facebook-footer">
-              <Facebook className="w-4 h-4" />
-            </a>
-            <a href="https://twitter.com/galleryje" target="_blank" rel="noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-twitter-footer">
-              <Twitter className="w-4 h-4" />
-            </a>
-            <a href="https://www.instagram.com/gallery.je" target="_blank" rel="noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-instagram-footer">
-              <Instagram className="w-4 h-4" />
-            </a>
-            <a href="#" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="social-linkedin-footer">
-              <Linkedin className="w-4 h-4" />
-            </a>
-          </div>
         </div>
 
         {/* Grid: links + newsletter */}
