@@ -17,7 +17,8 @@ import {
   Home,
   Eye,
   ArrowLeft,
-  RefreshCw
+  RefreshCw,
+  Star
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
@@ -30,6 +31,7 @@ import WordPressAuthorUpdater from "@/components/WordPressAuthorUpdater";
 import { MediaManager } from "@/components/MediaManager";
 import { MediaIndexing } from "@/components/MediaIndexing";
 import { WPSync } from "@/components/WPSync";
+import { FeaturedStoriesManager } from "@/components/FeaturedStoriesManager";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
@@ -202,6 +204,18 @@ export default function Admin() {
                 >
                   <Upload className="w-5 h-5 mr-3" />
                   WordPress Import
+                </button>
+                <button
+                  onClick={() => setActiveTab("featured")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "featured"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-featured"
+                >
+                  <Star className="w-5 h-5 mr-3" />
+                  Featured Stories
                 </button>
                 <button
                   onClick={() => setActiveTab("sync")}
@@ -387,6 +401,10 @@ export default function Admin() {
 
               {activeTab === "storage" && (
                 <MediaIndexing />
+              )}
+
+              {activeTab === "featured" && (
+                <FeaturedStoriesManager />
               )}
 
               {activeTab === "sync" && (

@@ -1,5 +1,7 @@
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { Link } from "wouter";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ArticleWithDetails } from "@shared/schema";
 import LazyImage from "@/components/LazyImage";
 
@@ -7,9 +9,30 @@ interface FeaturedHeroProps {
   articles: ArticleWithDetails[];
 }
 
+const ROTATION_MS = 7000;
+
 export default function FeaturedHero({ articles }: FeaturedHeroProps) {
-  const mainArticle = articles[0];
-  const secondaryArticles = articles.slice(1, 4);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const total = articles.length;
+
+  const next = useCallback(() => {
+    setActiveIndex(i => (i + 1) % total);
+  }, [total]);
+
+  const prev = useCallback(() => {
+    setActiveIndex(i => (i - 1 + total) % total);
+  }, [total]);
+
+  useEffect(() => {
+    if (paused || total <= 1) return;
+    const id = setInterval(next, ROTATION_MS);
+    return () => clearInterval(id);
+  }, [paused, total, next]);
+
+  const mainArticle = articles[activeIndex];
+  const secondaryArticles = articles.filter((_, i) => i !== activeIndex).slice(0, 3);
 
   if (!mainArticle) {
     return (
@@ -24,11 +47,15 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
   }
 
   return (
-    <section className="bg-white border-b border-border">
+    <section
+      className="bg-white border-b border-border"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
       <div className="max-w-[1296px] mx-auto px-6">
 
         {/* Main hero: text left, image right */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 py-10 border-b border-border">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 py-10 border-b border-border relative">
           {/* Text */}
           <Link href={`/article/${mainArticle.slug}`}>
             <div className="flex flex-col justify-center gap-5 cursor-pointer h-full" data-testid="featured-main">
@@ -94,7 +121,7 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
 
           {/* Image */}
           <Link href={`/article/${mainArticle.slug}`}>
-            <div className="overflow-hidden cursor-pointer" style={{ aspectRatio: "4/3" }}>
+            <div className="overflow-hidden cursor-pointer relative" style={{ aspectRatio: "4/3" }}>
               {mainArticle.featuredImage ? (
                 <LazyImage
                   src={mainArticle.featuredImage}
@@ -110,6 +137,50 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
               )}
             </div>
           </Link>
+
+          {/* Navigation controls */}
+          {total > 1 && (
+            <div className="absolute bottom-4 right-0 flex items-center gap-3" onClick={e => e.stopPropagation()}>
+              {/* Dot indicators */}
+              <div className="flex gap-1.5">
+                {articles.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveIndex(i)}
+                    data-testid={`hero-dot-${i}`}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 0,
+                      border: "none",
+                      background: i === activeIndex ? "hsl(0 0% 4%)" : "hsl(0 0% 80%)",
+                      cursor: "pointer",
+                      padding: 0,
+                      transition: "background 0.2s",
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={prev}
+                data-testid="hero-prev"
+                className="hover:opacity-60 transition-opacity"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1 }}
+                aria-label="Previous story"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={next}
+                data-testid="hero-next"
+                className="hover:opacity-60 transition-opacity"
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1 }}
+                aria-label="Next story"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Secondary articles strip */}

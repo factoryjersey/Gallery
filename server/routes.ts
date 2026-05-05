@@ -151,6 +151,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/articles/:id/featured", async (req, res) => {
+    try {
+      const { isFeatured, featuredOrder } = req.body;
+      const article = await storage.updateArticle(req.params.id, { isFeatured, featuredOrder });
+      if (!article) return res.status(404).json({ error: "Article not found" });
+      res.json({ article });
+    } catch (error) {
+      console.error("Error updating featured status:", error);
+      res.status(500).json({ error: "Failed to update featured status" });
+    }
+  });
+
   app.delete("/api/articles/:id", async (req, res) => {
     try {
       const success = await storage.deleteArticle(req.params.id);

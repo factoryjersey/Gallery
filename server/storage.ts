@@ -412,19 +412,35 @@ export class DatabaseStorage implements IStorage {
     return { articles: articlesWithTags, total };
   }
 
-  async getFeaturedArticles(limit = 4): Promise<ArticleWithDetails[]> {
-    // Fetch a larger pool then sort: articles with images first, then by views
-    const pool = (await this.getArticles({
-      status: 'published',
-      limit: limit * 6,
-      orderBy: 'publishedAt',
-      orderDir: 'desc',
-    })).articles;
+  async getFeaturedArticles(limit = 8): Promise<ArticleWithDetails[]> {
+    // First: try explicitly pinned articles (isFeatured=true), ordered by featuredOrder
+    const pinned = await db
+      .select({ article: articles, author: authors, category: categories })
+      .from(articles)
+      .leftJoin(authors, eq(articles.authorId, authors.id))
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .where(and(eq(articles.isFeatured, true), eq(articles.status, 'published')))
+      .orderBy(asc(articles.featuredOrder), desc(articles.publishedAt))
+      .limit(limit);
 
-    const withImage = pool.filter(a => a.featuredImage);
-    const withoutImage = pool.filter(a => !a.featuredImage);
+    const pinnedWithTags: ArticleWithDetails[] = [];
+    for (const row of pinned) {
+      if (!row.author || !row.category) continue;
+      const tagResults = await db.select({ tag: tags }).from(articleTags)
+        .leftJoin(tags, eq(articleTags.tagId, tags.id))
+        .where(eq(articleTags.articleId, row.article.id));
+      pinnedWithTags.push({ ...row.article, author: row.author, category: row.category, tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[] });
+    }
 
-    return [...withImage, ...withoutImage].slice(0, limit);
+    if (pinnedWithTags.length >= limit) return pinnedWithTags.slice(0, limit);
+
+    // Fallback: fill remaining slots from latest published articles with images
+    const needed = limit - pinnedWithTags.length;
+    const pinnedIds = pinnedWithTags.map(a => a.id);
+    const pool = (await this.getArticles({ status: 'published', limit: needed * 6, orderBy: 'publishedAt', orderDir: 'desc' })).articles;
+    const filler = pool.filter(a => a.featuredImage && !pinnedIds.includes(a.id)).slice(0, needed);
+
+    return [...pinnedWithTags, ...filler];
   }
 
   async getTrendingArticles(limit = 5): Promise<ArticleWithDetails[]> {

@@ -50,6 +50,9 @@ export const articles = pgTable("articles", {
   // WordPress import data
   wpId: integer("wp_id"), // original WordPress post ID
   wpData: json("wp_data"), // store original WordPress data for reference
+  // Hero rotation
+  isFeatured: boolean("is_featured").default(false).notNull(),
+  featuredOrder: integer("featured_order").default(0).notNull(),
 });
 
 export const articleTags = pgTable("article_tags", {
