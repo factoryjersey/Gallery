@@ -82,6 +82,13 @@ export default function Header({ onSearch }: HeaderProps) {
             <a href="#" className="hover:text-foreground transition-colors" data-testid="social-youtube">
               <Youtube className="w-3.5 h-3.5" />
             </a>
+            <span className="w-px h-3 bg-border inline-block" />
+            <Link href="/admin">
+              <span className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" data-testid="admin-link">
+                <UserCircle className="w-3.5 h-3.5" />
+                Admin
+              </span>
+            </Link>
           </div>
         </div>
       </div>
@@ -110,7 +117,7 @@ export default function Header({ onSearch }: HeaderProps) {
           />
         </Link>
 
-        {/* Right: search + admin */}
+        {/* Right: search */}
         <div className="flex items-center gap-5" style={{ fontFamily: "Arial, sans-serif", fontSize: 13 }}>
           <button
             onClick={() => setIsSearchExpanded(!isSearchExpanded)}
@@ -120,12 +127,6 @@ export default function Header({ onSearch }: HeaderProps) {
           >
             Search <Search className="w-4 h-4" />
           </button>
-          <Link href="/admin">
-            <span className="hidden md:flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="admin-link">
-              <UserCircle className="w-4 h-4" />
-              Admin
-            </span>
-          </Link>
         </div>
       </div>
 
