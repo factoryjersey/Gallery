@@ -90,7 +90,7 @@ export default function Header({ onSearch }: HeaderProps) {
             src="/gallery-logo.png"
             alt="Gallery"
             className="cursor-pointer"
-            style={{ height: 28, width: "auto" }}
+            style={{ height: 22, width: "auto" }}
             data-testid="site-logo"
           />
         </Link>
@@ -103,7 +103,7 @@ export default function Header({ onSearch }: HeaderProps) {
             data-testid="search-toggle"
             aria-label="Search"
           >
-            Search <Search className="w-4 h-4" />
+            <Search className="w-4 h-4" />
           </button>
         </div>
       </div>
