@@ -183,11 +183,12 @@ export default function Sidebar() {
                   data-testid={`cartoon-article-${index}`}
                 >
                   {article.featuredImage ? (
-                    <div className="overflow-hidden mb-3" style={{ aspectRatio: "4/3" }}>
-                      <LazyImage
+                    <div className="mb-3 overflow-hidden">
+                      <img
                         src={article.featuredImage}
                         alt={article.title}
-                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                        className="w-full h-auto block group-hover:opacity-90 transition-opacity duration-300"
+                        loading="lazy"
                       />
                     </div>
                   ) : (
