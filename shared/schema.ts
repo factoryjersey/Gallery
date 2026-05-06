@@ -194,6 +194,25 @@ export type ArticleWithDetails = Article & {
 };
 
 // Legacy user table (keeping for compatibility)
+export const issueContributors = pgTable("issue_contributors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  issueNumber: integer("issue_number").notNull(),
+  name: text("name").notNull(),
+  bio: text("bio"),
+  pageRef: text("page_ref"),
+  role: text("role"),
+  photoUrl: text("photo_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertIssueContributorSchema = createInsertSchema(issueContributors).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type IssueContributor = typeof issueContributors.$inferSelect;
+export type InsertIssueContributor = z.infer<typeof insertIssueContributorSchema>;
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),

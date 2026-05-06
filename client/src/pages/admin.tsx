@@ -38,6 +38,7 @@ import { FeaturedStoriesManager } from "@/components/FeaturedStoriesManager";
 import { CartoonsManager } from "@/components/CartoonsManager";
 import { DataMigration } from "@/components/DataMigration";
 import IssuesManager from "@/components/IssuesManager";
+import { ContributorsManager } from "@/components/ContributorsManager";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
@@ -271,6 +272,18 @@ export default function Admin() {
                   <BookOpen className="w-5 h-5 mr-3" />
                   Issue Archive
                 </button>
+                <button
+                  onClick={() => setActiveTab("contributors")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "contributors"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-contributors"
+                >
+                  <Users className="w-5 h-5 mr-3" />
+                  Contributors
+                </button>
               </nav>
             </div>
 
@@ -463,6 +476,10 @@ export default function Admin() {
 
               {activeTab === "issues" && (
                 <IssuesManager />
+              )}
+
+              {activeTab === "contributors" && (
+                <ContributorsManager />
               )}
             </div>
           </div>

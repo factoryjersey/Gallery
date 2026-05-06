@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, and, eq, ne, desc, asc } from "drizzle-orm";
-import { articles, authors, categories, tags, articleTags, issues } from "@shared/schema";
+import { articles, authors, categories, tags, articleTags, issues, issueContributors } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema } from "@shared/schema";
 import { z } from "zod";
@@ -2684,6 +2684,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .set({ pdfUrl: null })
         .where(sql`${issues.number} = ${num}`);
       res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Contributors ---
+
+  app.get("/api/contributors", async (req, res) => {
+    try {
+      const { issueNumber, search } = req.query;
+      let query = db.select().from(issueContributors) as any;
+      const conditions: any[] = [];
+      if (issueNumber) conditions.push(eq(issueContributors.issueNumber, Number(issueNumber)));
+      if (search) conditions.push(sql`${issueContributors.name} ilike ${'%' + search + '%'}`);
+      if (conditions.length > 0) query = query.where(and(...conditions));
+      const rows = await query.orderBy(asc(issueContributors.issueNumber), asc(issueContributors.name));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/contributors/issues", async (_req, res) => {
+    try {
+      const rows = await db
+        .selectDistinct({ issueNumber: issueContributors.issueNumber })
+        .from(issueContributors)
+        .orderBy(desc(issueContributors.issueNumber));
+      res.json(rows.map(r => r.issueNumber));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/contributors", async (req, res) => {
+    try {
+      const { issueNumber, name, bio, pageRef, role, photoUrl } = req.body;
+      if (!issueNumber || !name) return res.status(400).json({ error: "issueNumber and name required" });
+      const [row] = await db.insert(issueContributors).values({ issueNumber: Number(issueNumber), name, bio, pageRef, role, photoUrl }).returning();
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/contributors/:id", async (req, res) => {
+    try {
+      const { name, bio, pageRef, role, photoUrl } = req.body;
+      const [row] = await db.update(issueContributors)
+        .set({ name, bio, pageRef, role, photoUrl })
+        .where(eq(issueContributors.id, req.params.id))
+        .returning();
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/contributors/:id", async (req, res) => {
+    try {
+      await db.delete(issueContributors).where(eq(issueContributors.id, req.params.id));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/contributors/issue/:number", async (req, res) => {
+    try {
+      const num = parseInt(req.params.number, 10);
+      await db.delete(issueContributors).where(eq(issueContributors.issueNumber, num));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Trigger PDF extraction for one or all issues (runs Python script)
+  app.post("/api/contributors/extract", async (req, res) => {
+    try {
+      const { issueNumber } = req.body;
+      const { spawn } = await import('child_process');
+      const args = ['scripts/extract_contributors.py'];
+      if (issueNumber) args.push(String(issueNumber));
+      const proc = spawn('python3', args, { cwd: process.cwd() });
+      let out = '', err = '';
+      proc.stdout.on('data', d => { out += d; });
+      proc.stderr.on('data', d => { err += d; });
+      proc.on('close', code => {
+        if (code === 0) {
+          try { res.json(JSON.parse(out)); }
+          catch { res.json({ ok: true, output: out }); }
+        } else {
+          res.status(500).json({ error: err || 'Script failed', output: out });
+        }
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

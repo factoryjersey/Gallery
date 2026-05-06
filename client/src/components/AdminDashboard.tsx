@@ -27,6 +27,7 @@ import { MediaIndexing } from "./MediaIndexing";
 import { ImageRationalization } from "./ImageRationalization";
 import { WordPressCleanup } from "./WordPressCleanup";
 import { WPSync } from "./WPSync";
+import { ContributorsManager } from "./ContributorsManager";
 import { format } from "date-fns";
 
 export default function AdminDashboard() {
@@ -86,7 +87,7 @@ export default function AdminDashboard() {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="dashboard" className="flex items-center">
               <BarChart3 className="w-4 h-4 mr-2" />
               Dashboard
@@ -118,6 +119,10 @@ export default function AdminDashboard() {
             <TabsTrigger value="sync" className="flex items-center">
               <RefreshCw className="w-4 h-4 mr-2" />
               Sync
+            </TabsTrigger>
+            <TabsTrigger value="contributors" className="flex items-center">
+              <Users className="w-4 h-4 mr-2" />
+              Contributors
             </TabsTrigger>
           </TabsList>
 
@@ -370,6 +375,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="sync">
             <WPSync />
+          </TabsContent>
+
+          <TabsContent value="contributors">
+            <ContributorsManager />
           </TabsContent>
         </Tabs>
       </div>

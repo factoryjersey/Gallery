@@ -50,6 +50,7 @@ Gallery is a full-stack CMS for gallery.je, a Jersey lifestyle magazine, providi
 *   **WordPress Migration:** Import articles, authors, categories, and media from WordPress XML exports, including content cleanup.
 *   **Frontend Display:** Public-facing magazine site with editorial design, category/year filtering, image galleries with lightbox, and SEO-friendly URLs.
 *   **Admin Dashboard:** Comprehensive interface for content, media, author, and system management tasks.
+*   **Contributors:** `issue_contributors` DB table populated by `scripts/extract_contributors.py` (PyMuPDF). Admin UI at Contributors sidebar item — extract all/one issue, browse by issue, edit/delete records. API: `GET /api/contributors`, `GET /api/contributors/issues`, `POST /api/contributors/extract`.
 
 ## User preferences
 
