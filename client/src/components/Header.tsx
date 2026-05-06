@@ -6,7 +6,7 @@ import { Search, Menu, X, UserCircle, ChevronDown, BookOpen } from "lucide-react
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 
-const PRIMARY_SLUGS = ["people", "fashion", "appetite-1", "culture", "travel-1", "interiors", "business"];
+const PRIMARY_SLUGS = ["people", "fashion", "appetite-1", "culture", "travel-1", "interiors", "business", "events"];
 
 interface HeaderProps {
   onSearch?: (search: string, category?: string, year?: string) => void;
