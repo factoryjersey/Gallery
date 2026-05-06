@@ -183,60 +183,6 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
           )}
         </div>
 
-        {/* Secondary articles strip */}
-        {secondaryArticles.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 py-8">
-            {secondaryArticles.map((article, index) => (
-              <Link key={article.id} href={`/article/${article.slug}`}>
-                <div className="flex flex-col gap-3 cursor-pointer group" data-testid={`featured-secondary-${index}`}>
-                  <div className="overflow-hidden" style={{ aspectRatio: "3/2" }}>
-                    {article.featuredImage ? (
-                      <LazyImage
-                        src={article.featuredImage}
-                        alt={article.title}
-                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-[hsl(0,0%,92%)]" />
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: "Arial, sans-serif",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.12em",
-                      textTransform: "uppercase",
-                      color: "hsl(182 55% 56%)",
-                    }}
-                    data-testid={`featured-secondary-${index}-category`}
-                  >
-                    {article.category.name}
-                  </div>
-                  <h3
-                    className="group-hover:text-secondary transition-colors line-clamp-2"
-                    style={{
-                      fontFamily: "Georgia, serif",
-                      fontSize: 18,
-                      fontWeight: 400,
-                      lineHeight: 1.3,
-                      letterSpacing: "-0.2px",
-                      color: "hsl(0 0% 4%)",
-                      margin: 0,
-                    }}
-                    data-testid={`featured-secondary-${index}-title`}
-                  >
-                    {article.title}
-                  </h3>
-                  <div style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}
-                    data-testid={`featured-secondary-${index}-author`}>
-                    By {article.author.name}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
 
       </div>
     </section>
