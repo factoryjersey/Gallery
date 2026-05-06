@@ -168,53 +168,45 @@ export default function Sidebar() {
         </div>
       </SidebarSection>
 
-      {/* Cartoons */}
+      {/* Cartoons — horizontal scroll strip */}
       {cartoonArticles.length > 0 && (
         <SidebarSection title="Cartoons">
-          <div className="space-y-5" data-testid="cartoon-articles">
-            {cartoonArticles.map((article: any, index: number) => (
-              <Link key={article.id} href={`/article/${article.slug}`}>
-                <div
-                  className="group cursor-pointer"
-                  data-testid={`cartoon-article-${index}`}
-                >
-                  {article.featuredImage ? (
-                    <div className="mb-3 overflow-hidden">
+          <div data-testid="cartoon-articles">
+            {/* Scrollable row */}
+            <div
+              className="flex gap-3 overflow-x-auto pb-2"
+              style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", msOverflowStyle: "none", scrollbarWidth: "none" }}
+            >
+              {cartoonArticles.map((article: any, index: number) => (
+                <Link key={article.id} href={`/article/${article.slug}`}>
+                  <div
+                    className="group cursor-pointer shrink-0"
+                    style={{ width: 140, scrollSnapAlign: "start" }}
+                    data-testid={`cartoon-article-${index}`}
+                  >
+                    {article.featuredImage ? (
                       <img
                         src={article.featuredImage}
                         alt={article.title}
-                        className="w-full h-auto block group-hover:opacity-90 transition-opacity duration-300"
+                        className="w-full h-auto block group-hover:opacity-80 transition-opacity duration-300"
                         loading="lazy"
                       />
-                    </div>
-                  ) : (
-                    <div
-                      className="mb-3 flex items-center justify-center bg-[hsl(0,0%,94%)]"
-                      style={{ aspectRatio: "4/3" }}
-                    >
-                      <Pencil className="w-6 h-6 text-border" />
-                    </div>
-                  )}
-                  <h4
-                    className="group-hover:text-secondary transition-colors line-clamp-2"
-                    style={{
-                      fontFamily: "Georgia, serif",
-                      fontSize: 15,
-                      fontWeight: 400,
-                      lineHeight: 1.4,
-                      color: "hsl(0 0% 4%)",
-                      margin: 0,
-                    }}
-                    data-testid={`cartoon-title-${index}`}
-                  >
-                    {article.title}
-                  </h4>
-                </div>
-              </Link>
-            ))}
+                    ) : (
+                      <div
+                        className="w-full flex items-center justify-center bg-[hsl(0,0%,94%)]"
+                        style={{ height: 190 }}
+                      >
+                        <Pencil className="w-5 h-5 text-border" />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+
             <Link href="/category/ntjp">
               <span
-                className="inline-block hover:text-secondary transition-colors"
+                className="inline-block mt-3 hover:text-secondary transition-colors"
                 style={{
                   fontFamily: "Arial, sans-serif",
                   fontSize: 11,
