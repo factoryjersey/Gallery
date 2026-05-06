@@ -63,6 +63,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Current issue — articles published in the last 56 days (8-week cycle)
+  app.get("/api/articles/current-issue", async (req, res) => {
+    try {
+      const limit = Number(req.query.limit) || 20;
+      const categoryId = req.query.categoryId as string | undefined;
+      const weeksBack = Number(req.query.weeks) || 8;
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - weeksBack * 7);
+
+      const result = await storage.getArticles({
+        status: "published",
+        categoryId,
+        withImage: true,
+        limit,
+        offset: 0,
+        orderBy: "publishedAt",
+        orderDir: "desc",
+      });
+
+      // Filter to within the issue window
+      const issueArticles = result.articles.filter(
+        (a) => new Date(a.publishedAt || a.createdAt) >= cutoff
+      );
+
+      res.json({ articles: issueArticles, cutoff: cutoff.toISOString() });
+    } catch (error) {
+      console.error("Error fetching current issue:", error);
+      res.status(500).json({ error: "Failed to fetch current issue" });
+    }
+  });
+
   app.get("/api/articles/featured", async (req, res) => {
     try {
       const limit = Number(req.query.limit) || 4;

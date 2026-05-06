@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import Admin from "@/pages/admin";
 import Article from "@/pages/article";
 import Category from "@/pages/category";
+import CurrentIssue from "@/pages/current-issue";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/admin" component={Admin} />
       <Route path="/article/:slug" component={Article} />
       <Route path="/category/:slug" component={Category} />
+      <Route path="/current-issue" component={CurrentIssue} />
       <Route component={NotFound} />
     </Switch>
   );
