@@ -183,6 +183,30 @@ def parse_legacy_contributors(text):
     return results if results else None
 
 
+def parse_inline_credits(all_text):
+    """Fallback: scan entire document for inline 'Photography: Name' style credits."""
+    seen = {}  # name -> role (deduplicate across all pages)
+
+    INLINE_PATTERNS = [
+        (r'(?:Photography|Photograph(?:er|s)?)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})', 'photography'),
+        (r'(?:Words|Written by|Writer)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})', 'editorial'),
+        (r'(?:Illustration(?:s)?|Illustrator)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})', 'illustration'),
+        (r'(?:Styling|Stylist)[:\s]+([A-Z][a-z]+(?: [A-Z][a-z]+){1,3})', 'editorial'),
+    ]
+
+    for pattern, role in INLINE_PATTERNS:
+        for m in re.finditer(pattern, all_text):
+            raw = m.group(1).strip()
+            name = re.split(r'\n', raw)[0].strip()  # stop at newline
+            name = re.sub(r'\s+', ' ', name).strip()
+            if (len(name.split()) >= 2 and len(name) <= 40 and
+                    '@' not in name and not re.search(r'\d', name)):
+                if name not in seen:
+                    seen[name] = role
+
+    return [{'name': n, 'bio': None, 'page_ref': None, 'role': r} for n, r in seen.items()]
+
+
 def extract_contributors(pdf_path):
     try:
         import fitz
@@ -198,6 +222,7 @@ def extract_contributors(pdf_path):
 
     results = []
     found_page = None
+    full_text_parts = []
 
     for page_num in range(min(35, doc.page_count)):
         page = doc[page_num]
@@ -205,12 +230,15 @@ def extract_contributors(pdf_path):
         if len(text) < 30:
             continue
 
-        # Try modern format first
+        full_text_parts.append(text)
+
+        # Try modern format first (dedicated CONTRIBUTORS page)
         r = parse_modern_contributors(text)
         if r:
             results = r
             found_page = page_num + 1
-            break
+            doc.close()
+            return results, found_page
 
         # Try legacy format on early pages only (masthead is usually pages 6-12)
         if 4 <= page_num <= 15:
@@ -218,7 +246,14 @@ def extract_contributors(pdf_path):
             if r and len(r) >= 2:
                 results = r
                 found_page = page_num + 1
-                break
+                doc.close()
+                return results, found_page
+
+    # Scan full document for inline credits as fallback
+    full_text = '\n'.join(full_text_parts)
+    r = parse_inline_credits(full_text)
+    if r:
+        results = r
 
     doc.close()
     return results, found_page
