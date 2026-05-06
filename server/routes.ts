@@ -858,7 +858,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const newCat = await storage.createCategory({
           name: catData.name,
           slug: catData.slug,
-          description: `Imported from WordPress`,
           parentId: parentCat?.id || undefined,
         });
         
