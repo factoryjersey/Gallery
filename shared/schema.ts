@@ -54,6 +54,8 @@ export const articles = pgTable("articles", {
   // Hero rotation
   isFeatured: boolean("is_featured").default(false).notNull(),
   featuredOrder: integer("featured_order").default(0).notNull(),
+  // Content type: 'article' | 'cartoon'
+  contentType: text("content_type").notNull().default("article"),
 });
 
 export const articleTags = pgTable("article_tags", {

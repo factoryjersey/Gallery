@@ -30,7 +30,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         page = 1,
         limit = 10,
         orderBy = 'publishedAt',
-        orderDir = 'desc'
+        orderDir = 'desc',
+        contentType,
       } = req.query;
 
       const offset = (Number(page) - 1) * Number(limit);
@@ -46,6 +47,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         offset,
         orderBy: orderBy as 'publishedAt' | 'createdAt' | 'views' | 'title',
         orderDir: orderDir as 'asc' | 'desc',
+        contentType: contentType as string | undefined,
       });
 
       res.json({

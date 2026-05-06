@@ -329,6 +329,7 @@ export class DatabaseStorage implements IStorage {
     offset?: number;
     orderBy?: 'publishedAt' | 'createdAt' | 'views' | 'title';
     orderDir?: 'asc' | 'desc';
+    contentType?: string;
   } = {}): Promise<{ articles: ArticleWithDetails[]; total: number }> {
     const {
       status = 'published',
@@ -341,9 +342,17 @@ export class DatabaseStorage implements IStorage {
       offset = 0,
       orderBy = 'publishedAt',
       orderDir = 'desc',
+      contentType = 'article',
     } = options;
 
     let whereCondition: any = status === 'all' ? undefined : eq(articles.status, status);
+
+    // Filter by content type ('article' by default — excludes cartoons from main feed)
+    if (contentType === 'all') {
+      // no filter
+    } else {
+      whereCondition = and(whereCondition, eq(articles.contentType, contentType));
+    }
 
     if (categoryId) {
       whereCondition = and(whereCondition, eq(articles.categoryId, categoryId));
@@ -456,7 +465,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(categories.excludeFromHero, true));
     const excludedCatIds = new Set(excludedCats.map(c => c.id));
 
-    const pool = (await this.getArticles({ status: 'published', limit: needed * 10, orderBy: 'publishedAt', orderDir: 'desc' })).articles;
+    const pool = (await this.getArticles({ status: 'published', contentType: 'article', limit: needed * 10, orderBy: 'publishedAt', orderDir: 'desc' })).articles;
     const filler = pool
       .filter(a => a.featuredImage && !pinnedIds.includes(a.id) && !excludedCatIds.has(a.categoryId))
       .slice(0, needed);

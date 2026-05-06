@@ -13,6 +13,14 @@ import { format } from "date-fns";
 
 const NTJP_SLUG = "ntjp";
 
+const cartoonListParams = new URLSearchParams({
+  contentType: "cartoon",
+  status: "published",
+  limit: "20",
+  orderBy: "publishedAt",
+  orderDir: "desc",
+}).toString();
+
 export function CartoonsManager() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,13 +40,8 @@ export function CartoonsManager() {
 
   const ntjpCategory = categoriesData?.categories?.find((c: any) => c.slug === NTJP_SLUG);
 
-  const cartoonParams = ntjpCategory
-    ? new URLSearchParams({ categoryId: ntjpCategory.id, status: "published", limit: "20", orderBy: "publishedAt", orderDir: "desc" }).toString()
-    : null;
-
   const { data: cartoonsData, isLoading: cartoonsLoading } = useQuery<{ articles: ArticleWithDetails[] }>({
-    queryKey: cartoonParams ? [`/api/articles?${cartoonParams}`] : ["cartoons-disabled"],
-    enabled: !!cartoonParams,
+    queryKey: [`/api/articles?${cartoonListParams}`],
   });
 
   const createMutation = useMutation({
@@ -50,6 +53,7 @@ export function CartoonsManager() {
         content: `<img src="${imageUrl}" alt="${title}" style="max-width:100%;height:auto;" />`,
         featuredImage: imageUrl,
         status: "published",
+        contentType: "cartoon",
         categoryId,
         authorId,
         publishedAt: new Date().toISOString(),

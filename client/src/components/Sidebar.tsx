@@ -4,9 +4,6 @@ import { TrendingUp, Pencil } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import LazyImage from "@/components/LazyImage";
-
-const CARTOONS_CATEGORY_SLUG = "ntjp";
 
 function SidebarSection({ title, teal = false, children }: { title: string; teal?: boolean; children: React.ReactNode }) {
   return (
@@ -26,17 +23,16 @@ export default function Sidebar() {
   const { data: trendingData } = useQuery({ queryKey: ["/api/articles/trending"] });
   const { data: categoriesData } = useQuery({ queryKey: ["/api/categories"] });
 
-  const cartoonCategory = (categoriesData?.categories || []).find(
-    (c: any) => c.slug === CARTOONS_CATEGORY_SLUG
-  );
-
-  const cartoonParams = cartoonCategory
-    ? new URLSearchParams({ categoryId: cartoonCategory.id, status: "published", limit: "6", orderBy: "publishedAt", orderDir: "desc" }).toString()
-    : null;
+  const cartoonParams = new URLSearchParams({
+    contentType: "cartoon",
+    status: "published",
+    limit: "6",
+    orderBy: "publishedAt",
+    orderDir: "desc",
+  }).toString();
 
   const { data: cartoonsData } = useQuery({
-    queryKey: cartoonParams ? [`/api/articles?${cartoonParams}`] : ["cartoons-disabled"],
-    enabled: !!cartoonParams,
+    queryKey: [`/api/articles?${cartoonParams}`],
   });
 
   const handleNewsletterSignup = (e: React.FormEvent) => {
