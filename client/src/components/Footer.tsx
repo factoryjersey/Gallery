@@ -54,6 +54,11 @@ export default function Footer() {
               {[["About Us", "#"], ["Contact", "#"], ["Advertise", "#"], ["Careers", "#"]].map(([label, href]) => (
                 <li key={label}><a href={href} className="hover:text-foreground transition-colors">{label}</a></li>
               ))}
+              <li>
+                <Link href="/archive">
+                  <span className="hover:text-foreground transition-colors cursor-pointer">Back Issues</span>
+                </Link>
+              </li>
             </ul>
           </div>
 

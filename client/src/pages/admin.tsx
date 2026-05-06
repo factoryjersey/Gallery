@@ -20,7 +20,8 @@ import {
   RefreshCw,
   Star,
   Database,
-  Pencil
+  Pencil,
+  BookOpen
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
@@ -36,6 +37,7 @@ import { WPSync } from "@/components/WPSync";
 import { FeaturedStoriesManager } from "@/components/FeaturedStoriesManager";
 import { CartoonsManager } from "@/components/CartoonsManager";
 import { DataMigration } from "@/components/DataMigration";
+import IssuesManager from "@/components/IssuesManager";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
@@ -257,6 +259,18 @@ export default function Admin() {
                   <RefreshCw className="w-5 h-5 mr-3" />
                   Live Sync
                 </button>
+                <button
+                  onClick={() => setActiveTab("issues")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "issues"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-issues"
+                >
+                  <BookOpen className="w-5 h-5 mr-3" />
+                  Issue Archive
+                </button>
               </nav>
             </div>
 
@@ -445,6 +459,10 @@ export default function Admin() {
 
               {activeTab === "sync" && (
                 <WPSync />
+              )}
+
+              {activeTab === "issues" && (
+                <IssuesManager />
               )}
             </div>
           </div>

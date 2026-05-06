@@ -9,6 +9,7 @@ import Admin from "@/pages/admin";
 import Article from "@/pages/article";
 import Category from "@/pages/category";
 import CurrentIssue from "@/pages/current-issue";
+import Archive from "@/pages/archive";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/article/:slug" component={Article} />
       <Route path="/category/:slug" component={Category} />
       <Route path="/current-issue" component={CurrentIssue} />
+      <Route path="/archive" component={Archive} />
       <Route component={NotFound} />
     </Switch>
   );

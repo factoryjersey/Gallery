@@ -60,6 +60,19 @@ export const articles = pgTable("articles", {
   issueNumber: integer("issue_number"),
 });
 
+export const issues = pgTable("issues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  number: integer("number").notNull().unique(),
+  title: text("title"),
+  pdfUrl: text("pdf_url"),
+  coverImage: text("cover_image"),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Issue = typeof issues.$inferSelect;
+export type InsertIssue = typeof issues.$inferInsert;
+
 export const articleTags = pgTable("article_tags", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),

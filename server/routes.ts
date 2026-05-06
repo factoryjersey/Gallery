@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
-import { articles, authors, categories, tags, articleTags } from "@shared/schema";
+import { articles, authors, categories, tags, articleTags, issues } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema } from "@shared/schema";
 import { z } from "zod";
@@ -2461,6 +2461,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err: any) {
       send({ type: 'error', message: err.message });
       res.end();
+    }
+  });
+
+  // ── Issues / Archive ─────────────────────────────────────────────────────────
+
+  // GET all issues
+  app.get("/api/issues", async (_req, res) => {
+    try {
+      const rows = await db.select().from(issues).orderBy(issues.number);
+      res.json({ issues: rows });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET single issue
+  app.get("/api/issues/:number", async (req, res) => {
+    try {
+      const num = parseInt(req.params.number, 10);
+      const [row] = await db.select().from(issues).where(sql`${issues.number} = ${num}`);
+      if (!row) return res.status(404).json({ error: "Issue not found" });
+      res.json({ issue: row });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST PDF for an issue (upload to R2)
+  app.post("/api/issues/:number/pdf", upload.single("pdf"), async (req, res) => {
+    try {
+      const num = parseInt(req.params.number, 10);
+      if (!req.file) return res.status(400).json({ error: "No file provided" });
+      if (req.file.mimetype !== "application/pdf") {
+        return res.status(400).json({ error: "File must be a PDF" });
+      }
+
+      const key = `pdfs/gallery-${num}.pdf`;
+      await uploadToR2(key, req.file.buffer, "application/pdf");
+      const pdfUrl = getR2PublicUrl(key);
+
+      await db.update(issues)
+        .set({ pdfUrl })
+        .where(sql`${issues.number} = ${num}`);
+
+      // Upsert if issue row doesn't exist yet
+      await db.execute(sql`
+        INSERT INTO issues (number, title, pdf_url)
+        VALUES (${num}, ${'Gallery #' + num}, ${pdfUrl})
+        ON CONFLICT (number) DO UPDATE SET pdf_url = ${pdfUrl}
+      `);
+
+      res.json({ pdfUrl });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE PDF for an issue
+  app.delete("/api/issues/:number/pdf", async (req, res) => {
+    try {
+      const num = parseInt(req.params.number, 10);
+      await db.update(issues)
+        .set({ pdfUrl: null })
+        .where(sql`${issues.number} = ${num}`);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
