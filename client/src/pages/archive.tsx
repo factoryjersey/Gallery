@@ -12,6 +12,7 @@ type Issue = {
   pdfUrl: string | null;
   coverImage: string | null;
   publishedAt: string | null;
+  displayLabel: string | null;
 };
 
 function CoverCard({ issue }: { issue: Issue }) {
@@ -37,9 +38,9 @@ function CoverCard({ issue }: { issue: Issue }) {
           style={{ background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)" }}>
           <div className="flex items-end justify-between">
             <div>
-              {issue.publishedAt && (
+              {(issue.displayLabel || issue.publishedAt) && (
                 <p style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", letterSpacing: "0.08em", textTransform: "uppercase", lineHeight: 1 }}>
-                  {format(new Date(issue.publishedAt), "MMM yyyy")}
+                  {issue.displayLabel ?? format(new Date(issue.publishedAt!), "MMM yyyy")}
                 </p>
               )}
               <p style={{ fontFamily: "Georgia, serif", fontSize: 18, color: "white", lineHeight: 1.1, marginTop: 1 }}>
@@ -77,9 +78,9 @@ function PlaceholderCard({ issue }: { issue: Issue }) {
         <p style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700, color: "hsl(0 0% 10%)" }}>
           #{issue.number}
         </p>
-        {issue.publishedAt && (
+        {(issue.displayLabel || issue.publishedAt) && (
           <p style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "hsl(0 0% 55%)" }}>
-            {format(new Date(issue.publishedAt), "MMMM yyyy")}
+            {issue.displayLabel ?? format(new Date(issue.publishedAt!), "MMMM yyyy")}
           </p>
         )}
       </div>
@@ -107,7 +108,10 @@ export default function Archive() {
     queryKey: ["/api/issues"],
   });
 
-  const allIssues = (data?.issues || []).sort((a, b) => b.number - a.number);
+  const now = new Date();
+  const allIssues = (data?.issues || [])
+    .filter(i => i.coverImage || !i.publishedAt || new Date(i.publishedAt) <= now)
+    .sort((a, b) => b.number - a.number);
   const withCovers = allIssues.filter(i => i.coverImage);
   const withoutCovers = allIssues.filter(i => !i.coverImage);
 
@@ -139,7 +143,7 @@ export default function Archive() {
             The Archive
           </h1>
           <p className="mt-2" style={{ fontFamily: "Georgia, serif", fontSize: 16, fontStyle: "italic", color: "hsl(0 0% 43%)", lineHeight: 1.6 }}>
-            Every issue of Gallery Magazine — Jersey life &amp; style since 2009.
+            Every issue of Gallery Magazine — Jersey life &amp; style since 2004.
           </p>
           {!isLoading && (
             <p className="mt-3" style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 60%)", letterSpacing: "0.06em" }}>
