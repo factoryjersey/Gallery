@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Download, Trash2, BookOpen, Loader2, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { Upload, Download, Trash2, BookOpen, Loader2, CheckCircle2, XCircle, RefreshCw, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 
@@ -14,12 +14,11 @@ interface UploadState {
 }
 
 function parseIssueNumber(filename: string): number | null {
-  // Try patterns: gallery-207.pdf, gallery207.pdf, 207.pdf, issue-207.pdf, g207.pdf
   const patterns = [
     /gallery[-_\s]?(\d{2,3})/i,
     /issue[-_\s]?(\d{2,3})/i,
-    /^g?(\d{2,3})\.pdf$/i,
-    /[-_\s](\d{2,3})\.pdf$/i,
+    /^g?(\d{2,3})\.(pdf|jpg|jpeg|png|webp)$/i,
+    /[-_\s](\d{2,3})\.(pdf|jpg|jpeg|png|webp)$/i,
     /(\d{2,3})/,
   ];
   for (const re of patterns) {
@@ -32,13 +31,102 @@ function parseIssueNumber(filename: string): number | null {
   return null;
 }
 
+function BulkZone({
+  accept, label, hint, fieldName, endpoint, dragLabel
+}: {
+  accept: string; label: string; hint: string;
+  fieldName: string; endpoint: string; dragLabel: string;
+}) {
+  const { toast } = useToast();
+  const [queue, setQueue] = useState<UploadState[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const start = useCallback(async (files: File[]) => {
+    const items: UploadState[] = [];
+    const skipped: string[] = [];
+    for (const file of files) {
+      const num = parseIssueNumber(file.name);
+      if (!num) { skipped.push(file.name); continue; }
+      items.push({ issueNumber: num, filename: file.name, status: "pending" });
+    }
+    if (skipped.length) toast({ title: `${skipped.length} skipped — couldn't parse issue number`, variant: "destructive" });
+    if (!items.length) return;
+    setQueue(items);
+
+    const CONCURRENCY = 3;
+    let index = 0;
+    async function runOne(state: UploadState) {
+      setQueue(q => q.map(x => x.issueNumber === state.issueNumber ? { ...x, status: "uploading" } : x));
+      try {
+        const file = files.find(f => f.name === state.filename)!;
+        const fd = new FormData();
+        fd.append(fieldName, file);
+        const res = await fetch(`${endpoint}/${state.issueNumber}/${fieldName === "pdf" ? "pdf" : "cover"}`, { method: "POST", body: fd });
+        if (!res.ok) throw new Error();
+        setQueue(q => q.map(x => x.issueNumber === state.issueNumber ? { ...x, status: "done" } : x));
+      } catch {
+        setQueue(q => q.map(x => x.issueNumber === state.issueNumber ? { ...x, status: "error", error: "Failed" } : x));
+      }
+    }
+    async function worker() {
+      while (index < items.length) { const item = items[index++]; await runOne(item); }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
+    await queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
+    toast({ title: `Uploaded ${items.filter(x => x.status !== "error").length} of ${items.length} files` });
+  }, [toast, fieldName, endpoint]);
+
+  return (
+    <div className="space-y-3">
+      <div
+        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={e => { e.preventDefault(); setIsDragging(false); start(Array.from(e.dataTransfer.files)); }}
+        className={`border-2 border-dashed transition-colors p-6 text-center ${isDragging ? "border-secondary bg-secondary/5" : "border-border"}`}
+      >
+        <p style={{ fontFamily: "Georgia, serif", fontSize: 15, color: "hsl(0 0% 35%)" }}>{dragLabel}</p>
+        <p className="mt-1 mb-3" style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 55%)" }}>
+          {hint}
+        </p>
+        <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 border border-border hover:border-foreground transition-colors"
+          style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700 }}>
+          <input type="file" accept={accept} multiple className="hidden"
+            onChange={e => { const f = Array.from(e.target.files || []); if (f.length) start(f); e.target.value = ""; }} />
+          {label}
+        </label>
+      </div>
+
+      {queue.length > 0 && (
+        <div className="border border-border divide-y divide-border">
+          <div className="px-3 py-1.5 flex items-center justify-between bg-[hsl(0,0%,97%)]">
+            <span style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 55%)" }}>
+              {queue.filter(x => x.status === "done").length}/{queue.length} complete
+            </span>
+            {queue.every(x => x.status === "done" || x.status === "error") && (
+              <button onClick={() => setQueue([])} style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 55%)" }} className="hover:text-foreground">Clear</button>
+            )}
+          </div>
+          {queue.map(item => (
+            <div key={item.issueNumber} className="flex items-center gap-3 px-3 py-2">
+              <span style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700, minWidth: 36 }}>#{item.issueNumber}</span>
+              <span className="flex-1 truncate" style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 55%)" }}>{item.filename}</span>
+              {item.status === "pending" && <span style={{ fontSize: 11, color: "hsl(0 0% 65%)" }}>Waiting…</span>}
+              {item.status === "uploading" && <Loader2 className="w-3.5 h-3.5 animate-spin text-secondary" />}
+              {item.status === "done" && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
+              {item.status === "error" && <XCircle className="w-3.5 h-3.5 text-destructive" />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function IssuesManager() {
   const { toast } = useToast();
-  const [uploadQueue, setUploadQueue] = useState<UploadState[]>([]);
-  const [singleUploading, setSingleUploading] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [singleUploading, setSingleUploading] = useState<string | null>(null); // "pdf-207" or "cover-207"
   const [isSyncing, setIsSyncing] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<"covers" | "pdfs">("covers");
 
   const { data, isLoading } = useQuery<{ issues: any[] }>({
     queryKey: ["/api/issues"],
@@ -47,27 +135,24 @@ export default function IssuesManager() {
   const issues = (data?.issues || []).sort((a, b) => b.number - a.number);
 
   const deletePdf = useMutation({
-    mutationFn: async (issueNumber: number) => {
-      const res = await fetch(`/api/issues/${issueNumber}/pdf`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to remove PDF");
-      return res.json();
+    mutationFn: async (num: number) => {
+      const res = await fetch(`/api/issues/${num}/pdf`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
-      toast({ title: "PDF removed" });
-    },
-    onError: () => toast({ title: "Error removing PDF", variant: "destructive" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/issues"] }); toast({ title: "PDF removed" }); },
+    onError: () => toast({ title: "Failed to remove PDF", variant: "destructive" }),
   });
 
-  async function uploadSingle(issueNumber: number, file: File) {
-    setSingleUploading(issueNumber);
+  async function uploadFile(issueNumber: number, file: File, type: "pdf" | "cover") {
+    const key = `${type}-${issueNumber}`;
+    setSingleUploading(key);
     try {
-      const formData = new FormData();
-      formData.append("pdf", file);
-      const res = await fetch(`/api/issues/${issueNumber}/pdf`, { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
+      const fd = new FormData();
+      fd.append(type === "pdf" ? "pdf" : "cover", file);
+      const res = await fetch(`/api/issues/${issueNumber}/${type}`, { method: "POST", body: fd });
+      if (!res.ok) throw new Error();
       await queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
-      toast({ title: `Issue #${issueNumber} PDF uploaded` });
+      toast({ title: `Issue #${issueNumber} ${type === "pdf" ? "PDF" : "cover"} uploaded` });
     } catch {
       toast({ title: "Upload failed", variant: "destructive" });
     } finally {
@@ -75,69 +160,13 @@ export default function IssuesManager() {
     }
   }
 
-  const startBulkUpload = useCallback(async (files: File[]) => {
-    const queue: UploadState[] = [];
-    const skipped: string[] = [];
-
-    for (const file of files) {
-      if (!file.name.toLowerCase().endsWith(".pdf")) continue;
-      const num = parseIssueNumber(file.name);
-      if (!num) { skipped.push(file.name); continue; }
-      queue.push({ issueNumber: num, filename: file.name, status: "pending" });
-    }
-
-    if (skipped.length) {
-      toast({ title: `${skipped.length} file(s) skipped — couldn't parse issue number`, variant: "destructive" });
-    }
-    if (!queue.length) return;
-
-    setUploadQueue(queue);
-
-    // Upload up to 3 at a time
-    const CONCURRENCY = 3;
-    let index = 0;
-
-    async function runOne(state: UploadState) {
-      setUploadQueue(q => q.map(x => x.issueNumber === state.issueNumber ? { ...x, status: "uploading" } : x));
-      try {
-        const fileObj = files.find(f => f.name === state.filename)!;
-        const formData = new FormData();
-        formData.append("pdf", fileObj);
-        const res = await fetch(`/api/issues/${state.issueNumber}/pdf`, { method: "POST", body: formData });
-        if (!res.ok) throw new Error();
-        setUploadQueue(q => q.map(x => x.issueNumber === state.issueNumber ? { ...x, status: "done" } : x));
-      } catch {
-        setUploadQueue(q => q.map(x => x.issueNumber === state.issueNumber ? { ...x, status: "error", error: "Upload failed" } : x));
-      }
-    }
-
-    async function worker() {
-      while (index < queue.length) {
-        const item = queue[index++];
-        await runOne(item);
-      }
-    }
-
-    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker);
-    await Promise.all(workers);
-    await queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
-    toast({ title: `Uploaded ${queue.filter(x => x.status !== "error").length} of ${queue.length} PDFs` });
-  }, [toast]);
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    startBulkUpload(files);
-  }
-
-  async function syncFromR2() {
+  async function syncFromR2(type: "pdfs" | "covers") {
     setIsSyncing(true);
     try {
-      const res = await fetch("/api/issues/sync-r2", { method: "POST" });
+      const res = await fetch(`/api/issues/sync-${type === "pdfs" ? "r2" : "covers"}`, { method: "POST" });
       const data = await res.json();
       await queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
-      toast({ title: `Synced ${data.synced ?? 0} PDFs from R2` });
+      toast({ title: `Synced ${data.synced ?? 0} ${type} from R2` });
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
     } finally {
@@ -145,200 +174,157 @@ export default function IssuesManager() {
     }
   }
 
+  const coverCount = issues.filter(i => i.coverImage).length;
   const pdfCount = issues.filter(i => i.pdfUrl).length;
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  if (isLoading) return (
+    <div className="flex items-center justify-center py-20">
+      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 24, fontWeight: 400 }}>
-            Issue Archive — PDFs
-          </h2>
+          <h2 style={{ fontFamily: "Georgia, serif", fontSize: 24, fontWeight: 400 }}>Issue Archive</h2>
           <p className="mt-1" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 55%)" }}>
-            {pdfCount} of {issues.length} issues have a PDF.{" "}
-            <a href="/archive" target="_blank" className="text-secondary hover:underline">
-              View public archive →
-            </a>
+            {coverCount} covers · {pdfCount} PDFs · {issues.length} total issues.{" "}
+            <a href="/archive" target="_blank" className="text-secondary hover:underline">View archive →</a>
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={syncFromR2}
-          disabled={isSyncing}
-          data-testid="sync-r2"
-          className="shrink-0"
-        >
+        <Button variant="outline" size="sm" onClick={() => syncFromR2(activeTab === "covers" ? "covers" : "pdfs")} disabled={isSyncing} className="shrink-0">
           {isSyncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-          Sync from R2
+          Sync {activeTab === "covers" ? "covers" : "PDFs"} from R2
         </Button>
       </div>
 
-      {/* Bulk drop zone */}
-      <div
-        ref={dropRef}
-        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed transition-colors p-8 text-center ${isDragging ? "border-secondary bg-secondary/5" : "border-border"}`}
-        data-testid="bulk-drop-zone"
-      >
-        <Upload className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-        <p style={{ fontFamily: "Georgia, serif", fontSize: 16, color: "hsl(0 0% 35%)" }}>
-          Drop all your PDFs here
-        </p>
-        <p className="mt-1 mb-4" style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 55%)" }}>
-          Name files <strong>gallery-181.pdf</strong>, <strong>gallery-207.pdf</strong> etc. — issue numbers are parsed automatically.
-          <br />Also accepts: <code>181.pdf</code>, <code>issue-207.pdf</code>, <code>g204.pdf</code>
-        </p>
-        <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 border border-border hover:border-foreground transition-colors"
-          style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700 }}>
-          <input
-            type="file"
-            accept=".pdf,application/pdf"
-            multiple
-            className="hidden"
-            onChange={e => {
-              const files = Array.from(e.target.files || []);
-              if (files.length) startBulkUpload(files);
-              e.target.value = "";
-            }}
-            data-testid="bulk-file-input"
-          />
-          Select PDFs
-        </label>
+      {/* Tab switcher */}
+      <div className="flex border-b border-border">
+        {(["covers", "pdfs"] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2.5 -mb-px border-b-2 transition-colors ${activeTab === tab ? "border-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            {tab === "covers" ? `Covers (${coverCount}/${issues.length})` : `PDFs (${pdfCount}/${issues.length})`}
+          </button>
+        ))}
       </div>
 
-      {/* Upload progress */}
-      {uploadQueue.length > 0 && (
-        <div className="border border-border divide-y divide-border">
-          <div className="px-4 py-2 flex items-center justify-between bg-[hsl(0,0%,97%)]">
-            <span style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 55%)" }}>
-              Upload Progress — {uploadQueue.filter(x => x.status === "done").length}/{uploadQueue.length} complete
-            </span>
-            {uploadQueue.every(x => x.status === "done" || x.status === "error") && (
-              <button onClick={() => setUploadQueue([])}
-                style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 55%)" }}
-                className="hover:text-foreground">
-                Clear
-              </button>
-            )}
-          </div>
-          {uploadQueue.map(item => (
-            <div key={item.issueNumber} className="flex items-center gap-4 px-4 py-2">
-              <span style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, minWidth: 40 }}>
-                #{item.issueNumber}
-              </span>
-              <span className="flex-1 truncate" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 55%)" }}>
-                {item.filename}
-              </span>
-              {item.status === "pending" && (
-                <span style={{ fontSize: 12, color: "hsl(0 0% 65%)" }}>Waiting…</span>
-              )}
-              {item.status === "uploading" && (
-                <Loader2 className="w-4 h-4 animate-spin text-secondary" />
-              )}
-              {item.status === "done" && (
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-              )}
-              {item.status === "error" && (
-                <div className="flex items-center gap-1.5">
-                  <XCircle className="w-4 h-4 text-destructive" />
-                  <span style={{ fontSize: 12, color: "hsl(0 0% 55%)" }}>{item.error}</span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      {/* Bulk upload zone */}
+      {activeTab === "covers" ? (
+        <BulkZone
+          accept="image/*,.jpg,.jpeg,.png,.webp"
+          label="Select cover images"
+          dragLabel="Drop all cover images here"
+          hint="Name files gallery-181.jpg, gallery-207.jpg etc."
+          fieldName="cover"
+          endpoint="/api/issues"
+        />
+      ) : (
+        <BulkZone
+          accept=".pdf,application/pdf"
+          label="Select PDFs"
+          dragLabel="Drop all PDFs here"
+          hint="Name files gallery-181.pdf, gallery-207.pdf etc."
+          fieldName="pdf"
+          endpoint="/api/issues"
+        />
       )}
 
       {/* Per-issue table */}
       <div className="border border-border divide-y divide-border">
-        <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-[hsl(0,0%,97%)]"
-          style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 55%)" }}>
-          <div className="col-span-1">Issue</div>
-          <div className="col-span-2">Date</div>
-          <div className="col-span-1">Cover</div>
-          <div className="col-span-4">PDF</div>
-          <div className="col-span-4">Actions</div>
+        {/* Header */}
+        <div className="grid gap-3 px-4 py-2 bg-[hsl(0,0%,97%)]"
+          style={{ gridTemplateColumns: "60px 80px 56px 1fr 1fr", fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 55%)" }}>
+          <div>Issue</div>
+          <div>Date</div>
+          <div>Cover</div>
+          <div>{activeTab === "covers" ? "Cover image" : "PDF"}</div>
+          <div>Upload</div>
         </div>
 
-        {issues.map((issue) => (
-          <div key={issue.id} className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-[hsl(0,0%,99%)]">
-            <div className="col-span-1">
-              <span style={{ fontFamily: "Arial, sans-serif", fontSize: 14, fontWeight: 700 }}>
-                #{issue.number}
-              </span>
+        {issues.map((issue) => {
+          const uploadKey = `${activeTab === "covers" ? "cover" : "pdf"}-${issue.number}`;
+          const isUploading = singleUploading === uploadKey;
+          return (
+            <div key={issue.id} className="grid gap-3 px-4 py-3 items-center hover:bg-[hsl(0,0%,99%)]"
+              style={{ gridTemplateColumns: "60px 80px 56px 1fr 1fr" }}>
+
+              {/* Number */}
+              <div style={{ fontFamily: "Arial, sans-serif", fontSize: 14, fontWeight: 700 }}>#{issue.number}</div>
+
+              {/* Date */}
+              <div style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 55%)" }}>
+                {issue.publishedAt ? format(new Date(issue.publishedAt), "MMM yyyy") : "—"}
+              </div>
+
+              {/* Cover thumbnail */}
+              <div>
+                {issue.coverImage ? (
+                  <img src={issue.coverImage} alt="" className="w-8 h-12 object-cover shadow-sm" />
+                ) : (
+                  <div className="w-8 h-12 bg-border flex items-center justify-center">
+                    <ImageIcon className="w-3 h-3 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+
+              {/* Status */}
+              <div>
+                {activeTab === "covers" ? (
+                  issue.coverImage ? (
+                    <span style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(182 55% 56%)" }}>✓ Cover set</span>
+                  ) : (
+                    <span style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 70%)" }}>No cover</span>
+                  )
+                ) : (
+                  issue.pdfUrl ? (
+                    <a href={issue.pdfUrl} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-secondary hover:underline"
+                      style={{ fontFamily: "Arial, sans-serif", fontSize: 12 }}>
+                      <Download className="w-3 h-3" />PDF
+                    </a>
+                  ) : (
+                    <span style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 70%)" }}>No PDF</span>
+                  )
+                )}
+              </div>
+
+              {/* Upload action */}
+              <div className="flex items-center gap-2">
+                {isUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <label className="cursor-pointer" data-testid={`upload-${activeTab === "covers" ? "cover" : "pdf"}-${issue.number}`}>
+                    <input type="file"
+                      accept={activeTab === "covers" ? "image/*,.jpg,.jpeg,.png,.webp" : ".pdf,application/pdf"}
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadFile(issue.number, file, activeTab === "covers" ? "cover" : "pdf");
+                        e.target.value = "";
+                      }}
+                    />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 border border-border hover:border-foreground transition-colors cursor-pointer"
+                      style={{ fontFamily: "Arial, sans-serif", fontSize: 11 }}>
+                      <Upload className="w-3 h-3" />
+                      {activeTab === "covers"
+                        ? (issue.coverImage ? "Replace" : "Upload cover")
+                        : (issue.pdfUrl ? "Replace" : "Upload PDF")}
+                    </span>
+                  </label>
+                )}
+                {activeTab === "pdfs" && issue.pdfUrl && (
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive h-6 px-1.5"
+                    onClick={() => deletePdf.mutate(issue.number)}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
             </div>
-            <div className="col-span-2" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 55%)" }}>
-              {issue.publishedAt ? format(new Date(issue.publishedAt), "MMM yyyy") : "—"}
-            </div>
-            <div className="col-span-1">
-              {issue.coverImage ? (
-                <img src={issue.coverImage} alt="" className="w-8 h-12 object-cover" />
-              ) : (
-                <div className="w-8 h-12 bg-border flex items-center justify-center">
-                  <BookOpen className="w-3 h-3 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-            <div className="col-span-4">
-              {issue.pdfUrl ? (
-                <a href={issue.pdfUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-secondary hover:underline"
-                  style={{ fontFamily: "Arial, sans-serif", fontSize: 13 }}
-                  data-testid={`pdf-link-${issue.number}`}>
-                  <Download className="w-3.5 h-3.5" />
-                  Download PDF
-                </a>
-              ) : (
-                <span style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 70%)" }}>
-                  No PDF uploaded
-                </span>
-              )}
-            </div>
-            <div className="col-span-4 flex items-center gap-2">
-              {singleUploading === issue.number ? (
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-              ) : (
-                <label className="cursor-pointer" data-testid={`upload-pdf-${issue.number}`}>
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadSingle(issue.number, file);
-                      e.target.value = "";
-                    }}
-                  />
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-border hover:border-foreground transition-colors cursor-pointer"
-                    style={{ fontFamily: "Arial, sans-serif", fontSize: 12 }}>
-                    <Upload className="w-3.5 h-3.5" />
-                    {issue.pdfUrl ? "Replace" : "Upload PDF"}
-                  </span>
-                </label>
-              )}
-              {issue.pdfUrl && (
-                <Button variant="ghost" size="sm"
-                  className="text-destructive hover:text-destructive h-7 px-2"
-                  onClick={() => deletePdf.mutate(issue.number)}
-                  data-testid={`delete-pdf-${issue.number}`}>
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -2488,6 +2488,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST cover image for an issue (upload to R2)
+  app.post("/api/issues/:number/cover", upload.single("cover"), async (req, res) => {
+    try {
+      const num = parseInt(req.params.number, 10);
+      if (!req.file) return res.status(400).json({ error: "No file provided" });
+      if (!req.file.mimetype.startsWith("image/")) {
+        return res.status(400).json({ error: "File must be an image" });
+      }
+
+      const ext = req.file.mimetype === "image/png" ? "png" : "jpg";
+      const key = `covers/gallery-${num}.${ext}`;
+      await uploadToR2(key, req.file.buffer, req.file.mimetype);
+      const coverImage = getR2PublicUrl(key);
+
+      await db.execute(sql`
+        INSERT INTO issues (number, title, cover_image)
+        VALUES (${num}, ${'Gallery #' + num}, ${coverImage})
+        ON CONFLICT (number) DO UPDATE SET cover_image = ${coverImage}
+      `);
+
+      res.json({ coverImage });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST sync cover images from R2 covers/ folder
+  app.post("/api/issues/sync-covers", async (_req, res) => {
+    try {
+      const { ListObjectsV2Command: ListCmd } = await import("@aws-sdk/client-s3");
+      const listResp = await r2Client.send(new ListCmd({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Prefix: "covers/",
+      }));
+      const objects = listResp.Contents || [];
+      let synced = 0;
+      const patterns = [
+        /gallery[-_\s]?(\d{2,3})/i,
+        /issue[-_\s]?(\d{2,3})/i,
+        /^g?(\d{2,3})\.(jpg|jpeg|png|webp)$/i,
+        /[-_\s](\d{2,3})\.(jpg|jpeg|png|webp)$/i,
+        /(\d{2,3})/,
+      ];
+      for (const obj of objects) {
+        if (!obj.Key) continue;
+        const filename = obj.Key.split("/").pop() || "";
+        if (!/\.(jpg|jpeg|png|webp)$/i.test(filename)) continue;
+        let issueNum: number | null = null;
+        for (const re of patterns) {
+          const m = filename.match(re);
+          if (m) { issueNum = parseInt(m[1], 10); break; }
+        }
+        if (!issueNum || issueNum < 1 || issueNum > 999) continue;
+        const coverImage = getR2PublicUrl(obj.Key);
+        await db.execute(sql`
+          INSERT INTO issues (number, title, cover_image)
+          VALUES (${issueNum}, ${'Gallery #' + issueNum}, ${coverImage})
+          ON CONFLICT (number) DO UPDATE SET cover_image = ${coverImage}
+        `);
+        synced++;
+      }
+      res.json({ synced });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // POST PDF for an issue (upload to R2)
   app.post("/api/issues/:number/pdf", upload.single("pdf"), async (req, res) => {
     try {
