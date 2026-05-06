@@ -2585,41 +2585,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST sync PDFs from R2 (scans pdfs/ prefix, maps filenames to issue numbers)
+  // POST sync PDFs from R2 (scans pdfs/ and gallery_pdf_archive/ prefixes)
   app.post("/api/issues/sync-r2", async (_req, res) => {
     try {
       const { ListObjectsV2Command: ListCmd } = await import("@aws-sdk/client-s3");
-      const listResp = await r2Client.send(new ListCmd({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Prefix: "pdfs/",
-      }));
-      const objects = listResp.Contents || [];
+      const prefixes = ["pdfs/", "gallery_pdf_archive/"];
+      const patterns = [
+        /^gj_?(\d{1,3})[_\s]/i,          // gj8_... gj100_...
+        /gallery[-_\s]?(\d{1,3})/i,
+        /issue[-_\s]?(\d{1,3})/i,
+        /^g?j?(\d{1,3})\.pdf$/i,
+        /[-_\s](\d{1,3})\.pdf$/i,
+        /(\d{1,3})/,
+      ];
       let synced = 0;
-      for (const obj of objects) {
-        if (!obj.Key) continue;
-        const filename = obj.Key.split("/").pop() || "";
-        if (!filename.toLowerCase().endsWith(".pdf")) continue;
-        // Parse issue number from filename
-        const patterns = [
-          /gallery[-_\s]?(\d{2,3})/i,
-          /issue[-_\s]?(\d{2,3})/i,
-          /^g?(\d{2,3})\.pdf$/i,
-          /[-_\s](\d{2,3})\.pdf$/i,
-          /(\d{2,3})/,
-        ];
-        let issueNum: number | null = null;
-        for (const re of patterns) {
-          const m = filename.match(re);
-          if (m) { issueNum = parseInt(m[1], 10); break; }
-        }
-        if (!issueNum || issueNum < 1 || issueNum > 999) continue;
-        const pdfUrl = getR2PublicUrl(obj.Key);
-        await db.execute(sql`
-          INSERT INTO issues (number, title, pdf_url)
-          VALUES (${issueNum}, ${'Gallery #' + issueNum}, ${pdfUrl})
-          ON CONFLICT (number) DO UPDATE SET pdf_url = ${pdfUrl}
-        `);
-        synced++;
+      for (const prefix of prefixes) {
+        let token: string | undefined;
+        do {
+          const listResp = await r2Client.send(new ListCmd({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Prefix: prefix,
+            ContinuationToken: token,
+          }));
+          for (const obj of listResp.Contents || []) {
+            if (!obj.Key) continue;
+            const filename = obj.Key.split("/").pop() || "";
+            if (!filename.toLowerCase().endsWith(".pdf")) continue;
+            let issueNum: number | null = null;
+            for (const re of patterns) {
+              const m = filename.match(re);
+              if (m) {
+                const n = parseInt(m[1], 10);
+                if (n >= 1 && n <= 999) { issueNum = n; break; }
+              }
+            }
+            if (!issueNum) continue;
+            const pdfUrl = getR2PublicUrl(obj.Key);
+            await db.execute(sql`
+              INSERT INTO issues (number, title, pdf_url)
+              VALUES (${issueNum}, ${'Gallery #' + issueNum}, ${pdfUrl})
+              ON CONFLICT (number) DO UPDATE SET pdf_url = ${pdfUrl}
+            `);
+            synced++;
+          }
+          token = listResp.NextContinuationToken;
+        } while (token);
       }
       res.json({ synced });
     } catch (err: any) {
