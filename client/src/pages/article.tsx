@@ -1,7 +1,7 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Clock, Eye, ArrowLeft, Edit } from "lucide-react";
+import { Clock, Eye, ArrowLeft, ArrowRight, Edit } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
@@ -16,6 +16,13 @@ export default function Article() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: [`/api/articles/by-slug/${slug}`],
+  });
+
+  const article = data?.article;
+
+  const { data: adjacentData } = useQuery({
+    queryKey: [`/api/articles/by-slug/${slug}/adjacent`],
+    enabled: article?.contentType === "cartoon",
   });
 
   if (isLoading) {
@@ -60,8 +67,6 @@ export default function Article() {
       </div>
     );
   }
-
-  const { article } = data;
 
   return (
     <div className="min-h-screen bg-background">
@@ -214,6 +219,45 @@ export default function Article() {
             content={article.content}
             className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
           />
+        )}
+
+        {/* Cartoon prev/next navigation */}
+        {article.contentType === "cartoon" && (
+          <nav className="mt-10 flex items-stretch justify-between gap-4 border-t border-b border-border py-6" data-testid="cartoon-navigation">
+            {adjacentData?.prev ? (
+              <Link href={`/article/${adjacentData.prev.slug}`}>
+                <span
+                  className="flex items-center gap-3 group cursor-pointer"
+                  data-testid="button-prev-cartoon"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-border group-hover:bg-foreground group-hover:text-white group-hover:border-foreground transition-colors">
+                    <ArrowLeft className="h-4 w-4" />
+                  </span>
+                  <span style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
+                    <span className="block" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Previous</span>
+                    <span className="block group-hover:text-foreground transition-colors line-clamp-2" style={{ color: "hsl(0 0% 20%)" }}>{adjacentData.prev.title}</span>
+                  </span>
+                </span>
+              </Link>
+            ) : <span />}
+
+            {adjacentData?.next ? (
+              <Link href={`/article/${adjacentData.next.slug}`}>
+                <span
+                  className="flex items-center gap-3 group cursor-pointer text-right"
+                  data-testid="button-next-cartoon"
+                >
+                  <span style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
+                    <span className="block" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Next</span>
+                    <span className="block group-hover:text-foreground transition-colors line-clamp-2" style={{ color: "hsl(0 0% 20%)" }}>{adjacentData.next.title}</span>
+                  </span>
+                  <span className="flex-shrink-0 w-10 h-10 flex items-center justify-center border border-border group-hover:bg-foreground group-hover:text-white group-hover:border-foreground transition-colors">
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                </span>
+              </Link>
+            ) : <span />}
+          </nav>
         )}
 
         {/* Author bio footer */}

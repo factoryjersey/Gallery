@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, and, eq, ne, desc, asc } from "drizzle-orm";
 import { articles, authors, categories, tags, articleTags, issues } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema } from "@shared/schema";
@@ -154,6 +154,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching article by slug:", error);
       res.status(500).json({ error: "Failed to fetch article" });
+    }
+  });
+
+  // Adjacent articles (prev/next) for the same content type
+  app.get("/api/articles/by-slug/:slug/adjacent", async (req, res) => {
+    try {
+      const article = await storage.getArticleBySlug(req.params.slug);
+      if (!article) return res.status(404).json({ error: "Article not found" });
+
+      const contentType = (article as any).contentType || 'article';
+      const publishedAt = (article as any).publishedAt || (article as any).createdAt;
+
+      const [prevResult, nextResult] = await Promise.all([
+        db.select({ id: articles.id, title: articles.title, slug: articles.slug })
+          .from(articles)
+          .where(and(
+            ne(articles.id, article.id),
+            eq(articles.contentType, contentType),
+            eq(articles.status, 'published'),
+            sql`${articles.publishedAt} <= ${publishedAt}`
+          ))
+          .orderBy(desc(articles.publishedAt))
+          .limit(1),
+        db.select({ id: articles.id, title: articles.title, slug: articles.slug })
+          .from(articles)
+          .where(and(
+            ne(articles.id, article.id),
+            eq(articles.contentType, contentType),
+            eq(articles.status, 'published'),
+            sql`${articles.publishedAt} >= ${publishedAt}`
+          ))
+          .orderBy(asc(articles.publishedAt))
+          .limit(1),
+      ]);
+
+      res.json({ prev: prevResult[0] || null, next: nextResult[0] || null });
+    } catch (error) {
+      console.error("Error fetching adjacent articles:", error);
+      res.status(500).json({ error: "Failed to fetch adjacent articles" });
     }
   });
 
