@@ -41,6 +41,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authorId: authorId as string,
         search: search as string,
         year: year as string,
+        withImage: req.query.withImage === 'true' ? true : undefined,
         limit: Number(limit),
         offset,
         orderBy: orderBy as 'publishedAt' | 'createdAt' | 'views' | 'title',

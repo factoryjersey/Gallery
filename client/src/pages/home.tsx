@@ -11,21 +11,18 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [withImage, setWithImage] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
-  const { data: categoriesData } = useQuery({
-    queryKey: ["/api/categories"],
-  });
-
-  const { data: featuredData } = useQuery({
-    queryKey: ["/api/articles/featured"],
-  });
+  const { data: categoriesData } = useQuery({ queryKey: ["/api/categories"] });
+  const { data: featuredData } = useQuery({ queryKey: ["/api/articles/featured"] });
 
   const queryParams = new URLSearchParams({
     ...(selectedCategory && { categoryId: selectedCategory }),
     ...(searchTerm && { search: searchTerm }),
     ...(selectedYear !== "all" && { year: selectedYear }),
+    ...(withImage && { withImage: "true" }),
     page: currentPage.toString(),
     limit: itemsPerPage.toString(),
   });
@@ -34,14 +31,10 @@ export default function Home() {
     queryKey: [`/api/articles?${queryParams.toString()}`],
   });
 
-  // Generate available years (2008-2025)
   const availableYears = useMemo(() => {
-    const currentYear = new Date().getFullYear();
     const years: number[] = [];
-    for (let year = 2008; year <= currentYear; year++) {
-      years.push(year);
-    }
-    return years.reverse(); // Show newest first
+    for (let year = 2008; year <= new Date().getFullYear(); year++) years.push(year);
+    return years.reverse();
   }, []);
 
   const handleCategoryFilter = (categoryId: string) => {
@@ -51,12 +44,8 @@ export default function Home() {
 
   const handleSearch = (search: string, category?: string, year?: string) => {
     setSearchTerm(search);
-    if (category) {
-      setSelectedCategory(category);
-    }
-    if (year) {
-      setSelectedYear(year);
-    }
+    if (category) setSelectedCategory(category);
+    if (year) setSelectedYear(year);
     setCurrentPage(1);
   };
 
@@ -65,17 +54,19 @@ export default function Home() {
     setCurrentPage(1);
   };
 
+  const handleToggleWithImage = () => {
+    setWithImage((prev) => !prev);
+    setCurrentPage(1);
+  };
+
   const handleItemsPerPageChange = (newLimit: number) => {
     setItemsPerPage(newLimit);
     setCurrentPage(1);
   };
 
-  // Check if any filters are active
   const hasActiveFilters = searchTerm || selectedCategory || selectedYear !== "all";
-
-  // Get display names for active filters
   const selectedCategoryName = categoriesData?.categories?.find(
-    cat => cat.id === selectedCategory
+    (cat: any) => cat.id === selectedCategory
   )?.name;
 
   const clearAllFilters = () => {
@@ -88,55 +79,49 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       <Header onSearch={handleSearch} />
-      
+
       {!hasActiveFilters && <FeaturedHero articles={featuredData?.articles || []} />}
-      
-      <CategoryFilter 
+
+      <CategoryFilter
         categories={categoriesData?.categories || []}
         selectedCategory={selectedCategory}
         onSelectCategory={handleCategoryFilter}
         selectedYear={selectedYear}
         onSelectYear={handleYearFilter}
         availableYears={availableYears}
+        withImage={withImage}
+        onToggleWithImage={handleToggleWithImage}
       />
 
       <section className="py-12 bg-background">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1296px] mx-auto px-6">
+
           {hasActiveFilters && (
-            <div className="mb-6 p-4 bg-muted rounded-lg border border-border">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium">Showing results for:</span>
-                  {searchTerm && (
-                    <span className="px-3 py-1 bg-primary text-primary-foreground rounded-full text-sm">
-                      "{searchTerm}"
-                    </span>
-                  )}
-                  {selectedCategoryName && (
-                    <span className="px-3 py-1 bg-secondary text-secondary-foreground rounded-full text-sm">
-                      {selectedCategoryName}
-                    </span>
-                  )}
-                  {selectedYear !== "all" && (
-                    <span className="px-3 py-1 bg-accent text-accent-foreground rounded-full text-sm">
-                      Year: {selectedYear}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={clearAllFilters}
-                  className="text-sm text-muted-foreground hover:text-foreground underline"
-                  data-testid="button-clear-filters"
-                >
-                  Clear all
-                </button>
-              </div>
+            <div className="mb-6 flex items-center gap-3 flex-wrap"
+              style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 43%)" }}>
+              <span>Showing:</span>
+              {searchTerm && (
+                <span className="px-2 py-0.5 bg-foreground text-white text-xs">"{searchTerm}"</span>
+              )}
+              {selectedCategoryName && (
+                <span className="px-2 py-0.5 border border-border text-xs">{selectedCategoryName}</span>
+              )}
+              {selectedYear !== "all" && (
+                <span className="px-2 py-0.5 border border-border text-xs">{selectedYear}</span>
+              )}
+              <button
+                onClick={clearAllFilters}
+                className="underline hover:text-foreground transition-colors"
+                data-testid="button-clear-filters"
+              >
+                Clear all
+              </button>
             </div>
           )}
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2">
-              <ArticleGrid 
+              <ArticleGrid
                 articles={articlesData?.articles || []}
                 isLoading={isLoading}
                 pagination={articlesData?.pagination}

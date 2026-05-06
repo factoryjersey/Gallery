@@ -5,19 +5,27 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ArticleGrid from "@/components/ArticleGrid";
 import Sidebar from "@/components/Sidebar";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Image, ImageOff } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Category() {
   const { slug } = useParams();
   const [currentPage, setCurrentPage] = useState(1);
+  const [withImage, setWithImage] = useState(true);
 
   const { data: categoryData } = useQuery({
     queryKey: [`/api/categories/by-slug/${slug}`],
   });
 
+  const queryParams = new URLSearchParams({
+    ...(categoryData?.category?.id && { categoryId: categoryData.category.id }),
+    ...(withImage && { withImage: "true" }),
+    page: currentPage.toString(),
+    limit: "16",
+  });
+
   const { data: articlesData, isLoading } = useQuery({
-    queryKey: [`/api/articles?categoryId=${categoryData?.category?.id}&page=${currentPage}&limit=12`],
+    queryKey: [`/api/articles?${queryParams.toString()}`],
     enabled: !!categoryData?.category?.id,
   });
 
@@ -86,14 +94,24 @@ export default function Category() {
         <div className="max-w-[1296px] mx-auto px-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2">
-              <div className="mb-6">
-                <h2 style={{ fontFamily: "Georgia, serif", fontSize: 20, fontWeight: 400, color: "hsl(0 0% 4%)" }}>
-                  Articles in {category.name}
-                </h2>
+              {/* Toolbar */}
+              <div className="flex items-center justify-between mb-6">
                 <p style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
-                  {articlesData?.pagination?.total || 0} articles found
+                  {articlesData?.pagination?.total ?? 0} articles
+                  {withImage ? " with images" : ""}
                 </p>
+                <button
+                  onClick={() => { setWithImage(p => !p); setCurrentPage(1); }}
+                  className="flex items-center gap-1.5 py-1.5 px-3 border border-border hover:border-foreground transition-colors"
+                  style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: withImage ? "hsl(0 0% 10%)" : "hsl(0 0% 55%)" }}
+                  title={withImage ? "Showing articles with images only" : "Showing all articles"}
+                  data-testid="toggle-with-image"
+                >
+                  {withImage ? <Image className="w-3.5 h-3.5" /> : <ImageOff className="w-3.5 h-3.5" />}
+                  <span>{withImage ? "With images" : "All articles"}</span>
+                </button>
               </div>
+
               <ArticleGrid
                 articles={articlesData?.articles || []}
                 isLoading={isLoading}

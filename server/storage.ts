@@ -8,7 +8,7 @@ import {
   articles, authors, categories, tags, articleTags, media, users
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, like, ilike, and, or, inArray, count, sql } from "drizzle-orm";
+import { eq, desc, asc, like, ilike, and, or, inArray, count, sql, isNotNull, ne } from "drizzle-orm";
 
 export interface IStorage {
   // User methods (legacy)
@@ -51,6 +51,8 @@ export interface IStorage {
     categoryId?: string;
     authorId?: string;
     search?: string;
+    year?: string;
+    withImage?: boolean;
     limit?: number;
     offset?: number;
     orderBy?: 'publishedAt' | 'createdAt' | 'views' | 'title';
@@ -322,6 +324,7 @@ export class DatabaseStorage implements IStorage {
     authorId?: string;
     search?: string;
     year?: string;
+    withImage?: boolean;
     limit?: number;
     offset?: number;
     orderBy?: 'publishedAt' | 'createdAt' | 'views' | 'title';
@@ -333,6 +336,7 @@ export class DatabaseStorage implements IStorage {
       authorId,
       search,
       year,
+      withImage,
       limit = 10,
       offset = 0,
       orderBy = 'publishedAt',
@@ -361,10 +365,17 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (year) {
-      // Filter by year using SQL EXTRACT function
       whereCondition = and(
         whereCondition,
         sql`EXTRACT(YEAR FROM ${articles.publishedAt}) = ${year}`
+      );
+    }
+
+    if (withImage) {
+      whereCondition = and(
+        whereCondition,
+        isNotNull(articles.featuredImage),
+        ne(articles.featuredImage, '')
       );
     }
 
