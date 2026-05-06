@@ -109,24 +109,24 @@ export default function CurrentIssue() {
       <Header />
 
       {/* ── Full-width editorial hero ─────────────────────────────── */}
-      <section className="w-full bg-white border-b border-border" style={{ minHeight: 460 }}>
-        <div className="flex flex-col md:flex-row w-full" style={{ minHeight: 460 }}>
+      <section className="w-full bg-white border-b border-border">
+        <div className="max-w-[1296px] mx-auto px-6 py-10">
+          <div className="flex flex-col md:flex-row gap-10 items-center">
 
-          {/* Cover image — full bleed left column */}
-          <div className="shrink-0 bg-[hsl(0,0%,12%)] md:w-[320px] lg:w-[380px] xl:w-[420px] relative overflow-hidden"
-            style={{ minHeight: 320 }}>
+          {/* Cover image — original size */}
+          <div className="shrink-0" style={{ width: 200 }}>
             {coverImage ? (
               <img src={coverImage} alt={`Gallery #${issueNumber}`}
-                className="w-full h-full object-cover absolute inset-0" />
+                className="w-full h-auto shadow-md" />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <BookOpen className="w-12 h-12 text-white/20" />
+              <div className="w-full flex items-center justify-center bg-[hsl(0,0%,94%)] border border-border" style={{ aspectRatio: "2/3" }}>
+                <BookOpen className="w-8 h-8 text-muted-foreground" />
               </div>
             )}
           </div>
 
           {/* Info panel */}
-          <div className="flex-1 flex flex-col justify-center px-8 lg:px-14 xl:px-20 py-10 md:py-12">
+          <div className="flex-1 flex flex-col justify-center">
 
             {/* Label */}
             <div className="flex items-center gap-2 mb-4"
@@ -197,6 +197,7 @@ export default function CurrentIssue() {
                 </Link>
               )}
             </div>
+          </div>
           </div>
         </div>
       </section>
