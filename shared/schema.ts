@@ -19,6 +19,7 @@ export const categories = pgTable("categories", {
   description: text("description"),
   color: text("color").default("#3B82F6"),
   parentId: varchar("parent_id").references((): any => categories.id),
+  excludeFromHero: boolean("exclude_from_hero").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

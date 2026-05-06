@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Star, StarOff, Search, GripVertical } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Star, StarOff, Search, GripVertical, Ban } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { ArticleWithDetails } from "@shared/schema";
+import type { ArticleWithDetails, Category } from "@shared/schema";
 import { format } from "date-fns";
 
 export function FeaturedStoriesManager() {
@@ -16,6 +17,10 @@ export function FeaturedStoriesManager() {
 
   const { data: featuredData, isLoading: featuredLoading } = useQuery<{ articles: ArticleWithDetails[] }>({
     queryKey: ["/api/articles/featured"],
+  });
+
+  const { data: categoriesData, isLoading: categoriesLoading } = useQuery<{ categories: Category[] }>({
+    queryKey: ["/api/categories"],
   });
 
   const searchParams = new URLSearchParams({ status: "published", limit: "20", ...(search && { search }) });
@@ -37,7 +42,22 @@ export function FeaturedStoriesManager() {
     },
   });
 
+  const excludeMutation = useMutation({
+    mutationFn: async ({ id, excludeFromHero }: { id: string; excludeFromHero: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/categories/${id}/exclude-from-hero`, { excludeFromHero });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles/featured"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not update category exclusion.", variant: "destructive" });
+    },
+  });
+
   const pinned = featuredData?.articles?.filter(a => a.isFeatured) ?? [];
+  const allCategories = categoriesData?.categories ?? [];
 
   const handleToggle = (article: ArticleWithDetails) => {
     if (article.isFeatured) {
@@ -50,8 +70,22 @@ export function FeaturedStoriesManager() {
     }
   };
 
+  const handleExcludeToggle = (category: Category) => {
+    const next = !category.excludeFromHero;
+    excludeMutation.mutate({ id: category.id, excludeFromHero: next });
+    toast({
+      title: next ? "Category blocked" : "Category allowed",
+      description: next
+        ? `"${category.name}" will no longer appear in the hero.`
+        : `"${category.name}" can now appear in the hero fallback.`,
+    });
+  };
+
   const articles = searchData?.articles ?? [];
   const pinnedIds = new Set(pinned.map(a => a.id));
+
+  const excludedCategories = allCategories.filter(c => c.excludeFromHero);
+  const includedCategories = allCategories.filter(c => !c.excludeFromHero);
 
   return (
     <div className="space-y-6" data-testid="featured-stories-manager">
@@ -59,7 +93,7 @@ export function FeaturedStoriesManager() {
         <h2 className="text-xl font-bold mb-1">Featured Stories</h2>
         <p className="text-sm text-muted-foreground">
           Pin specific articles to the hero carousel. They rotate automatically on the homepage.
-          If none are pinned, the latest articles with images are used.
+          If none are pinned, the latest articles with images are used — respecting the category rules below.
         </p>
       </div>
 
@@ -76,7 +110,7 @@ export function FeaturedStoriesManager() {
 
           {!featuredLoading && pinned.length === 0 && (
             <p className="text-sm text-muted-foreground py-4">
-              No articles pinned — showing latest articles with images automatically.
+              No articles pinned — showing latest articles with images automatically (honouring blocked categories).
             </p>
           )}
 
@@ -178,6 +212,56 @@ export function FeaturedStoriesManager() {
                 </div>
               );
             })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Category hero exclusion */}
+      <Card>
+        <CardContent className="pt-4">
+          <h3 className="font-semibold mb-1 flex items-center gap-2">
+            <Ban className="w-4 h-4 text-destructive" />
+            Category rules
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Blocked categories will never appear in the hero carousel — even in the automatic fallback.
+            {excludedCategories.length > 0 && (
+              <span className="font-medium text-foreground"> Currently blocked: {excludedCategories.map(c => c.name).join(", ")}.</span>
+            )}
+          </p>
+
+          {categoriesLoading && <p className="text-sm text-muted-foreground">Loading categories…</p>}
+
+          <div className="space-y-1 max-h-80 overflow-y-auto">
+            {allCategories
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(category => (
+                <div
+                  key={category.id}
+                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                  data-testid={`category-hero-row-${category.id}`}
+                >
+                  <div className="flex items-center gap-2">
+                    {category.excludeFromHero && (
+                      <Ban className="w-3 h-3 text-destructive shrink-0" />
+                    )}
+                    <span className={`text-sm ${category.excludeFromHero ? "text-muted-foreground line-through" : ""}`}>
+                      {category.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {category.excludeFromHero ? "Blocked" : "Allowed"}
+                    </span>
+                    <Switch
+                      checked={!category.excludeFromHero}
+                      onCheckedChange={() => handleExcludeToggle(category)}
+                      disabled={excludeMutation.isPending}
+                      data-testid={`category-hero-toggle-${category.id}`}
+                    />
+                  </div>
+                </div>
+              ))}
           </div>
         </CardContent>
       </Card>

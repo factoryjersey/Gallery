@@ -445,11 +445,21 @@ export class DatabaseStorage implements IStorage {
 
     if (pinnedWithTags.length >= limit) return pinnedWithTags.slice(0, limit);
 
-    // Fallback: fill remaining slots from latest published articles with images
+    // Fallback: fill remaining slots from latest published articles with images,
+    // excluding any category marked excludeFromHero
     const needed = limit - pinnedWithTags.length;
     const pinnedIds = pinnedWithTags.map(a => a.id);
-    const pool = (await this.getArticles({ status: 'published', limit: needed * 6, orderBy: 'publishedAt', orderDir: 'desc' })).articles;
-    const filler = pool.filter(a => a.featuredImage && !pinnedIds.includes(a.id)).slice(0, needed);
+
+    const excludedCats = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.excludeFromHero, true));
+    const excludedCatIds = new Set(excludedCats.map(c => c.id));
+
+    const pool = (await this.getArticles({ status: 'published', limit: needed * 10, orderBy: 'publishedAt', orderDir: 'desc' })).articles;
+    const filler = pool
+      .filter(a => a.featuredImage && !pinnedIds.includes(a.id) && !excludedCatIds.has(a.categoryId))
+      .slice(0, needed);
 
     return [...pinnedWithTags, ...filler];
   }

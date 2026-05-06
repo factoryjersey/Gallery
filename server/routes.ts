@@ -198,6 +198,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/categories/:id/exclude-from-hero", async (req, res) => {
+    try {
+      const { excludeFromHero } = req.body;
+      if (typeof excludeFromHero !== "boolean") {
+        return res.status(400).json({ error: "excludeFromHero must be a boolean" });
+      }
+      const category = await storage.updateCategory(req.params.id, { excludeFromHero });
+      if (!category) return res.status(404).json({ error: "Category not found" });
+      res.json({ category });
+    } catch (error) {
+      console.error("Error updating category hero exclusion:", error);
+      res.status(500).json({ error: "Failed to update category" });
+    }
+  });
+
   app.delete("/api/articles/:id", async (req, res) => {
     try {
       const success = await storage.deleteArticle(req.params.id);
