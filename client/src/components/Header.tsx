@@ -242,9 +242,10 @@ export default function Header({ onSearch }: HeaderProps) {
       </div>
 
       {/* Masthead */}
-      <div className="max-w-[1296px] mx-auto px-6 py-4 flex justify-between items-center">
+      <div className="max-w-[1296px] mx-auto px-6 py-4 flex items-center gap-4">
+        {/* Hamburger — always visible on mobile, hidden on desktop */}
         <button
-          className="text-foreground hover:opacity-70 transition-opacity"
+          className="lg:hidden text-foreground hover:opacity-70 transition-opacity"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           data-testid="mobile-menu-toggle"
           aria-label="Menu"
@@ -252,10 +253,14 @@ export default function Header({ onSearch }: HeaderProps) {
           {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
 
+        {/* Logo — left-aligned, centred on mobile via auto margin */}
         <Link href="/">
           <img src="/gallery-logo.png" alt="Gallery" className="cursor-pointer"
-            style={{ height: 22, width: "auto" }} data-testid="site-logo" />
+            style={{ height: 33, width: "auto" }} data-testid="site-logo" />
         </Link>
+
+        {/* Push search icon to the right */}
+        <div className="flex-1" />
 
         <button
           onClick={() => setIsSearchExpanded(!isSearchExpanded)}
