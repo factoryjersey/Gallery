@@ -101,7 +101,7 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="absolute top-full right-0 bg-white border border-border shadow-xl z-50 w-[360px] p-5"
+      className="absolute top-full left-0 bg-white border border-border shadow-xl z-50 w-[360px] p-5"
       onMouseLeave={onClose}
     >
       <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
@@ -256,7 +256,7 @@ export default function Header({ onSearch }: HeaderProps) {
         {/* Logo — left-aligned, centred on mobile via auto margin */}
         <Link href="/">
           <img src="/gallery-logo.png" alt="Gallery" className="cursor-pointer"
-            style={{ height: 33, width: "auto" }} data-testid="site-logo" />
+            style={{ height: 33, width: "auto", marginLeft: 10 }} data-testid="site-logo" />
         </Link>
 
         {/* Push search icon to the right */}
