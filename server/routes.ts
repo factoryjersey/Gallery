@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
+import { articles, authors, categories, tags, articleTags } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema } from "@shared/schema";
 import { z } from "zod";
@@ -1079,6 +1082,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error importing WordPress content:", error);
       res.status(500).json({ error: "Failed to import WordPress content" });
+    }
+  });
+
+  // ─── Data Export ──────────────────────────────────────────────────────────
+  app.get("/api/admin/export", async (req, res) => {
+    try {
+      const allAuthors    = await db.select().from(authors);
+      const allCategories = await db.select().from(categories);
+      const allTags       = await db.select().from(tags);
+      const allArticles   = await db.select().from(articles);
+      const allArticleTags = await db.select().from(articleTags);
+
+      const payload = { authors: allAuthors, categories: allCategories, tags: allTags, articles: allArticles, articleTags: allArticleTags };
+      const json = JSON.stringify(payload);
+
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename="gallery-export-${new Date().toISOString().slice(0,10)}.json"`);
+      res.send(json);
+    } catch (error) {
+      console.error("Export error:", error);
+      res.status(500).json({ error: "Export failed" });
+    }
+  });
+
+  // ─── Data Import ──────────────────────────────────────────────────────────
+  app.post("/api/admin/import", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+      const payload = JSON.parse(req.file.buffer.toString("utf-8"));
+      const { authors: importAuthors = [], categories: importCategories = [], tags: importTags = [], articles: importArticles = [], articleTags: importArticleTags = [] } = payload;
+
+      let stats = { authors: 0, categories: 0, tags: 0, articles: 0, articleTags: 0 };
+
+      // Authors
+      for (const row of importAuthors) {
+        const { createdAt, ...rest } = row;
+        await db.execute(
+          sql`INSERT INTO authors (id, name, email, bio, avatar, created_at)
+              VALUES (${rest.id}, ${rest.name}, ${rest.email}, ${rest.bio ?? null}, ${rest.avatar ?? null}, ${createdAt ?? new Date()})
+              ON CONFLICT (id) DO NOTHING`
+        );
+        stats.authors++;
+      }
+
+      // Categories (two passes to handle parent references)
+      for (const row of importCategories) {
+        const { createdAt, ...rest } = row;
+        await db.execute(
+          sql`INSERT INTO categories (id, name, slug, description, color, parent_id, created_at)
+              VALUES (${rest.id}, ${rest.name}, ${rest.slug}, ${rest.description ?? null}, ${rest.color ?? null}, NULL, ${createdAt ?? new Date()})
+              ON CONFLICT (id) DO NOTHING`
+        );
+        stats.categories++;
+      }
+      // Second pass: set parent_id
+      for (const row of importCategories) {
+        if (row.parentId) {
+          await db.execute(sql`UPDATE categories SET parent_id = ${row.parentId} WHERE id = ${row.id}`);
+        }
+      }
+
+      // Tags
+      for (const row of importTags) {
+        const { createdAt, ...rest } = row;
+        await db.execute(
+          sql`INSERT INTO tags (id, name, slug, created_at)
+              VALUES (${rest.id}, ${rest.name}, ${rest.slug}, ${createdAt ?? new Date()})
+              ON CONFLICT (id) DO NOTHING`
+        );
+        stats.tags++;
+      }
+
+      // Articles
+      for (const row of importArticles) {
+        const { createdAt, updatedAt, ...rest } = row;
+        await db.execute(
+          sql`INSERT INTO articles (id, title, slug, excerpt, content, featured_image, status, views, read_time, author_id, category_id, published_at, created_at, updated_at, meta_title, meta_description, wp_id, wp_data, is_featured, featured_order)
+              VALUES (${rest.id}, ${rest.title}, ${rest.slug}, ${rest.excerpt ?? null}, ${rest.content}, ${rest.featuredImage ?? null}, ${rest.status}, ${rest.views ?? 0}, ${rest.readTime ?? 5}, ${rest.authorId}, ${rest.categoryId}, ${rest.publishedAt ?? null}, ${createdAt ?? new Date()}, ${updatedAt ?? new Date()}, ${rest.metaTitle ?? null}, ${rest.metaDescription ?? null}, ${rest.wpId ?? null}, ${rest.wpData ? JSON.stringify(rest.wpData) : null}, ${rest.isFeatured ?? false}, ${rest.featuredOrder ?? 0})
+              ON CONFLICT (id) DO NOTHING`
+        );
+        stats.articles++;
+      }
+
+      // Article tags
+      for (const row of importArticleTags) {
+        await db.execute(
+          sql`INSERT INTO article_tags (id, article_id, tag_id)
+              VALUES (${row.id}, ${row.articleId}, ${row.tagId})
+              ON CONFLICT (id) DO NOTHING`
+        );
+        stats.articleTags++;
+      }
+
+      res.json({ success: true, stats });
+    } catch (error) {
+      console.error("Import error:", error);
+      res.status(500).json({ error: "Import failed", detail: String(error) });
     }
   });
 

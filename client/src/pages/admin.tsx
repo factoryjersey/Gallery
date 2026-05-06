@@ -18,7 +18,8 @@ import {
   Eye,
   ArrowLeft,
   RefreshCw,
-  Star
+  Star,
+  Database
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
@@ -32,6 +33,7 @@ import { MediaManager } from "@/components/MediaManager";
 import { MediaIndexing } from "@/components/MediaIndexing";
 import { WPSync } from "@/components/WPSync";
 import { FeaturedStoriesManager } from "@/components/FeaturedStoriesManager";
+import { DataMigration } from "@/components/DataMigration";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
@@ -216,6 +218,18 @@ export default function Admin() {
                 >
                   <Star className="w-5 h-5 mr-3" />
                   Featured Stories
+                </button>
+                <button
+                  onClick={() => setActiveTab("migration")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "migration"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-migration"
+                >
+                  <Database className="w-5 h-5 mr-3" />
+                  Data Migration
                 </button>
                 <button
                   onClick={() => setActiveTab("sync")}
@@ -405,6 +419,10 @@ export default function Admin() {
 
               {activeTab === "featured" && (
                 <FeaturedStoriesManager />
+              )}
+
+              {activeTab === "migration" && (
+                <DataMigration />
               )}
 
               {activeTab === "sync" && (
