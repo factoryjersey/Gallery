@@ -115,7 +115,7 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
             </span>
           )}
         </div>
-        <Link href="/?issue=current">
+        <Link href="/current-issue">
           <span className="text-secondary hover:underline cursor-pointer"
             style={{ fontFamily: "Arial, sans-serif", fontSize: 11 }}
             onClick={onClose}>
