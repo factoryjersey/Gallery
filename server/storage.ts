@@ -350,9 +350,12 @@ export class DatabaseStorage implements IStorage {
 
     let whereCondition: any = status === 'all' ? undefined : eq(articles.status, status);
 
-    // Filter by content type ('article' by default — excludes cartoons from main feed)
+    // Filter by content type — default shows articles + galleries, excludes cartoons
     if (contentType === 'all') {
       // no filter
+    } else if (contentType === 'article') {
+      // Default: show articles and galleries, exclude cartoons
+      whereCondition = and(whereCondition, ne(articles.contentType, 'cartoon'));
     } else {
       whereCondition = and(whereCondition, eq(articles.contentType, contentType));
     }
