@@ -111,7 +111,7 @@ export default function CurrentIssue() {
       {/* ── Full-width editorial hero ─────────────────────────────── */}
       <section className="w-full bg-white border-b border-border">
         <div className="max-w-[1296px] mx-auto px-6 py-10">
-          <div className="flex flex-col md:flex-row gap-10 items-center">
+          <div className="flex flex-col md:flex-row gap-10 items-start">
 
           {/* Cover image — original size */}
           <div className="shrink-0" style={{ width: 200 }}>
