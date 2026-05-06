@@ -115,7 +115,7 @@ export default function Sidebar() {
           </span>
         </div>
         <p className="text-sm mt-4 mb-4 opacity-80" style={{ fontFamily: "Georgia, serif", fontSize: 15, lineHeight: 1.5 }}>
-          Get the latest stories from Gallery delivered to your inbox.
+          Get the latest stories from Gallery delivered to your inbox, now and again.
         </p>
         <form onSubmit={handleNewsletterSignup} className="space-y-3" data-testid="sidebar-newsletter-form">
           <Input

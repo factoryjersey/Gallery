@@ -92,7 +92,7 @@ export default function Footer() {
           <div>
             <h4 className="font-bold mb-4 uppercase tracking-widest text-xs text-foreground">Newsletter</h4>
             <p className="text-muted-foreground mb-3" style={{ fontSize: 13, lineHeight: 1.5 }}>
-              The best of Gallery, delivered weekly.
+              The best of Gallery, delivered now and again.
             </p>
             <form onSubmit={handleNewsletterSignup} className="space-y-2" data-testid="newsletter-form">
               <Input
