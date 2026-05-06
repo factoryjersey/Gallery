@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Pencil } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import LazyImage from "@/components/LazyImage";
+
+const CARTOONS_CATEGORY_SLUG = "ntjp";
 
 function SidebarSection({ title, teal = false, children }: { title: string; teal?: boolean; children: React.ReactNode }) {
   return (
@@ -23,6 +26,19 @@ export default function Sidebar() {
   const { data: trendingData } = useQuery({ queryKey: ["/api/articles/trending"] });
   const { data: categoriesData } = useQuery({ queryKey: ["/api/categories"] });
 
+  const cartoonCategory = (categoriesData?.categories || []).find(
+    (c: any) => c.slug === CARTOONS_CATEGORY_SLUG
+  );
+
+  const cartoonParams = cartoonCategory
+    ? new URLSearchParams({ categoryId: cartoonCategory.id, status: "published", limit: "6", orderBy: "publishedAt", orderDir: "desc" }).toString()
+    : null;
+
+  const { data: cartoonsData } = useQuery({
+    queryKey: cartoonParams ? [`/api/articles?${cartoonParams}`] : ["cartoons-disabled"],
+    enabled: !!cartoonParams,
+  });
+
   const handleNewsletterSignup = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
@@ -32,6 +48,7 @@ export default function Sidebar() {
 
   const trendingArticles = trendingData?.articles || [];
   const categories = (categoriesData?.categories || []).filter((c: any) => !c.parentId).slice(0, 7);
+  const cartoonArticles = cartoonsData?.articles || [];
 
   return (
     <aside className="space-y-10">
@@ -154,6 +171,69 @@ export default function Sidebar() {
           )}
         </div>
       </SidebarSection>
+
+      {/* Cartoons */}
+      {cartoonArticles.length > 0 && (
+        <SidebarSection title="Cartoons">
+          <div className="space-y-5" data-testid="cartoon-articles">
+            {cartoonArticles.map((article: any, index: number) => (
+              <Link key={article.id} href={`/article/${article.slug}`}>
+                <div
+                  className="group cursor-pointer"
+                  data-testid={`cartoon-article-${index}`}
+                >
+                  {article.featuredImage ? (
+                    <div className="overflow-hidden mb-3" style={{ aspectRatio: "4/3" }}>
+                      <LazyImage
+                        src={article.featuredImage}
+                        alt={article.title}
+                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="mb-3 flex items-center justify-center bg-[hsl(0,0%,94%)]"
+                      style={{ aspectRatio: "4/3" }}
+                    >
+                      <Pencil className="w-6 h-6 text-border" />
+                    </div>
+                  )}
+                  <h4
+                    className="group-hover:text-secondary transition-colors line-clamp-2"
+                    style={{
+                      fontFamily: "Georgia, serif",
+                      fontSize: 15,
+                      fontWeight: 400,
+                      lineHeight: 1.4,
+                      color: "hsl(0 0% 4%)",
+                      margin: 0,
+                    }}
+                    data-testid={`cartoon-title-${index}`}
+                  >
+                    {article.title}
+                  </h4>
+                </div>
+              </Link>
+            ))}
+            <Link href="/category/ntjp">
+              <span
+                className="inline-block hover:text-secondary transition-colors"
+                style={{
+                  fontFamily: "Arial, sans-serif",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "hsl(182 55% 56%)",
+                }}
+                data-testid="cartoons-view-all"
+              >
+                View all cartoons →
+              </span>
+            </Link>
+          </div>
+        </SidebarSection>
+      )}
 
     </aside>
   );
