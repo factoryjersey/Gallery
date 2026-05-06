@@ -30,20 +30,13 @@ export default function Footer() {
         {/* Top: wordmark + tagline */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-8 border-b border-border">
           <Link href="/">
-            <span
+            <img
+              src="/gallery-logo.png"
+              alt="Gallery"
               className="cursor-pointer"
-              style={{
-                fontFamily: "Arial, Helvetica, sans-serif",
-                fontSize: 22,
-                fontWeight: 700,
-                letterSpacing: "0.3em",
-                textTransform: "uppercase",
-                color: "hsl(0 0% 4%)",
-              }}
+              style={{ height: 22, width: "auto" }}
               data-testid="footer-title"
-            >
-              Gallery
-            </span>
+            />
           </Link>
           <p style={{ fontFamily: "Georgia, serif", fontSize: 14, color: "hsl(0 0% 43%)", fontStyle: "italic" }}>
             Life &amp; style in Jersey.
