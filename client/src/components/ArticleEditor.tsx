@@ -34,6 +34,7 @@ const articleSchema = z.object({
   categoryId: z.string().min(1, "Category is required"),
   authorId: z.string().min(1, "Author is required"),
   status: z.enum(["draft", "published"]),
+  contentType: z.enum(["article", "cartoon", "gallery"]).default("article"),
   featuredImage: z.string().optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
@@ -58,6 +59,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     resolver: zodResolver(articleSchema),
     defaultValues: {
       status: "draft",
+      contentType: "article",
       readTime: 5,
     },
   });
@@ -92,6 +94,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         categoryId: article.categoryId,
         authorId: article.authorId,
         status: article.status,
+        contentType: article.contentType || "article",
         featuredImage: article.featuredImage || "",
         metaTitle: article.metaTitle || "",
         metaDescription: article.metaDescription || "",
@@ -133,7 +136,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
 
   const updateArticleMutation = useMutation({
     mutationFn: async (data: ArticleFormData & { tags?: string[] }) => {
-      const response = await apiRequest("PATCH", `/api/articles/${articleId}`, data);
+      const response = await apiRequest("PUT", `/api/articles/${articleId}`, data);
       return response.json();
     },
     onSuccess: () => {
@@ -196,8 +199,12 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     const content = e.target.value;
     form.setValue("content", content);
     
-    // Update read time
-    const wordCount = content.split(/\s+/).length;
+    // For gallery type, don't compute read time from image-heavy HTML
+    if (form.getValues("contentType") === "gallery") {
+      form.setValue("readTime", 1);
+      return;
+    }
+    const wordCount = content.replace(/<[^>]*>/g, " ").split(/\s+/).filter(Boolean).length;
     const readTime = Math.max(1, Math.ceil(wordCount / 200));
     form.setValue("readTime", readTime);
   };
@@ -348,6 +355,25 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   <p className="text-sm text-destructive">{form.formState.errors.slug.message}</p>
                 )}
               </div>
+            </div>
+
+            {/* Content Type */}
+            <div className="space-y-2">
+              <Label>Content Type</Label>
+              <Select
+                value={form.watch("contentType")}
+                onValueChange={(value) => form.setValue("contentType", value as "article" | "cartoon" | "gallery")}
+                data-testid="content-type-select"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select content type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="article">Article</SelectItem>
+                  <SelectItem value="gallery">Gallery (Paparazzi / Photo grid)</SelectItem>
+                  <SelectItem value="cartoon">Cartoon</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Category and Author */}

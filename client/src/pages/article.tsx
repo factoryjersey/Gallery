@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
 import ArticleGallery from "@/components/ArticleGallery";
+import PaparazziGallery from "@/components/PaparazziGallery";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -179,10 +180,12 @@ export default function Article() {
             <span data-testid="article-date">
               {format(new Date(article.publishedAt || article.createdAt), "d MMMM yyyy")}
             </span>
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              <span data-testid="article-read-time">{article.readTime} min read</span>
-            </span>
+            {article.contentType !== "gallery" && (
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                <span data-testid="article-read-time">{article.readTime} min read</span>
+              </span>
+            )}
             <span className="flex items-center gap-1">
               <Eye className="h-3 w-3" />
               <span data-testid="article-views">{article.views.toLocaleString()} views</span>
@@ -204,10 +207,14 @@ export default function Article() {
         )}
 
         {/* Body content */}
-        <ArticleGallery
-          content={article.content}
-          className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
-        />
+        {article.contentType === "gallery" ? (
+          <PaparazziGallery content={article.content} />
+        ) : (
+          <ArticleGallery
+            content={article.content}
+            className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
+          />
+        )}
 
         {/* Author bio footer */}
         <footer className="mt-12 pt-8 border-t border-border">
