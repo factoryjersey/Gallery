@@ -57,6 +57,7 @@ export interface IStorage {
     offset?: number;
     orderBy?: 'publishedAt' | 'createdAt' | 'views' | 'title';
     orderDir?: 'asc' | 'desc';
+    issueNumber?: number;
   }): Promise<{ articles: ArticleWithDetails[]; total: number }>;
   getFeaturedArticles(limit?: number): Promise<ArticleWithDetails[]>;
   getTrendingArticles(limit?: number): Promise<ArticleWithDetails[]>;
@@ -330,6 +331,7 @@ export class DatabaseStorage implements IStorage {
     orderBy?: 'publishedAt' | 'createdAt' | 'views' | 'title';
     orderDir?: 'asc' | 'desc';
     contentType?: string;
+    issueNumber?: number;
   } = {}): Promise<{ articles: ArticleWithDetails[]; total: number }> {
     const {
       status = 'published',
@@ -343,6 +345,7 @@ export class DatabaseStorage implements IStorage {
       orderBy = 'publishedAt',
       orderDir = 'desc',
       contentType = 'article',
+      issueNumber,
     } = options;
 
     let whereCondition: any = status === 'all' ? undefined : eq(articles.status, status);
@@ -386,6 +389,10 @@ export class DatabaseStorage implements IStorage {
         isNotNull(articles.featuredImage),
         ne(articles.featuredImage, '')
       );
+    }
+
+    if (issueNumber !== undefined) {
+      whereCondition = and(whereCondition, eq(articles.issueNumber, issueNumber));
     }
 
     const orderColumn = articles[orderBy];

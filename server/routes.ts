@@ -65,31 +65,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Current issue — articles published in the last 56 days (8-week cycle)
+  // Current issue — articles grouped by issue_number
   app.get("/api/articles/current-issue", async (req, res) => {
     try {
-      const limit = Number(req.query.limit) || 20;
-      const categoryId = req.query.categoryId as string | undefined;
-      const weeksBack = Number(req.query.weeks) || 8;
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - weeksBack * 7);
+      const issueParam = req.query.issue ? Number(req.query.issue) : null;
 
+      // Find the target issue number (param or max)
+      const [{ maxIssue }] = await db
+        .select({ maxIssue: sql<number>`MAX(issue_number)` })
+        .from(articles);
+      const targetIssue = issueParam || maxIssue;
+
+      if (!targetIssue) {
+        return res.json({ articles: [], edito: null, issueNumber: null });
+      }
+
+      // Get all articles for this issue
       const result = await storage.getArticles({
         status: "published",
-        categoryId,
-        withImage: true,
-        limit,
+        limit: 200,
         offset: 0,
         orderBy: "publishedAt",
         orderDir: "desc",
+        issueNumber: targetIssue,
       });
 
-      // Filter to within the issue window
-      const issueArticles = result.articles.filter(
-        (a) => new Date(a.publishedAt || a.createdAt) >= cutoff
-      );
+      // Separate edito from the rest
+      const edito = result.articles.find(a => a.category?.slug === "edito") || null;
+      const issueArticles = result.articles.filter(a => a.category?.slug !== "edito" && a.contentType === "article");
 
-      res.json({ articles: issueArticles, cutoff: cutoff.toISOString() });
+      res.json({ articles: issueArticles, edito, issueNumber: targetIssue });
     } catch (error) {
       console.error("Error fetching current issue:", error);
       res.status(500).json({ error: "Failed to fetch current issue" });

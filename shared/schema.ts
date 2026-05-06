@@ -56,6 +56,8 @@ export const articles = pgTable("articles", {
   featuredOrder: integer("featured_order").default(0).notNull(),
   // Content type: 'article' | 'cartoon'
   contentType: text("content_type").notNull().default("article"),
+  // Issue number (bimonthly edition)
+  issueNumber: integer("issue_number"),
 });
 
 export const articleTags = pgTable("article_tags", {
