@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
-import { TrendingUp, Pencil } from "lucide-react";
+import { TrendingUp, Pencil, X } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -18,6 +18,7 @@ function SidebarSection({ title, teal = false, children }: { title: string; teal
 
 export default function Sidebar() {
   const [email, setEmail] = useState("");
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: trendingData } = useQuery({ queryKey: ["/api/articles/trending"] });
@@ -189,25 +190,22 @@ export default function Sidebar() {
                   style={{ flex: "0 0 100%", scrollSnapAlign: "start" }}
                   data-testid={`cartoon-article-${index}`}
                 >
-                  <Link href={`/article/${article.slug}`}>
-                    <div className="group cursor-pointer">
-                      {article.featuredImage ? (
-                        <img
-                          src={article.featuredImage}
-                          alt={article.title}
-                          className="w-full h-auto block group-hover:opacity-80 transition-opacity duration-300"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div
-                          className="w-full flex items-center justify-center bg-[hsl(0,0%,94%)]"
-                          style={{ height: 240 }}
-                        >
-                          <Pencil className="w-5 h-5 text-border" />
-                        </div>
-                      )}
+                  {article.featuredImage ? (
+                    <img
+                      src={article.featuredImage}
+                      alt={article.title}
+                      className="w-full h-auto block cursor-zoom-in hover:opacity-90 transition-opacity duration-200"
+                      loading="lazy"
+                      onClick={() => setLightboxImage(article.featuredImage)}
+                    />
+                  ) : (
+                    <div
+                      className="w-full flex items-center justify-center bg-[hsl(0,0%,94%)]"
+                      style={{ height: 240 }}
+                    >
+                      <Pencil className="w-5 h-5 text-border" />
                     </div>
-                  </Link>
+                  )}
                 </div>
               ))}
             </div>
@@ -249,6 +247,29 @@ export default function Sidebar() {
         </SidebarSection>
       )}
 
+      {/* Cartoon lightbox */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85"
+          onClick={() => setLightboxImage(null)}
+          data-testid="cartoon-lightbox"
+        >
+          <button
+            className="absolute top-4 right-4 text-white hover:opacity-70 transition-opacity"
+            onClick={() => setLightboxImage(null)}
+            aria-label="Close"
+            data-testid="lightbox-close"
+          >
+            <X className="w-7 h-7" />
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Cartoon"
+            className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </aside>
   );
 }
