@@ -110,8 +110,8 @@
 /* Gallery editorial styles */
 .article-card {
   transition: background-color 0.15s ease;
-  padding: 2px;
-  margin: -2px;
+  padding: 5px;
+  margin: -5px;
 }
 
 .article-card:hover {
