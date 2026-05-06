@@ -171,7 +171,7 @@ export default function CurrentIssue() {
 
             {/* Edito excerpt */}
             {edito?.excerpt && (
-              <p className="mb-6 max-w-xl" style={{ fontFamily: "Georgia, serif", fontSize: 17, fontStyle: "italic", color: "hsl(0 0% 35%)", lineHeight: 1.65 }}>
+              <p className="mb-6" style={{ fontFamily: "Georgia, serif", fontSize: 17, fontStyle: "italic", color: "hsl(0 0% 35%)", lineHeight: 1.65 }}>
                 {stripHtml(edito.excerpt)}
               </p>
             )}
