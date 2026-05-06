@@ -66,6 +66,7 @@ export const issues = pgTable("issues", {
   title: text("title"),
   pdfUrl: text("pdf_url"),
   coverImage: text("cover_image"),
+  coverImageAlt: text("cover_image_alt"),
   publishedAt: timestamp("published_at"),
   displayLabel: text("display_label"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

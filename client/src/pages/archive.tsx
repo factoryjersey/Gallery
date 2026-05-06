@@ -11,17 +11,22 @@ type Issue = {
   title: string | null;
   pdfUrl: string | null;
   coverImage: string | null;
+  coverImageAlt: string | null;
   publishedAt: string | null;
   displayLabel: string | null;
 };
 
 function CoverCard({ issue }: { issue: Issue }) {
+  // Rotate between primary and alt cover on each page load (stable per issue)
+  const cover = issue.coverImageAlt && issue.number % 2 === Math.floor(Date.now() / 86400000) % 2
+    ? issue.coverImageAlt
+    : issue.coverImage!;
   return (
     <div className="group flex flex-col" data-testid={`issue-cover-${issue.number}`}>
       <div className="relative overflow-hidden shadow-md group-hover:shadow-xl transition-shadow duration-300"
         style={{ aspectRatio: "2/3" }}>
         <img
-          src={issue.coverImage!}
+          src={cover}
           alt={`Gallery #${issue.number}`}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
           loading="lazy"
