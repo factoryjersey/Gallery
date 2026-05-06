@@ -242,8 +242,8 @@ export default function Header({ onSearch }: HeaderProps) {
       </div>
 
       {/* Masthead */}
-      <div className="max-w-[1296px] mx-auto px-6 py-4 flex items-center gap-4">
-        {/* Hamburger — always visible on mobile, hidden on desktop */}
+      <div className="max-w-[1296px] mx-auto px-6 py-4 flex items-center gap-4 relative">
+        {/* Hamburger — mobile only */}
         <button
           className="lg:hidden text-foreground hover:opacity-70 transition-opacity"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -253,10 +253,16 @@ export default function Header({ onSearch }: HeaderProps) {
           {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
 
-        {/* Logo — left-aligned, centred on mobile via auto margin */}
-        <Link href="/">
-          <img src="/gallery-logo.png" alt="Gallery" className="cursor-pointer"
-            style={{ height: 33, width: "auto", marginLeft: 10 }} data-testid="site-logo" />
+        {/* Logo — centred on mobile (absolute), left on desktop (static, larger) */}
+        <Link href="/"
+          className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 lg:ml-[10px]"
+        >
+          <img
+            src="/gallery-logo.png"
+            alt="Gallery"
+            className="cursor-pointer h-[22px] lg:h-[33px] w-auto"
+            data-testid="site-logo"
+          />
         </Link>
 
         {/* Push search icon to the right */}
