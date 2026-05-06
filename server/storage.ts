@@ -369,9 +369,9 @@ export class DatabaseStorage implements IStorage {
       whereCondition = and(
         whereCondition,
         or(
-          like(articles.title, `%${search}%`),
-          like(articles.excerpt, `%${search}%`),
-          like(articles.content, `%${search}%`)
+          ilike(articles.title, `%${search}%`),
+          ilike(articles.excerpt, `%${search}%`),
+          ilike(articles.content, `%${search}%`)
         )
       );
     }

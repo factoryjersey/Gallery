@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Menu, X, UserCircle, ChevronDown, BookOpen } from "lucide-react";
@@ -158,7 +158,7 @@ export default function Header({ onSearch }: HeaderProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchCategory, setSearchCategory] = useState<string>("all");
   const [searchYear, setSearchYear] = useState<string>("all");
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const moreRef = useRef<HTMLDivElement>(null);
   const currentIssueRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -212,12 +212,16 @@ export default function Header({ onSearch }: HeaderProps) {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch?.(
-      searchTerm,
-      searchCategory === "all" ? undefined : searchCategory,
-      searchYear === "all" ? undefined : searchYear
-    );
+    const params = new URLSearchParams();
+    if (searchTerm) params.set("search", searchTerm);
+    if (searchCategory !== "all") params.set("categoryId", searchCategory);
+    if (searchYear !== "all") params.set("year", searchYear);
+    const qs = params.toString();
+    setLocation(qs ? `/?${qs}` : "/");
     setIsSearchExpanded(false);
+    setSearchTerm("");
+    setSearchCategory("all");
+    setSearchYear("all");
   };
 
   return (

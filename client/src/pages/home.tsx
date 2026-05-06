@@ -5,15 +5,27 @@ import FeaturedHero from "@/components/FeaturedHero";
 import CategoryFilter from "@/components/CategoryFilter";
 import ArticleGrid from "@/components/ArticleGrid";
 import Sidebar from "@/components/Sidebar";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearch } from "wouter";
 
 export default function Home() {
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const searchString = useSearch();
+  const urlParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>(urlParams.get("categoryId") || "");
+  const [searchTerm, setSearchTerm] = useState<string>(urlParams.get("search") || "");
+  const [selectedYear, setSelectedYear] = useState<string>(urlParams.get("year") || "all");
   const [withImage, setWithImage] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
+
+  // Sync state when URL params change (e.g. after Header search navigation)
+  useEffect(() => {
+    setSearchTerm(urlParams.get("search") || "");
+    setSelectedCategory(urlParams.get("categoryId") || "");
+    setSelectedYear(urlParams.get("year") || "all");
+    setCurrentPage(1);
+  }, [searchString]);
 
   const { data: categoriesData } = useQuery({ queryKey: ["/api/categories"] });
   const { data: featuredData } = useQuery({ queryKey: ["/api/articles/featured"] });
