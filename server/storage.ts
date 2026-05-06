@@ -490,6 +490,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(articles.status, 'published'),
+          eq(articles.contentType, 'article'),
           sql`${articles.publishedAt} >= ${sevenDaysAgo}`
         )
       )

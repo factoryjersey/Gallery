@@ -172,16 +172,21 @@ export default function Sidebar() {
       {cartoonArticles.length > 0 && (
         <SidebarSection title="Cartoons">
           <div data-testid="cartoon-articles">
-            {/* Scrollable row */}
+            {/* Full-width snap carousel */}
             <div
-              className="flex gap-3 overflow-x-auto pb-2"
-              style={{ scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch", msOverflowStyle: "none", scrollbarWidth: "none" }}
+              className="flex overflow-x-auto"
+              style={{
+                scrollSnapType: "x mandatory",
+                WebkitOverflowScrolling: "touch",
+                msOverflowStyle: "none",
+                scrollbarWidth: "none",
+              }}
             >
               {cartoonArticles.map((article: any, index: number) => (
                 <Link key={article.id} href={`/article/${article.slug}`}>
                   <div
                     className="group cursor-pointer shrink-0"
-                    style={{ width: 140, scrollSnapAlign: "start" }}
+                    style={{ width: "100%", minWidth: "100%", scrollSnapAlign: "start" }}
                     data-testid={`cartoon-article-${index}`}
                   >
                     {article.featuredImage ? (
@@ -194,7 +199,7 @@ export default function Sidebar() {
                     ) : (
                       <div
                         className="w-full flex items-center justify-center bg-[hsl(0,0%,94%)]"
-                        style={{ height: 190 }}
+                        style={{ height: 240 }}
                       >
                         <Pencil className="w-5 h-5 text-border" />
                       </div>
@@ -203,6 +208,23 @@ export default function Sidebar() {
                 </Link>
               ))}
             </div>
+
+            {/* Dot indicators */}
+            {cartoonArticles.length > 1 && (
+              <div className="flex justify-center gap-1.5 mt-3">
+                {cartoonArticles.map((_: any, i: number) => (
+                  <span
+                    key={i}
+                    style={{
+                      display: "inline-block",
+                      width: 5,
+                      height: 5,
+                      background: i === 0 ? "hsl(0 0% 4%)" : "hsl(0 0% 80%)",
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
             <Link href="/category/ntjp">
               <span
