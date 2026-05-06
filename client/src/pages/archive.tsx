@@ -31,13 +31,6 @@ function CoverCard({ issue }: { issue: Issue }) {
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
           loading="lazy"
         />
-        {/* Top gradient + masthead */}
-        <div className="absolute top-0 left-0 right-0 px-2.5 py-2"
-          style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.5), transparent)" }}>
-          <span style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 900, letterSpacing: "0.22em", color: "white", textTransform: "uppercase", opacity: 0.9 }}>
-            Gallery
-          </span>
-        </div>
         {/* Bottom gradient + number + PDF button */}
         <div className="absolute bottom-0 left-0 right-0 px-2.5 pb-2.5 pt-8"
           style={{ background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)" }}>
