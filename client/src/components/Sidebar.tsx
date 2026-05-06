@@ -76,9 +76,7 @@ export default function Sidebar() {
                       {article.title}
                     </h4>
                     <div style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
-                      <span data-testid={`trending-read-time-${index}`}>{article.readTime} min</span>
-                      <span className="mx-1.5">·</span>
-                      <span data-testid={`trending-views-${index}`}>{article.views.toLocaleString()} views</span>
+                      <span data-testid={`trending-read-time-${index}`}>{article.readTime} min read</span>
                     </div>
                   </div>
                 </div>

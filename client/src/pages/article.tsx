@@ -1,7 +1,7 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Clock, Eye, ArrowLeft, ArrowRight, Edit } from "lucide-react";
+import { Clock, ArrowLeft, ArrowRight, Edit } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
@@ -191,10 +191,6 @@ export default function Article() {
                 <span data-testid="article-read-time">{article.readTime} min read</span>
               </span>
             )}
-            <span className="flex items-center gap-1">
-              <Eye className="h-3 w-3" />
-              <span data-testid="article-views">{article.views.toLocaleString()} views</span>
-            </span>
           </div>
         </header>
 
