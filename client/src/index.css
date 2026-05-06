@@ -109,11 +109,11 @@
 
 /* Gallery editorial styles */
 .article-card {
-  transition: border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .article-card:hover {
-  border-color: hsl(0 0% 4%);
+  background-color: hsl(0 0% 100%);
 }
 
 /* Section label with accent underline */
