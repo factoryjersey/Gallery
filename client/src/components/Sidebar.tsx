@@ -183,29 +183,32 @@ export default function Sidebar() {
               }}
             >
               {cartoonArticles.map((article: any, index: number) => (
-                <Link key={article.id} href={`/article/${article.slug}`}>
-                  <div
-                    className="group cursor-pointer shrink-0"
-                    style={{ width: "100%", minWidth: "100%", scrollSnapAlign: "start" }}
-                    data-testid={`cartoon-article-${index}`}
-                  >
-                    {article.featuredImage ? (
-                      <img
-                        src={article.featuredImage}
-                        alt={article.title}
-                        className="w-full h-auto block group-hover:opacity-80 transition-opacity duration-300"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div
-                        className="w-full flex items-center justify-center bg-[hsl(0,0%,94%)]"
-                        style={{ height: 240 }}
-                      >
-                        <Pencil className="w-5 h-5 text-border" />
-                      </div>
-                    )}
-                  </div>
-                </Link>
+                <div
+                  key={article.id}
+                  className="shrink-0"
+                  style={{ flex: "0 0 100%", scrollSnapAlign: "start" }}
+                  data-testid={`cartoon-article-${index}`}
+                >
+                  <Link href={`/article/${article.slug}`}>
+                    <div className="group cursor-pointer">
+                      {article.featuredImage ? (
+                        <img
+                          src={article.featuredImage}
+                          alt={article.title}
+                          className="w-full h-auto block group-hover:opacity-80 transition-opacity duration-300"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div
+                          className="w-full flex items-center justify-center bg-[hsl(0,0%,94%)]"
+                          style={{ height: 240 }}
+                        >
+                          <Pencil className="w-5 h-5 text-border" />
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                </div>
               ))}
             </div>
 
