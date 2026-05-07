@@ -11,6 +11,7 @@ import Category from "@/pages/category";
 import CurrentIssue from "@/pages/current-issue";
 import Archive from "@/pages/archive";
 import About from "@/pages/about";
+import MediaPack from "@/pages/media-pack";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/current-issue" component={CurrentIssue} />
       <Route path="/archive" component={Archive} />
       <Route path="/about" component={About} />
+      <Route path="/media-pack" component={MediaPack} />
       <Route component={NotFound} />
     </Switch>
   );

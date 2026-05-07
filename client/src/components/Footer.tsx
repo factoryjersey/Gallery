@@ -61,6 +61,11 @@ export default function Footer() {
                   <span className="hover:text-foreground transition-colors cursor-pointer">Back Issues</span>
                 </Link>
               </li>
+              <li>
+                <Link href="/media-pack">
+                  <span className="hover:text-foreground transition-colors cursor-pointer">Advertise</span>
+                </Link>
+              </li>
             </ul>
           </div>
 
