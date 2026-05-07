@@ -183,6 +183,57 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
           )}
         </div>
 
+        {/* Secondary articles strip */}
+        {secondaryArticles.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 border-t border-border divide-x divide-border">
+            {secondaryArticles.map((article) => (
+              <Link key={article.id} href={`/article/${article.slug}`}>
+                <div
+                  className="flex gap-4 py-5 px-4 hover:bg-[hsl(0,0%,98%)] transition-colors cursor-pointer group"
+                  data-testid={`featured-secondary-${article.id}`}
+                >
+                  {article.featuredImage && (
+                    <div className="shrink-0 w-20 h-16 overflow-hidden">
+                      <img
+                        src={article.featuredImage}
+                        alt={article.title}
+                        className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div
+                      className="mb-1"
+                      style={{
+                        fontFamily: "Arial, sans-serif",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: "hsl(182 55% 56%)",
+                      }}
+                    >
+                      {article.category.name}
+                    </div>
+                    <p
+                      className="line-clamp-2 group-hover:text-secondary transition-colors"
+                      style={{
+                        fontFamily: "Georgia, serif",
+                        fontSize: 14,
+                        lineHeight: 1.35,
+                        color: "hsl(0 0% 4%)",
+                        margin: 0,
+                      }}
+                    >
+                      {article.title}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
 
       </div>
     </section>
