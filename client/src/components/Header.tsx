@@ -227,11 +227,10 @@ export default function Header({ onSearch }: HeaderProps) {
   return (
     <header className="bg-white border-b border-border sticky top-0 z-50">
 
-      {/* Thin top bar */}
-      <div className="border-b border-border">
-        <div className="max-w-[1296px] mx-auto px-6 py-2 flex justify-between items-center"
-          style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}>
-          <span data-testid="current-date">{currentDate}</span>
+      {/* Top bar */}
+      <div className="border-b border-border" style={{ background: "#cfc5bb" }}>
+        <div className="max-w-[1296px] mx-auto px-6 pt-2 pb-2 md:pt-8 md:pb-2 flex justify-end items-end"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 12, color: "hsl(0 0% 35%)" }}>
           <Link href="/admin">
             <span className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" data-testid="admin-link">
               <UserCircle className="w-3.5 h-3.5" />
