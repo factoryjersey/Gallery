@@ -5,7 +5,11 @@ const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
+
+export const R2_PUBLIC_URL = (
+  process.env.R2_PUBLIC_URL ||
+  `https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev`
+).replace(/\/$/, '');
 
 if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME) {
   console.warn('R2 credentials not configured. File uploads will not work.');
@@ -51,4 +55,45 @@ export const deleteFromR2 = async (key: string): Promise<void> => {
 
 export const getR2PublicUrl = (key: string): string => {
   return `${R2_PUBLIC_URL}/${key}`;
+};
+
+/**
+ * Returns a RegExp that matches any R2 URL for this bucket.
+ * Handles both the configured public URL and the legacy r2.dev fallback.
+ */
+export const getR2UrlPattern = (flags = 'gi'): RegExp => {
+  const escaped = R2_PUBLIC_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escaped}/[^\\s"'<>)]+`, flags);
+};
+
+/**
+ * Like getR2UrlPattern but restricts to image extensions.
+ */
+export const getR2ImagePattern = (flags = 'gi'): RegExp => {
+  const escaped = R2_PUBLIC_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escaped}/[^\\s"'<>)]+\\.(?:jpg|jpeg|png|gif|webp)`, flags);
+};
+
+/**
+ * Extracts the storage key (path after the domain) from any R2 URL.
+ * Returns null if the URL is not a recognised R2 URL.
+ */
+export const extractR2Key = (url: string): string | null => {
+  if (!url) return null;
+  // Match configured public URL first
+  if (url.startsWith(R2_PUBLIC_URL + '/')) {
+    return url.slice(R2_PUBLIC_URL.length + 1);
+  }
+  // Fallback: any *.r2.dev URL
+  const m = url.match(/https?:\/\/[^/]*\.r2\.dev\/(.+)/);
+  return m ? m[1] : null;
+};
+
+/**
+ * Returns true if the given string looks like an R2 URL for this bucket
+ * or any r2.dev bucket.
+ */
+export const isR2Url = (url: string): boolean => {
+  if (!url) return false;
+  return url.startsWith(R2_PUBLIC_URL + '/') || url.includes('.r2.dev/');
 };

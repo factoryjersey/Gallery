@@ -10,7 +10,7 @@ import { z } from "zod";
 import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
 import { processImage, getPublicUrl } from "./imageProcessor";
-import { r2Client, uploadToR2, getR2PublicUrl } from "./r2Client";
+import { r2Client, uploadToR2, getR2PublicUrl, getR2UrlPattern, getR2ImagePattern, extractR2Key, isR2Url, R2_PUBLIC_URL } from "./r2Client";
 import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
