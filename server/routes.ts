@@ -69,6 +69,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/articles/current-issue", async (req, res) => {
     try {
       const issueParam = req.query.issue ? Number(req.query.issue) : null;
+      const limit = req.query.limit ? Number(req.query.limit) : 200;
 
       // Find the target issue number (param or max)
       const [{ maxIssue }] = await db
@@ -76,25 +77,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(articles);
       const targetIssue = issueParam || maxIssue;
 
-      if (!targetIssue) {
-        return res.json({ articles: [], edito: null, issueNumber: null });
+      let result;
+      if (targetIssue) {
+        // Articles with issue numbers — fetch by issue
+        result = await storage.getArticles({
+          status: "published",
+          limit: 200,
+          offset: 0,
+          orderBy: "publishedAt",
+          orderDir: "desc",
+          issueNumber: targetIssue,
+        });
+      } else {
+        // No issue numbers assigned — fall back to most recent published articles
+        result = await storage.getArticles({
+          status: "published",
+          limit: Math.max(limit, 20),
+          offset: 0,
+          orderBy: "publishedAt",
+          orderDir: "desc",
+        });
       }
-
-      // Get all articles for this issue
-      const result = await storage.getArticles({
-        status: "published",
-        limit: 200,
-        offset: 0,
-        orderBy: "publishedAt",
-        orderDir: "desc",
-        issueNumber: targetIssue,
-      });
 
       // Separate edito from the rest
       const edito = result.articles.find(a => a.category?.slug === "edito") || null;
       const issueArticles = result.articles.filter(a => a.category?.slug !== "edito" && a.contentType === "article");
 
-      res.json({ articles: issueArticles, edito, issueNumber: targetIssue });
+      res.json({ articles: issueArticles, edito, issueNumber: targetIssue || null });
     } catch (error) {
       console.error("Error fetching current issue:", error);
       res.status(500).json({ error: "Failed to fetch current issue" });

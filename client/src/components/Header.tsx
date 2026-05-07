@@ -138,7 +138,7 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
         </div>
       ) : articles.length === 0 ? (
         <p style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 60%)" }}>
-          No articles in the current 8-week window yet.
+          No articles available yet.
         </p>
       ) : (
         <div className="space-y-1 divide-y divide-border" onClick={onClose}>

@@ -68,8 +68,12 @@ export default function CurrentIssue() {
 
   const { data, isLoading } = useQuery<{ articles: any[]; edito: any; issueNumber: number | null }>({
     queryKey: ["/api/articles/current-issue", targetIssueNum],
-    queryFn: () => fetch(`/api/articles/current-issue?issue=${targetIssueNum}&limit=200`).then(r => r.json()),
-    enabled: !!targetIssueNum,
+    queryFn: () => {
+      const url = targetIssueNum
+        ? `/api/articles/current-issue?issue=${targetIssueNum}&limit=200`
+        : `/api/articles/current-issue?limit=200`;
+      return fetch(url).then(r => r.json());
+    },
   });
 
   const { data: categoriesData } = useQuery<{ categories: any[] }>({
