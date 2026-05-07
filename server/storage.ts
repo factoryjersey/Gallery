@@ -475,7 +475,7 @@ export class DatabaseStorage implements IStorage {
       .from(articles)
       .leftJoin(authors, eq(articles.authorId, authors.id))
       .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(and(eq(articles.isFeatured, true), eq(articles.status, 'published')))
+      .where(and(eq(articles.isFeatured, true), eq(articles.status, 'published'), ne(articles.contentType, 'gallery')))
       .orderBy(asc(articles.featuredOrder), desc(articles.publishedAt))
       .limit(limit);
 
@@ -503,7 +503,7 @@ export class DatabaseStorage implements IStorage {
 
     const pool = (await this.getArticles({ status: 'published', contentType: 'article', limit: needed * 10, orderBy: 'publishedAt', orderDir: 'desc' })).articles;
     const filler = pool
-      .filter(a => a.featuredImage && !pinnedIds.includes(a.id) && !excludedCatIds.has(a.categoryId))
+      .filter(a => a.featuredImage && !pinnedIds.includes(a.id) && !excludedCatIds.has(a.categoryId) && a.contentType !== 'gallery')
       .slice(0, needed);
 
     return [...pinnedWithTags, ...filler];
