@@ -13,17 +13,26 @@ const editions2026 = [
 
 const readerProfiles = [
   {
+    key: "urban",
+    image: "/media/reader-urban.jpg",
+    superhead: "Forward-thinking ABC1 Readership",
     title: "The Urban 20-Something",
     subtitle: "Our core readers for 20 years.",
     copy: "It was our profile when we began producing Gallery and continues to form the backbone of our targeting and content. Gallery acts as a reflection for this audience as they begin and grow through their careers, start to spend, get married and buy their first homes. This audience are progressive, experientially focused, upwardly mobile and desire new products and services. They care about provenance and supporting small businesses.",
   },
   {
+    key: "rebel",
+    image: "/media/reader-rebel.jpg",
+    superhead: "Readers from Eighteen to Eighty",
     title: "The Middle-Age Rebel",
     subtitle: "Established and rebellious.",
     copy: "The core audience that grew up with Gallery are now in their 40s and have progressed in their careers and are more settled. They have families, are more financially secure and are building their forever homes. They're replacing matching and hatching with collecting key pieces and living for that stolen special night. We profile their businesses, feature their work and celebrate their achievements.",
   },
   {
-    title: "The Quicksilvers",
+    key: "silver",
+    image: "/media/reader-silver.jpg",
+    superhead: "People who Appreciate Style & Substance",
+    title: "The Quick Silvers",
     subtitle: "Staying relevant.",
     copy: "We've always been flattered that the more mature reader looks to connect with our vibrant approach. Whether it's spotting their children in our events section or grandchildren in the Paparazzi nightlife pages, this audience still strives to stay on the ball as they maintain their mature gardens and stay engaged in the arts. They want to stay versed with the latest restaurants and entertainment, and have time and money to spend.",
   },
@@ -63,6 +72,25 @@ const sections = [
     copy: "Gallery is Jersey's gallery of the island. We cover corporate, charity and nightlife events across the island — the best photography of the people that make Jersey tick.",
   },
 ];
+
+const rateCard = [
+  { ad: "Full Page", size: "210×297mm + 3mm bleed", single: 1350, two: 1215, four: 1080, annualDD: 945, annualPre: 878 },
+  { ad: "Half Page", size: "Portrait 95×277mm / Landscape 190×137mm", single: 715, two: 644, four: 572, annualDD: 501, annualPre: 465 },
+  { ad: "Quarter Page", size: "93×137mm", single: 375, two: 338, four: 300, annualDD: 263, annualPre: 244 },
+  { ad: "Double Page Spread", size: "420×297mm + 3mm bleed", single: 1995, two: 1796, four: 1596, annualDD: 1397, annualPre: 1297 },
+  { ad: "Inside Front Cover", size: "210×297mm + 3mm bleed", single: 1895, two: 1706, four: 1516, annualDD: 1327, annualPre: 1232 },
+  { ad: "Inside Front DPS", size: "420×297mm + 3mm bleed", single: 1995, two: 1796, four: 1596, annualDD: 1397, annualPre: 1297 },
+  { ad: "Inside Back", size: "210×297mm + 3mm bleed", single: 1595, two: 1436, four: 1276, annualDD: 1117, annualPre: 1037 },
+  { ad: "Back Cover", size: "210×297mm + 3mm bleed", single: 2275, two: 2048, four: 1820, annualDD: 1593, annualPre: 1479 },
+  { ad: "Page + Page*", size: "210×297mm + 3mm bleed / 500 words", single: 1350, two: 1215, four: 1080, annualDD: 945, annualPre: 878 },
+  { ad: "Quarter + Quarter*", size: "93×137mm + 3mm bleed / 200 words", single: 525, two: 473, four: 420, annualDD: 368, annualPre: 341 },
+  { ad: "Intro Banner", size: "60×190mm", single: 475, two: 428, four: 380, annualDD: 333, annualPre: 309 },
+  { ad: "Solus Banner ROP", size: "60×190mm + 20% creative breakout", single: 475, two: 428, four: 380, annualDD: 333, annualPre: 309 },
+  { ad: "Nightlife Banner DPS", size: "30×400mm", single: 340, two: 306, four: 272, annualDD: 238, annualPre: 221 },
+  { ad: "Event Half Page*", size: "6 images and 100 word description", single: 275, two: null, four: null, annualDD: null, annualPre: null },
+];
+
+const fmt = (v: number | null) => v === null ? "—" : `£${v.toLocaleString()}`;
 
 export default function MediaPack() {
   return (
@@ -166,7 +194,7 @@ export default function MediaPack() {
                 </tr>
               </thead>
               <tbody>
-                {editions2026.map((ed, i) => (
+                {editions2026.map((ed) => (
                   <tr key={ed.number} style={{ borderBottom: "1px solid hsl(0 0% 90%)" }}>
                     <td className="py-4" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(0 0% 4%)", paddingRight: 24 }}>
                       #{ed.number}
@@ -256,24 +284,46 @@ export default function MediaPack() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* Reader profile cards with illustrations */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-white/10">
             {readerProfiles.map(p => (
-              <div key={p.title} className="border border-white/20 p-8">
-                <h3
-                  className="mb-1"
-                  style={{ fontFamily: "Georgia, serif", fontSize: 20, fontWeight: 400, color: "white" }}
-                >
-                  {p.title}
-                </h3>
-                <p
-                  className="mb-4"
-                  style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "hsl(182 55% 56%)" }}
-                >
-                  {p.subtitle}
-                </p>
-                <p style={{ fontFamily: "Georgia, serif", fontSize: 15, lineHeight: 1.75, color: "hsl(0 0% 75%)" }}>
-                  {p.copy}
-                </p>
+              <div key={p.key} className="border-b md:border-b-0 md:border-r border-white/10 last:border-0 flex flex-col">
+                {/* Superhead */}
+                <div className="px-8 pt-8 pb-4">
+                  <p
+                    style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "hsl(182 55% 56%)" }}
+                  >
+                    {p.superhead}
+                  </p>
+                </div>
+                {/* Illustration */}
+                <div className="bg-white mx-8 mb-0">
+                  <img
+                    src={p.image}
+                    alt={p.title}
+                    className="w-full object-contain"
+                    style={{ maxHeight: 340 }}
+                    data-testid={`img-reader-${p.key}`}
+                  />
+                </div>
+                {/* Text */}
+                <div className="px-8 py-6 flex flex-col flex-1">
+                  <h3
+                    className="mb-1"
+                    style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "white" }}
+                  >
+                    {p.title}
+                  </h3>
+                  <p
+                    className="mb-4"
+                    style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 400, fontStyle: "italic", color: "hsl(182 55% 56%)" }}
+                  >
+                    {p.subtitle}
+                  </p>
+                  <p style={{ fontFamily: "Georgia, serif", fontSize: 14, lineHeight: 1.75, color: "hsl(0 0% 70%)" }}>
+                    {p.copy}
+                  </p>
+                </div>
               </div>
             ))}
           </div>
@@ -358,6 +408,144 @@ export default function MediaPack() {
         </div>
       </section>
 
+      {/* Rate Card */}
+      <section className="py-16 bg-background border-b border-border">
+        <div className="max-w-[1296px] mx-auto px-6">
+          <div className="mb-10">
+            <div
+              className="mb-3"
+              style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "hsl(182 55% 56%)" }}
+            >
+              Advertising Rates
+            </div>
+            <h2 style={{ fontFamily: "Georgia, serif", fontSize: "clamp(24px, 4vw, 36px)", fontWeight: 400, color: "hsl(0 0% 4%)" }}>
+              Standard Rate Card & Booking Discounts
+            </h2>
+            <p className="mt-3 max-w-[720px]" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 43%)", lineHeight: 1.6 }}>
+              Considering our print run and coverage, our rates offer strong value, particularly when booked as a campaign of multiple bookings. We avoid overprice/slash pricing and keep rates competitive and relevant to our reach and coverage. We're also able to offer editorial coverage to compliment clients' bookings. All prices subject to 5% GST.
+            </p>
+          </div>
+
+          {/* Desktop rate card table */}
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full border-collapse" data-testid="table-rate-card">
+              <thead>
+                <tr style={{ borderBottom: "2px solid hsl(0 0% 4%)" }}>
+                  <th className="pb-3 text-left" style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 4%)", paddingRight: 20, minWidth: 160 }}>
+                    Advertisement
+                  </th>
+                  <th className="pb-3 text-left" style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 4%)", paddingRight: 20, minWidth: 200 }}>
+                    Size
+                  </th>
+                  <th className="pb-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 4%)", paddingRight: 16 }}>
+                    Single
+                  </th>
+                  <th className="pb-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 40%)", paddingRight: 16 }}>
+                    2 Issues<br />
+                    <span style={{ fontWeight: 400, fontSize: 9 }}>10% off</span>
+                  </th>
+                  <th className="pb-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(0 0% 40%)", paddingRight: 24 }}>
+                    4 Issues<br />
+                    <span style={{ fontWeight: 400, fontSize: 9 }}>20% off</span>
+                  </th>
+                  <th className="pb-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(182 40% 40%)", paddingRight: 12, background: "hsl(182 30% 96%)", paddingLeft: 12 }}>
+                    Annual (6)<br />
+                    <span style={{ fontWeight: 400, fontSize: 9 }}>Direct Debit</span>
+                  </th>
+                  <th className="pb-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "hsl(182 40% 40%)", paddingLeft: 12, background: "hsl(182 30% 96%)" }}>
+                    Annual (6)<br />
+                    <span style={{ fontWeight: 400, fontSize: 9 }}>Prepaid</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rateCard.map((row, i) => (
+                  <tr key={row.ad} style={{ borderBottom: "1px solid hsl(0 0% 90%)", background: i % 2 === 0 ? "white" : "hsl(0 0% 98%)" }}>
+                    <td className="py-3" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 600, color: "hsl(0 0% 4%)", paddingRight: 20 }}>
+                      {row.ad}
+                    </td>
+                    <td className="py-3" style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "hsl(0 0% 50%)", paddingRight: 20 }}>
+                      {row.size}
+                    </td>
+                    <td className="py-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(0 0% 4%)", paddingRight: 16 }}>
+                      {fmt(row.single)}
+                    </td>
+                    <td className="py-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 30%)", paddingRight: 16 }}>
+                      {fmt(row.two)}
+                    </td>
+                    <td className="py-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 30%)", paddingRight: 24 }}>
+                      {fmt(row.four)}
+                    </td>
+                    <td className="py-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(182 50% 35%)", paddingRight: 12, paddingLeft: 12, background: "hsl(182 30% 96%)" }}>
+                      {fmt(row.annualDD)}
+                    </td>
+                    <td className="py-3 text-right" style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(182 50% 35%)", paddingLeft: 12, background: "hsl(182 30% 96%)" }}>
+                      {fmt(row.annualPre)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile rate cards */}
+          <div className="lg:hidden space-y-3">
+            {rateCard.map(row => (
+              <div key={row.ad} className="bg-white border border-border p-5">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(0 0% 4%)" }}>{row.ad}</div>
+                    <div style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "hsl(0 0% 50%)", marginTop: 2 }}>{row.size}</div>
+                  </div>
+                  <div style={{ fontFamily: "Arial, sans-serif", fontSize: 18, fontWeight: 700, color: "hsl(0 0% 4%)" }}>{fmt(row.single)}</div>
+                </div>
+                <div className="flex gap-4 mt-3 pt-3 border-t border-border flex-wrap">
+                  <div>
+                    <div style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "hsl(0 0% 60%)" }}>2 issues (−10%)</div>
+                    <div style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 30%)" }}>{fmt(row.two)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "hsl(0 0% 60%)" }}>4 issues (−20%)</div>
+                    <div style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 30%)" }}>{fmt(row.four)}</div>
+                  </div>
+                  {row.annualDD !== null && (
+                    <div>
+                      <div style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "hsl(182 50% 40%)" }}>Annual DD</div>
+                      <div style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(182 50% 35%)" }}>{fmt(row.annualDD)}</div>
+                    </div>
+                  )}
+                  {row.annualPre !== null && (
+                    <div>
+                      <div style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "hsl(182 50% 40%)" }}>Annual Prepaid</div>
+                      <div style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(182 50% 35%)" }}>{fmt(row.annualPre)}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footnotes */}
+          <div className="mt-6 pt-6 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <p style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 40%)", lineHeight: 1.6 }}>
+                <strong style={{ color: "hsl(0 0% 20%)" }}>Advertorial</strong> — Client submitted/approved editorial charged at 10% premium on equivalent advertising space rate. Spaces available from quarter page column size.
+              </p>
+            </div>
+            <div>
+              <p style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 40%)", lineHeight: 1.6 }}>
+                <strong style={{ color: "hsl(0 0% 20%)" }}>Artwork creation</strong> — If you don't have an advertising agency/designer we can help. Simply submit content by the editorial deadline (or sooner!) and we can artwork a design for you.
+              </p>
+            </div>
+            <div className="md:col-span-2">
+              <p style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "hsl(0 0% 60%)", lineHeight: 1.6 }}>
+                * Event attendance / coverage free for clients with booked campaigns &nbsp;|&nbsp; ** Only available on specific features &nbsp;|&nbsp; Media agency package discount 10% &nbsp;|&nbsp; Charity discount 40% &nbsp;|&nbsp; Strategic Partner rate 50%
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-16 bg-background">
         <div className="max-w-[720px] mx-auto px-6 text-center">
@@ -377,7 +565,7 @@ export default function MediaPack() {
             className="mb-8"
             style={{ fontFamily: "Georgia, serif", fontSize: 17, lineHeight: 1.75, color: "hsl(0 0% 40%)", fontStyle: "italic" }}
           >
-            Download the full media pack for rate cards, ad specifications, and detailed readership data, or get in touch to discuss a campaign.
+            Download the full media pack for ad specifications and detailed readership data, or get in touch to discuss a campaign.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
