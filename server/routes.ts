@@ -1395,7 +1395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Extract all image URLs from article content
-      const imageUrlPattern = /https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^\s"'<>)]+\.(jpg|jpeg|png|gif|webp)/gi;
+      const imageUrlPattern = getR2ImagePattern('gi');
       const usedImages = new Set<string>();
 
       for (const article of allArticles.articles) {
@@ -1413,11 +1413,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Extract just the path (everything after .r2.dev/)
-      const usedPaths = Array.from(usedImages).map(url => {
-        const match = url.match(/https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/(.+)/);
-        return match ? match[1] : url;
-      });
+      // Extract just the path (storage key) from each URL
+      const usedPaths = Array.from(usedImages).map(url => extractR2Key(url) || url);
 
       // Group by year and file
       const pathsByYear: Record<string, string[]> = {};
@@ -1461,11 +1458,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         orderDir: 'desc',
       });
 
-      const r2Pattern = /https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^\s"'<>)]+/gi;
+      const r2Pattern = getR2UrlPattern('gi');
       const usedUrls = new Set<string>();
 
       for (const article of allArticles.articles) {
-        if (article.featuredImage && article.featuredImage.includes('r2.dev')) {
+        if (article.featuredImage && isR2Url(article.featuredImage)) {
           usedUrls.add(article.featuredImage);
         }
         if (article.content) {
@@ -1604,7 +1601,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let newContent = article.content || '';
         let newFeaturedImage = article.featuredImage;
 
-        const variantPattern = /(https:\/\/pub-3b96f5fc8ba0456f9ffd861fc06e5e97\.r2\.dev\/[^"'\s<>)]+)-(thumbnail|medium|large)\.(jpg|jpeg|png|gif|webp)/gi;
+        const _r2Escaped = R2_PUBLIC_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const variantPattern = new RegExp(`(${_r2Escaped}/[^"'\\s<>)]+)-(thumbnail|medium|large)\\.(jpg|jpeg|png|gif|webp)`, 'gi');
         
         // Collect all matches first to process them with async calls
         const matches: Array<{ match: string, baseUrl: string, variant: string, ext: string }> = [];
@@ -1698,7 +1696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const obj of r2Objects) {
         if (!obj.Key || !imageExtensions.test(obj.Key)) continue;
         
-        const url = `https://pub-${process.env.R2_ACCOUNT_ID}.r2.dev/${obj.Key}`;
+        const url = getR2PublicUrl(obj.Key!);
         r2ImageMap.set(url, { size: obj.Size || 0, key: obj.Key, url });
 
         // Group by base name for finding largest variants
@@ -1734,7 +1732,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contentMatches.forEach(url => usedImageUrls.add(url));
 
         // Add featured image
-        if (article.featuredImage?.includes('r2.dev')) {
+        if (article.featuredImage && isR2Url(article.featuredImage)) {
           usedImageUrls.add(article.featuredImage);
         }
       }
@@ -2002,9 +2000,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Handle R2 URLs (already correct, extract key)
-      if (urlOrPath.includes('.r2.dev')) {
-        const url = new URL(urlOrPath);
-        return url.pathname.substring(1); // Remove leading /
+      if (isR2Url(urlOrPath)) {
+        return extractR2Key(urlOrPath) || new URL(urlOrPath).pathname.substring(1);
       }
       
       // Handle wp-content/ URLs with year pattern
@@ -2210,8 +2207,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updates: [] as any[]
       };
       
-      const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
-      
       // Helper: resolve a single URL to R2, returns r2Url string or null
       const resolveToR2 = async (originalUrl: string): Promise<string | null> => {
         const r2Key = normalizeToR2Key(originalUrl);
@@ -2243,7 +2238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // --- Fix featured image ---
         const isNonR2Featured = featuredImage &&
-          !featuredImage.includes('.r2.dev') &&
+          !isR2Url(featuredImage) &&
           (featuredImage.includes('gallerymagazine.co.uk') ||
            featuredImage.includes('gallery.je') ||
            featuredImage.includes('storage.googleapis.com') ||
@@ -2315,7 +2310,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
 
     const WP_API = 'https://www.gallery.je/wp-json/wp/v2';
-    const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev';
     const afterDate = (req.query.after as string) || '2025-10-08T00:00:00';
 
     try {

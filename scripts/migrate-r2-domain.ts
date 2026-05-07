@@ -12,7 +12,8 @@
  * Add --apply to actually run the migration.
  */
 
-import { Pool } from 'pg';
+import pg from 'pg';
+const { Pool } = pg;
 
 const OLD_URL = (process.env.OLD_URL || 'https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev').replace(/\/$/, '');
 const NEW_URL = (process.env.NEW_URL || '').replace(/\/$/, '');
@@ -40,7 +41,7 @@ async function main() {
     const migrations: Array<{ label: string; table: string; column: string; isJson?: boolean }> = [
       { label: 'articles.content',        table: 'articles', column: 'content' },
       { label: 'articles.featured_image', table: 'articles', column: 'featured_image' },
-      { label: 'media.url',               table: 'media',    column: 'url' },
+      { label: 'media.object_path',       table: 'media',    column: 'object_path' },
       { label: 'media.variants (JSON)',   table: 'media',    column: 'variants', isJson: true },
       { label: 'issues.pdf_url',          table: 'issues',   column: 'pdf_url' },
     ];
