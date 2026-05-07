@@ -1286,6 +1286,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/analytics/page-views", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const categoryId = req.query.categoryId as string | undefined;
+      const period = req.query.period as string | undefined; // '7d' | '30d' | '90d' | 'all'
+
+      let dateFilter: Date | undefined;
+      if (period && period !== 'all') {
+        const days = parseInt(period);
+        dateFilter = new Date();
+        dateFilter.setDate(dateFilter.getDate() - days);
+      }
+
+      // Top articles by views
+      const topArticlesResult = await db.execute(sql`
+        SELECT
+          a.id, a.title, a.slug, a.views, a.published_at,
+          a.status,
+          c.name  AS category_name,
+          c.id    AS category_id,
+          au.name AS author_name
+        FROM articles a
+        JOIN categories c  ON a.category_id = c.id
+        JOIN authors   au ON a.author_id    = au.id
+        WHERE a.views > 0
+          ${categoryId ? sql`AND a.category_id = ${categoryId}` : sql``}
+          ${dateFilter  ? sql`AND a.published_at >= ${dateFilter}` : sql``}
+        ORDER BY a.views DESC
+        LIMIT ${limit}
+      `);
+
+      // Views by category
+      const byCategoryResult = await db.execute(sql`
+        SELECT
+          c.id, c.name,
+          COUNT(a.id)::int    AS article_count,
+          COALESCE(SUM(a.views), 0)::int AS total_views
+        FROM categories c
+        LEFT JOIN articles a ON a.category_id = c.id
+          ${dateFilter ? sql`AND a.published_at >= ${dateFilter}` : sql``}
+        GROUP BY c.id, c.name
+        HAVING COALESCE(SUM(a.views), 0) > 0
+        ORDER BY total_views DESC
+      `);
+
+      // Views by author
+      const byAuthorResult = await db.execute(sql`
+        SELECT
+          au.id, au.name,
+          COUNT(a.id)::int    AS article_count,
+          COALESCE(SUM(a.views), 0)::int AS total_views
+        FROM authors au
+        LEFT JOIN articles a ON a.author_id = au.id
+          ${dateFilter ? sql`AND a.published_at >= ${dateFilter}` : sql``}
+        GROUP BY au.id, au.name
+        HAVING COALESCE(SUM(a.views), 0) > 0
+        ORDER BY total_views DESC
+        LIMIT 20
+      `);
+
+      // Summary totals
+      const totalsResult = await db.execute(sql`
+        SELECT
+          COUNT(*)::int                  AS article_count,
+          COALESCE(SUM(views), 0)::int   AS total_views,
+          COALESCE(AVG(views), 0)::float AS avg_views,
+          COALESCE(MAX(views), 0)::int   AS max_views
+        FROM articles
+        WHERE views > 0
+          ${dateFilter ? sql`AND published_at >= ${dateFilter}` : sql``}
+      `);
+
+      res.json({
+        summary: totalsResult.rows[0],
+        topArticles: topArticlesResult.rows,
+        byCategory: byCategoryResult.rows,
+        byAuthor: byAuthorResult.rows,
+      });
+    } catch (error) {
+      console.error("Error fetching page views analytics:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
   // WordPress author update (preserves content and images)
   app.post("/api/admin/wordpress-update-authors", upload.single("file"), async (req, res) => {
     try {
