@@ -10,6 +10,19 @@ import {
 import { db } from "./db";
 import { eq, desc, asc, like, ilike, and, or, inArray, count, sql, isNotNull, ne } from "drizzle-orm";
 
+function decodeHtml(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
+}
+
+function normaliseCategory<T extends { name: string }>(cat: T): T {
+  return { ...cat, name: decodeHtml(cat.name) };
+}
+
 export interface IStorage {
   // User methods (legacy)
   getUser(id: string): Promise<User | undefined>;
@@ -132,12 +145,12 @@ export class DatabaseStorage implements IStorage {
   // Category methods
   async getCategory(id: string): Promise<Category | undefined> {
     const [category] = await db.select().from(categories).where(eq(categories.id, id));
-    return category || undefined;
+    return category ? normaliseCategory(category) : undefined;
   }
 
   async getCategoryBySlug(slug: string): Promise<Category | undefined> {
     const [category] = await db.select().from(categories).where(eq(categories.slug, slug));
-    return category || undefined;
+    return category ? normaliseCategory(category) : undefined;
   }
 
   async createCategory(category: InsertCategory): Promise<Category> {
@@ -156,7 +169,8 @@ export class DatabaseStorage implements IStorage {
 
   async getAllCategories(): Promise<Category[]> {
     // Order by parentId first (nulls first for top-level), then by name
-    return await db.select().from(categories).orderBy(asc(categories.parentId), asc(categories.name));
+    const rows = await db.select().from(categories).orderBy(asc(categories.parentId), asc(categories.name));
+    return rows.map(normaliseCategory);
   }
 
   // Tag methods
