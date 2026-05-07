@@ -48,7 +48,7 @@ function CoverCard({ issue }: { issue: Issue }) {
             {issue.pdfUrl && (
               <a href={issue.pdfUrl} download target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
-                className="flex items-center gap-1 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                className="flex items-center gap-1 px-2 py-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
                 style={{ background: "hsl(182 55% 56%)", fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, color: "hsl(0 0% 4%)", letterSpacing: "0.08em", textTransform: "uppercase" }}
                 data-testid={`download-${issue.number}`}>
                 <Download className="w-2.5 h-2.5" />
@@ -137,7 +137,7 @@ export default function Archive() {
             <BookOpen className="w-4 h-4" />
             Back Issues
           </div>
-          <h1 style={{ fontFamily: "Georgia, serif", fontSize: 42, fontWeight: 400, letterSpacing: "-0.5px", color: "hsl(0 0% 4%)" }}>
+          <h1 style={{ fontFamily: "Georgia, serif", fontSize: "clamp(28px, 6vw, 42px)", fontWeight: 400, letterSpacing: "-0.5px", color: "hsl(0 0% 4%)" }}>
             The Archive
           </h1>
           <p className="mt-2" style={{ fontFamily: "Georgia, serif", fontSize: 16, fontStyle: "italic", color: "hsl(0 0% 43%)", lineHeight: 1.6 }}>
@@ -154,7 +154,7 @@ export default function Archive() {
 
       {isLoading ? (
         <div className="max-w-[1296px] mx-auto px-6 py-16">
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
             {Array.from({ length: 16 }).map((_, i) => (
               <div key={i} className="bg-border animate-pulse w-full" style={{ aspectRatio: "2/3" }} />
             ))}
@@ -175,7 +175,7 @@ export default function Archive() {
                   {byYear.get(year)!.length} {byYear.get(year)!.length === 1 ? "issue" : "issues"}
                 </span>
               </div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3 md:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3 md:gap-4">
                 {byYear.get(year)!.map(issue => (
                   <CoverCard key={issue.id} issue={issue} />
                 ))}
