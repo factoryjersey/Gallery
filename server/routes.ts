@@ -2581,30 +2581,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ── TEMPORARY: One-time issues seed ──────────────────────────────────────────
-  app.post("/api/admin/seed-issues", async (_req, res) => {
-    try {
-      const existing = await db.select({ count: sql<number>`count(*)` }).from(issues);
-      const currentCount = Number((existing[0] as any).count);
-      if (currentCount > 0) {
-        return res.json({ message: `Already seeded: ${currentCount} issues exist`, seeded: 0 });
-      }
-      const seedData = (await import("./seeds/issues-seed.json", { assert: { type: "json" } })).default as any[];
-      for (const row of seedData) {
-        await db.execute(sql`
-          INSERT INTO issues (id, number, title, cover_image, pdf_url, cover_image_alt, published_at, display_label, created_at)
-          VALUES (${row.id}, ${row.number}, ${row.title}, ${row.coverImage ?? null}, ${row.pdfUrl ?? null},
-                  ${row.coverImageAlt ?? null}, ${row.publishedAt ? new Date(row.publishedAt) : null},
-                  ${row.displayLabel ?? null}, ${row.createdAt ? new Date(row.createdAt) : new Date()})
-          ON CONFLICT (number) DO NOTHING
-        `);
-      }
-      res.json({ message: "Issues seeded successfully", seeded: seedData.length });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // ── Issues / Archive ─────────────────────────────────────────────────────────
 
   // GET all issues
