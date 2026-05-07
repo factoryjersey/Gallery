@@ -194,19 +194,6 @@ export default function Article() {
           </div>
         </header>
 
-        {/* Featured image */}
-        {article.featuredImage && (
-          <div className="mb-8 -mx-6">
-            <img
-              src={article.featuredImage}
-              alt={article.title}
-              className="w-full object-cover"
-              style={{ maxHeight: 480 }}
-              data-testid="article-featured-image"
-            />
-          </div>
-        )}
-
         {/* Body content */}
         {article.contentType === "gallery" ? (
           <PaparazziGallery content={article.content} />
