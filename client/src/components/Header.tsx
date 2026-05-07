@@ -225,23 +225,10 @@ export default function Header({ onSearch }: HeaderProps) {
   };
 
   return (
-    <header className="bg-white border-b border-border sticky top-0 z-50">
-
-      {/* Top bar */}
-      <div className="border-b border-border" style={{ background: "#cfc5bb" }}>
-        <div className="max-w-[1296px] mx-auto px-6 pt-2 pb-2 md:pt-8 md:pb-2 flex justify-end items-end"
-          style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 12, color: "hsl(0 0% 35%)" }}>
-          <Link href="/admin">
-            <span className="flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer" data-testid="admin-link">
-              <UserCircle className="w-3.5 h-3.5" />
-              Admin
-            </span>
-          </Link>
-        </div>
-      </div>
+    <header className="border-b border-border sticky top-0 z-50" style={{ background: "hsl(50 14% 95%)" }}>
 
       {/* Masthead */}
-      <div className="max-w-[1296px] mx-auto px-6 py-4 flex items-center gap-4 relative">
+      <div className="max-w-[1296px] mx-auto px-6 py-6 flex items-center gap-4 relative">
         {/* Hamburger — mobile only */}
         <button
           className="lg:hidden text-foreground hover:opacity-70 transition-opacity"
@@ -264,8 +251,20 @@ export default function Header({ onSearch }: HeaderProps) {
           />
         </Link>
 
-        {/* Push search icon to the right */}
+        {/* Push right-side items */}
         <div className="flex-1" />
+
+        {/* Admin link — desktop only */}
+        <Link href="/admin" className="hidden lg:block">
+          <span
+            className="flex items-center gap-1 hover:text-secondary transition-colors cursor-pointer"
+            style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}
+            data-testid="admin-link"
+          >
+            <UserCircle className="w-3.5 h-3.5" />
+            Admin
+          </span>
+        </Link>
 
         <button
           onClick={() => setIsSearchExpanded(!isSearchExpanded)}
