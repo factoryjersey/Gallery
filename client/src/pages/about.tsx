@@ -6,19 +6,37 @@ export default function About() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      <section className="bg-white border-b border-border py-10">
-        <div className="max-w-[1296px] mx-auto px-6 text-center">
+      {/* Banner */}
+      <div
+        className="w-full flex items-center justify-center text-center px-6"
+        style={{
+          minHeight: "clamp(320px, 45vw, 560px)",
+          backgroundImage: "linear-gradient(rgba(80,30,120,0.55), rgba(80,30,120,0.55)), url('/media/gallery-collage.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center top",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
+        <div className="flex flex-col items-center">
           <div
-            className="mb-3"
-            style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "hsl(182 55% 56%)" }}
+            className="mb-4"
+            style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}
           >
             About Gallery
           </div>
-          <h1 style={{ fontFamily: "Georgia, serif", fontSize: "clamp(28px, 6vw, 42px)", fontWeight: 400, letterSpacing: "-0.5px", color: "hsl(0 0% 4%)" }}>
-            Who We Are
+          <h1
+            style={{ fontFamily: "Georgia, serif", fontSize: "clamp(28px, 5vw, 52px)", fontWeight: 400, letterSpacing: "-0.5px", color: "#fff", margin: 0 }}
+          >
+            Printed (still) Matters.
           </h1>
+          <p
+            className="max-w-xl"
+            style={{ fontFamily: "Georgia, serif", fontSize: "clamp(14px, 1.8vw, 18px)", color: "rgba(255,255,255,0.85)", lineHeight: 1.6, margin: "20px auto 0" }}
+          >
+            Gallery has been setting the standard for producing quality print media in Jersey since 2004.
+          </p>
         </div>
-      </section>
+      </div>
 
       <section className="py-16 bg-background">
         <div className="max-w-[720px] mx-auto px-6">
