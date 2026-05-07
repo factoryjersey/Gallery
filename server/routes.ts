@@ -1083,7 +1083,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               author = await storage.createAuthor({
                 name: authorName,
                 email: authorEmail,
-                bio: `Content author imported from WordPress`,
+                bio: '',
               });
               importResults.authors++;
             }

@@ -23,6 +23,18 @@ function normaliseCategory<T extends { name: string }>(cat: T): T {
   return { ...cat, name: decodeHtml(cat.name) };
 }
 
+const WP_PLACEHOLDER_BIOS = [
+  'content author imported from wordpress',
+  'content imported from wordpress',
+];
+
+function normaliseAuthor<T extends { bio: string | null }>(author: T): T {
+  if (author.bio && WP_PLACEHOLDER_BIOS.includes(author.bio.toLowerCase())) {
+    return { ...author, bio: '' };
+  }
+  return author;
+}
+
 export interface IStorage {
   // User methods (legacy)
   getUser(id: string): Promise<User | undefined>;
@@ -115,7 +127,7 @@ export class DatabaseStorage implements IStorage {
   // Author methods
   async getAuthor(id: string): Promise<Author | undefined> {
     const [author] = await db.select().from(authors).where(eq(authors.id, id));
-    return author || undefined;
+    return author ? normaliseAuthor(author) : undefined;
   }
 
   async getAuthorByEmail(email: string): Promise<Author | undefined> {
@@ -222,8 +234,8 @@ export class DatabaseStorage implements IStorage {
 
     return {
       ...result[0].article,
-      author: result[0].author,
-      category: result[0].category,
+      author: normaliseAuthor(result[0].author),
+      category: normaliseCategory(result[0].category),
       tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
     };
   }
@@ -251,8 +263,8 @@ export class DatabaseStorage implements IStorage {
 
     return {
       ...result[0].article,
-      author: result[0].author,
-      category: result[0].category,
+      author: normaliseAuthor(result[0].author),
+      category: normaliseCategory(result[0].category),
       tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
     };
   }
@@ -280,8 +292,8 @@ export class DatabaseStorage implements IStorage {
 
     return {
       ...result[0].article,
-      author: result[0].author,
-      category: result[0].category,
+      author: normaliseAuthor(result[0].author),
+      category: normaliseCategory(result[0].category),
       tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
     };
   }
@@ -447,8 +459,8 @@ export class DatabaseStorage implements IStorage {
 
       articlesWithTags.push({
         ...row.article,
-        author: row.author,
-        category: row.category,
+        author: normaliseAuthor(row.author),
+        category: normaliseCategory(row.category),
         tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
       });
     }
@@ -534,8 +546,8 @@ export class DatabaseStorage implements IStorage {
 
       articlesWithTags.push({
         ...row.article,
-        author: row.author,
-        category: row.category,
+        author: normaliseAuthor(row.author),
+        category: normaliseCategory(row.category),
         tags: tagResults.map(at => at.tag).filter(Boolean) as Tag[],
       });
     }
