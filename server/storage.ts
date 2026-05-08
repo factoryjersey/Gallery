@@ -19,8 +19,14 @@ function decodeHtml(str: string): string {
     .replace(/&#039;/g, "'");
 }
 
-function normaliseCategory<T extends { name: string }>(cat: T): T {
-  return { ...cat, name: decodeHtml(cat.name) };
+function normaliseCategory<T extends { name: string; description?: string | null }>(cat: T): T {
+  const desc = cat.description;
+  const isPlaceholder = desc && desc.toLowerCase().trim() === 'imported from wordpress';
+  return {
+    ...cat,
+    name: decodeHtml(cat.name),
+    description: isPlaceholder ? null : desc,
+  };
 }
 
 const WP_PLACEHOLDER_BIOS = [
