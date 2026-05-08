@@ -17,7 +17,10 @@ export function log(message: string, source = "express") {
 export async function setupVite(app: Express, server: Server) {
   const { createServer: createViteServer, createLogger } = await import("vite");
   const { nanoid } = await import("nanoid");
-  const viteConfig = (await import("../vite.config")).default;
+  // Hide the path from esbuild's static analysis so it doesn't inline
+  // vite.config.ts (which statically imports "vite") into the prod bundle.
+  const viteConfigPath = "../vite.config";
+  const viteConfig = (await import(viteConfigPath)).default;
 
   const viteLogger = createLogger();
 
