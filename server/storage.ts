@@ -520,11 +520,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTrendingArticles(limit = 5): Promise<ArticleWithDetails[]> {
-    // Get articles from the last 7 days with high view counts
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // Gallery publishes monthly, so a 7-day window almost always returned
+    // nothing. Take top-viewed from the last 90 days, then top up with
+    // all-time top-viewed if the recent window doesn't have enough.
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    const result = await db
+    const baseSelect = db
       .select({
         article: articles,
         author: authors,
@@ -532,16 +534,41 @@ export class DatabaseStorage implements IStorage {
       })
       .from(articles)
       .leftJoin(authors, eq(articles.authorId, authors.id))
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .leftJoin(categories, eq(articles.categoryId, categories.id));
+
+    const recent = await baseSelect
       .where(
         and(
           eq(articles.status, 'published'),
           eq(articles.contentType, 'article'),
-          sql`${articles.publishedAt} >= ${sevenDaysAgo}`
+          sql`${articles.publishedAt} >= ${ninetyDaysAgo}`
         )
       )
       .orderBy(desc(articles.views))
       .limit(limit);
+
+    const result = [...recent];
+
+    if (result.length < limit) {
+      const have = new Set(result.map(r => r.article.id));
+      const fallback = await baseSelect
+        .where(
+          and(
+            eq(articles.status, 'published'),
+            eq(articles.contentType, 'article'),
+            sql`${articles.views} > 0`
+          )
+        )
+        .orderBy(desc(articles.views))
+        .limit(limit * 2);
+      for (const row of fallback) {
+        if (result.length >= limit) break;
+        if (!have.has(row.article.id)) {
+          result.push(row);
+          have.add(row.article.id);
+        }
+      }
+    }
 
     const articlesWithTags: ArticleWithDetails[] = [];
 
