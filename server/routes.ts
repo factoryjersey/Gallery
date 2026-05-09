@@ -36,9 +36,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const offset = (Number(page) - 1) * Number(limit);
 
+      // When a category is given, include articles from all descendant
+      // categories so e.g. /category/fashion rolls up Fashion Shoots and
+      // Style Stalker too.
+      let categoryIds: string[] | undefined;
+      if (categoryId) {
+        const tree = await db.execute(sql`
+          WITH RECURSIVE descendants AS (
+            SELECT id FROM categories WHERE id = ${categoryId}
+            UNION ALL
+            SELECT c.id FROM categories c
+            INNER JOIN descendants d ON c.parent_id = d.id
+          )
+          SELECT id FROM descendants
+        `);
+        categoryIds = (tree.rows as { id: string }[]).map(r => r.id);
+      }
+
       const result = await storage.getArticles({
         status: status as string,
-        categoryId: categoryId as string,
+        categoryIds,
         authorId: authorId as string,
         search: search as string,
         year: year as string,

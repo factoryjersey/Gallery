@@ -354,6 +354,7 @@ export class DatabaseStorage implements IStorage {
   async getArticles(options: {
     status?: string;
     categoryId?: string;
+    categoryIds?: string[];
     authorId?: string;
     search?: string;
     year?: string;
@@ -368,6 +369,7 @@ export class DatabaseStorage implements IStorage {
     const {
       status = 'published',
       categoryId,
+      categoryIds,
       authorId,
       search,
       year,
@@ -392,7 +394,9 @@ export class DatabaseStorage implements IStorage {
       whereCondition = and(whereCondition, eq(articles.contentType, contentType));
     }
 
-    if (categoryId) {
+    if (categoryIds && categoryIds.length > 0) {
+      whereCondition = and(whereCondition, inArray(articles.categoryId, categoryIds));
+    } else if (categoryId) {
       whereCondition = and(whereCondition, eq(articles.categoryId, categoryId));
     }
 
