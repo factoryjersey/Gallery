@@ -77,15 +77,22 @@ export default function Article() {
 
         {/* Back + Edit */}
         <div className="flex justify-between items-center mb-8">
-          <Link href="/">
-            <span
-              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              style={{ fontFamily: "Arial, sans-serif", fontSize: 12 }}
-              data-testid="back-button"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Articles
-            </span>
-          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              // Go back if there's history within our site, else fall back to /
+              if (window.history.length > 1 && document.referrer && new URL(document.referrer).origin === window.location.origin) {
+                window.history.back();
+              } else {
+                navigate("/");
+              }
+            }}
+            className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-0 p-0"
+            style={{ fontFamily: "Arial, sans-serif", fontSize: 12 }}
+            data-testid="back-button"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Articles
+          </button>
           {isAdmin && article && (
             <button
               onClick={() => {
