@@ -73,14 +73,9 @@ export default function CurrentIssue() {
     window.history.pushState({ issue: n }, "", url);
   };
 
-  // Auto-scroll the cover strip so the selected issue is visible.
+  // Refs for the cover strip — declared here, effect below the data deps.
   const stripRef = useRef<HTMLDivElement>(null);
   const activeCoverRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (activeCoverRef.current && stripRef.current) {
-      activeCoverRef.current.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-    }
-  }, [selectedIssueNum, allIssues.length]);
 
   // All issues for the dropdown
   const { data: issuesData } = useQuery<{ issues: any[] }>({
@@ -91,6 +86,14 @@ export default function CurrentIssue() {
       .sort((a, b) => b.number - a.number),
     [issuesData]
   );
+
+  // Auto-scroll the cover strip so the selected issue is visible. Declared
+  // after allIssues so the dependency reference isn't a TDZ access.
+  useEffect(() => {
+    if (activeCoverRef.current && stripRef.current) {
+      activeCoverRef.current.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }, [selectedIssueNum, allIssues.length]);
 
   // Pick the default (latest) issue on first load
   const targetIssueNum = selectedIssueNum ?? allIssues[0]?.number ?? null;
