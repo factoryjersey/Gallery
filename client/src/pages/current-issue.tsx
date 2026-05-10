@@ -145,6 +145,66 @@ export default function CurrentIssue() {
     <div className="min-h-screen bg-background">
       <Header />
 
+      {/* ── Issue cover strip ─────────────────────────────────────── */}
+      {allIssues.length > 1 && (
+        <section className="bg-[hsl(0,0%,98%)] border-b border-border">
+          <div className="max-w-[1296px] mx-auto px-6 py-4">
+            <div
+              ref={stripRef}
+              className="flex gap-2.5 overflow-x-auto pb-2"
+              style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}
+              data-testid="issue-cover-strip"
+            >
+              {allIssues.map((issue) => {
+                const isActive = issue.number === targetIssueNum;
+                return (
+                  <button
+                    key={issue.number}
+                    ref={isActive ? activeCoverRef : undefined}
+                    onClick={() => setIssueWithUrl(issue.number)}
+                    title={`#${issue.number}${issue.displayLabel ? " — " + issue.displayLabel : issue.publishedAt ? " — " + format(new Date(issue.publishedAt), "MMM yyyy") : ""}`}
+                    className={`shrink-0 transition-all duration-200 ${
+                      isActive
+                        ? "ring-2 ring-[hsl(182_55%_56%)] ring-offset-2 ring-offset-[hsl(0,0%,98%)]"
+                        : "opacity-70 hover:opacity-100 hover:-translate-y-0.5"
+                    }`}
+                    style={{ width: 56 }}
+                    data-testid={`issue-cover-${issue.number}`}
+                  >
+                    {issue.coverImage ? (
+                      <img
+                        src={issue.coverImage}
+                        alt={`Gallery #${issue.number}`}
+                        className="w-full h-auto block shadow-sm"
+                        loading="lazy"
+                        style={{ aspectRatio: "2/3", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <div
+                        className="w-full bg-[hsl(0,0%,90%)] border border-border flex items-center justify-center"
+                        style={{ aspectRatio: "2/3" }}
+                      >
+                        <span
+                          style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, color: "hsl(0 0% 50%)" }}
+                        >
+                          #{issue.number}
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      className="text-center mt-1"
+                      style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, color: isActive ? "hsl(0 0% 4%)" : "hsl(0 0% 50%)" }}
+                    >
+                      #{issue.number}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── Full-width editorial hero ─────────────────────────────── */}
       <section className="w-full bg-white border-b border-border">
         <div className="flex flex-col md:flex-row gap-10 items-start px-6 lg:px-10 xl:px-16 py-10">
@@ -233,66 +293,6 @@ export default function CurrentIssue() {
           </div>
         </div>
       </section>
-
-      {/* ── Issue cover strip ─────────────────────────────────────── */}
-      {allIssues.length > 1 && (
-        <section className="bg-[hsl(0,0%,98%)] border-b border-border">
-          <div className="max-w-[1296px] mx-auto px-6 py-4">
-            <div
-              ref={stripRef}
-              className="flex gap-2.5 overflow-x-auto pb-2"
-              style={{ scrollbarWidth: "thin", WebkitOverflowScrolling: "touch" }}
-              data-testid="issue-cover-strip"
-            >
-              {allIssues.map((issue) => {
-                const isActive = issue.number === targetIssueNum;
-                return (
-                  <button
-                    key={issue.number}
-                    ref={isActive ? activeCoverRef : undefined}
-                    onClick={() => setIssueWithUrl(issue.number)}
-                    title={`#${issue.number}${issue.displayLabel ? " — " + issue.displayLabel : issue.publishedAt ? " — " + format(new Date(issue.publishedAt), "MMM yyyy") : ""}`}
-                    className={`shrink-0 transition-all duration-200 ${
-                      isActive
-                        ? "ring-2 ring-[hsl(182_55%_56%)] ring-offset-2 ring-offset-[hsl(0,0%,98%)]"
-                        : "opacity-70 hover:opacity-100 hover:-translate-y-0.5"
-                    }`}
-                    style={{ width: 56 }}
-                    data-testid={`issue-cover-${issue.number}`}
-                  >
-                    {issue.coverImage ? (
-                      <img
-                        src={issue.coverImage}
-                        alt={`Gallery #${issue.number}`}
-                        className="w-full h-auto block shadow-sm"
-                        loading="lazy"
-                        style={{ aspectRatio: "2/3", objectFit: "cover" }}
-                      />
-                    ) : (
-                      <div
-                        className="w-full bg-[hsl(0,0%,90%)] border border-border flex items-center justify-center"
-                        style={{ aspectRatio: "2/3" }}
-                      >
-                        <span
-                          style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, color: "hsl(0 0% 50%)" }}
-                        >
-                          #{issue.number}
-                        </span>
-                      </div>
-                    )}
-                    <div
-                      className="text-center mt-1"
-                      style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, color: isActive ? "hsl(0 0% 4%)" : "hsl(0 0% 50%)" }}
-                    >
-                      #{issue.number}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* ── Category filter tabs ──────────────────────────────────── */}
       {issueCats.length > 1 && (
