@@ -194,6 +194,19 @@ export default function Article() {
           </div>
         </header>
 
+        {/* Lead image */}
+        {article.featuredImage && article.contentType !== "gallery" && (
+          <figure className="mb-8 -mx-6 sm:mx-0">
+            <img
+              src={article.featuredImage}
+              alt={article.title}
+              className="w-full h-auto block"
+              loading="eager"
+              data-testid="article-featured-image"
+            />
+          </figure>
+        )}
+
         {/* Body content */}
         {article.contentType === "gallery" ? (
           <PaparazziGallery content={article.content} />
