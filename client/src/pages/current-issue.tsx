@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import Header from "@/components/Header";
@@ -48,9 +48,30 @@ function ArticleCard({ article }: { article: any }) {
   );
 }
 
+function readIssueFromUrl(): number | null {
+  if (typeof window === "undefined") return null;
+  const n = new URLSearchParams(window.location.search).get("issue");
+  return n && /^\d+$/.test(n) ? parseInt(n, 10) : null;
+}
+
 export default function CurrentIssue() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedIssueNum, setSelectedIssueNum] = useState<number | null>(null);
+  const [selectedIssueNum, setSelectedIssueNum] = useState<number | null>(readIssueFromUrl);
+
+  // Keep state in sync with browser back/forward navigation.
+  useEffect(() => {
+    const onPopState = () => setSelectedIssueNum(readIssueFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // Write the issue choice to the URL so back-nav remembers it and the page is shareable.
+  const setIssueWithUrl = (n: number | null) => {
+    setSelectedIssueNum(n);
+    setSelectedCategory("all");
+    const url = n ? `/current-issue?issue=${n}` : `/current-issue`;
+    window.history.pushState({ issue: n }, "", url);
+  };
 
   // All issues for the dropdown
   const { data: issuesData } = useQuery<{ issues: any[] }>({
@@ -148,10 +169,7 @@ export default function CurrentIssue() {
               <div className="relative">
                 <select
                   value={targetIssueNum ?? ""}
-                  onChange={e => {
-                    setSelectedIssueNum(Number(e.target.value));
-                    setSelectedCategory("all");
-                  }}
+                  onChange={e => setIssueWithUrl(Number(e.target.value))}
                   className="appearance-none pl-3 pr-8 py-1.5 border border-border bg-white cursor-pointer hover:border-foreground transition-colors"
                   style={{ fontFamily: "Arial, sans-serif", fontSize: 13, fontWeight: 700, color: "hsl(0 0% 15%)" }}
                   data-testid="issue-selector"
