@@ -20,6 +20,7 @@ import {
   buildGalleryHtml,
   publicUrlForIssueImage,
 } from "./featureImport";
+import { getSitemapData, renderSitemapXml, renderRobotsTxt } from "./sitemap";
 import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -3097,6 +3098,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ ok: true, article: updated, heroUrl, galleryCount: galleryUrls.length });
     } catch (err: any) {
       console.error("feature-import attach failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ===========================================================================
+  // Sitemap + robots — SEO endpoints, no auth, browser-and-crawler friendly.
+  // ===========================================================================
+
+  app.get("/sitemap.xml", async (req, res) => {
+    try {
+      const origin = `${req.protocol}://${req.get("host")}`;
+      const data = await getSitemapData(origin);
+      const xml = renderSitemapXml(data);
+      res
+        .status(200)
+        .set("Content-Type", "application/xml; charset=utf-8")
+        .set("Cache-Control", "public, max-age=3600")
+        .send(xml);
+    } catch (err: any) {
+      console.error("sitemap.xml failed:", err);
+      res.status(500).send("sitemap generation failed");
+    }
+  });
+
+  app.get("/robots.txt", (req, res) => {
+    const origin = `${req.protocol}://${req.get("host")}`;
+    res
+      .status(200)
+      .set("Content-Type", "text/plain; charset=utf-8")
+      .set("Cache-Control", "public, max-age=86400")
+      .send(renderRobotsTxt(origin));
+  });
+
+  // JSON endpoint for the human-facing /sitemap page (client-rendered).
+  app.get("/api/sitemap", async (req, res) => {
+    try {
+      const origin = `${req.protocol}://${req.get("host")}`;
+      const data = await getSitemapData(origin);
+      res.json(data);
+    } catch (err: any) {
+      console.error("/api/sitemap failed:", err);
       res.status(500).json({ error: err.message });
     }
   });

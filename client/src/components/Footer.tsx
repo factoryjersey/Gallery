@@ -105,6 +105,11 @@ export default function Footer() {
                   <span className="hover:text-foreground transition-colors cursor-pointer">Cookie Policy</span>
                 </Link>
               </li>
+              <li>
+                <Link href="/sitemap">
+                  <span className="hover:text-foreground transition-colors cursor-pointer">Sitemap</span>
+                </Link>
+              </li>
             </ul>
           </div>
 
