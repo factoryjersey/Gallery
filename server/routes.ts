@@ -3052,7 +3052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .limit(1);
       if (existing.length === 0) return res.status(404).json({ error: "article not found" });
 
-      const prefix = `features/gj${issue}/_all/`;
+      const prefix = `features/gj${issue}/`;
       const baseContent = existing[0].content || "";
       const galleryBlock =
         galleryUrls.length > 0 && !baseContent.includes(prefix)

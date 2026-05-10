@@ -16,7 +16,7 @@ type Article = {
   featuredImage: string | null;
 };
 
-type ImageItem = { filename: string; size: number; r2Key: string; r2Url: string };
+type ImageItem = { filename: string; sourceSize: number; displayKey: string; thumbKey: string; displayUrl: string; thumbUrl: string };
 
 type IssueDetail = { issue: number; articles: Article[]; images: ImageItem[] };
 
@@ -41,7 +41,11 @@ export default function FeatureImporter() {
       return r.json();
     },
     onSuccess: (d) => {
-      toast({ title: "Synced", description: `${d.uploaded} uploaded, ${d.skipped} already on R2` });
+      const mb = (d.bytesUploaded / (1024 * 1024)).toFixed(1);
+      toast({
+        title: "Synced",
+        description: `${d.processed} processed, ${d.skipped} already up to date, ${d.failed} failed. ${mb} MB uploaded.`,
+      });
       qc.invalidateQueries({ queryKey: [`/api/admin/feature-import/issues/${selectedIssue}`] });
     },
     onError: (e: Error) => toast({ title: "Sync failed", description: e.message, variant: "destructive" }),
@@ -234,7 +238,7 @@ export default function FeatureImporter() {
                       data-testid={`image-${img.filename}`}
                     >
                       <img
-                        src={img.r2Url}
+                        src={img.thumbUrl}
                         alt={img.filename}
                         loading="lazy"
                         className="w-full h-full object-cover bg-muted"

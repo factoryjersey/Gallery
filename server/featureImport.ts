@@ -7,6 +7,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
+import sharp from "sharp";
 import {
   PutObjectCommand,
   HeadObjectCommand,
@@ -26,6 +27,22 @@ const R2_PUBLIC =
   );
 
 const IMAGE_RE = /\.(jpe?g|png|tiff?|psd)$/i;
+
+// Output sizes for the web. Anything wider than DISPLAY_MAX gets scaled down.
+// THUMB is just for the admin grid.
+const DISPLAY_MAX = 1600;
+const THUMB_MAX = 400;
+const DISPLAY_QUALITY = 85;
+const THUMB_QUALITY = 75;
+
+function stableSlug(filename: string): string {
+  // Strip extension, normalise spaces & punctuation. Used as the R2 key
+  // basename so we can predict URLs without re-listing.
+  return filename
+    .replace(/\.[^.]+$/, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "");
+}
 
 export function archiveAvailable(): boolean {
   return existsSync(ARCHIVE_ROOT);
@@ -51,8 +68,17 @@ export async function listPackagedIssues(): Promise<number[]> {
   return [...nums].sort((a, b) => a - b);
 }
 
-/** List images in the Links/ subfolder. */
-export async function listIssueImages(num: number): Promise<{ filename: string; size: number; r2Key: string; r2Url: string }[]> {
+type IssueImage = {
+  filename: string;        // original filename in Links/
+  sourceSize: number;      // bytes on disk
+  displayKey: string;      // R2 key for 1600px WebP
+  thumbKey: string;        // R2 key for 400px WebP
+  displayUrl: string;
+  thumbUrl: string;
+};
+
+/** List images in the Links/ subfolder, with predicted R2 keys for variants. */
+export async function listIssueImages(num: number): Promise<IssueImage[]> {
   const pkg = await packagedFolderForIssue(num);
   if (!pkg) return [];
   const linksDir = path.join(pkg, "Links");
@@ -60,27 +86,39 @@ export async function listIssueImages(num: number): Promise<{ filename: string; 
 
   let names: string[] = [];
   try { names = await readdir(linksDir); } catch { return []; }
-  const out = [];
+  const out: IssueImage[] = [];
   for (const f of names.sort()) {
     if (!IMAGE_RE.test(f)) continue;
+    if (/\.psd$/i.test(f)) continue;  // PSDs aren't web-renderable; skip
     let size = 0;
     try { size = (await stat(path.join(linksDir, f))).size; } catch {}
-    const r2Key = `features/gj${num}/_all/${f}`;
+    const slug = stableSlug(f);
+    const displayKey = `features/gj${num}/${slug}.webp`;
+    const thumbKey = `features/gj${num}/${slug}.thumb.webp`;
     out.push({
       filename: f,
-      size,
-      r2Key,
-      r2Url: `${R2_PUBLIC}/${r2Key}`,
+      sourceSize: size,
+      displayKey,
+      thumbKey,
+      displayUrl: `${R2_PUBLIC}/${displayKey}`,
+      thumbUrl: `${R2_PUBLIC}/${thumbKey}`,
     });
   }
   return out;
 }
 
 /**
- * Upload (or skip-if-exists) every Links/ image for an issue to R2 under
- * features/gj{N}/_all/. Idempotent. Returns the count uploaded vs skipped.
+ * Process every Links/ image for an issue with Sharp and upload two WebP
+ * variants per source image to R2:
+ *   features/gj{N}/{slug}.webp        — 1600px display
+ *   features/gj{N}/{slug}.thumb.webp  — 400px admin thumbnail
+ *
+ * Original source files (TIFF/JPG/PSD) are NOT uploaded — Google Drive is the
+ * canonical source for those. Skipping PSDs entirely (not web-renderable).
+ *
+ * Idempotent — skips a file if BOTH variants already exist on R2.
  */
-export async function syncIssueImagesToR2(num: number): Promise<{ uploaded: number; skipped: number; total: number }> {
+export async function syncIssueImagesToR2(num: number): Promise<{ processed: number; skipped: number; failed: number; total: number; bytesUploaded: number }> {
   const pkg = await packagedFolderForIssue(num);
   if (!pkg) throw new Error(`No packaged folder for issue ${num}`);
   const linksDir = path.join(pkg, "Links");
@@ -93,7 +131,7 @@ export async function syncIssueImagesToR2(num: number): Promise<{ uploaded: numb
     const r = await r2Client.send(
       new ListObjectsV2Command({
         Bucket: R2_BUCKET,
-        Prefix: `features/gj${num}/_all/`,
+        Prefix: `features/gj${num}/`,
         ContinuationToken: token,
       }),
     );
@@ -101,23 +139,49 @@ export async function syncIssueImagesToR2(num: number): Promise<{ uploaded: numb
     token = r.NextContinuationToken;
   } while (token);
 
-  const files = (await readdir(linksDir)).filter((f) => IMAGE_RE.test(f));
-  let uploaded = 0;
+  const allFiles = (await readdir(linksDir)).filter((f) => IMAGE_RE.test(f) && !/\.psd$/i.test(f));
+  let processed = 0;
   let skipped = 0;
-  for (const f of files) {
-    const key = `features/gj${num}/_all/${f}`;
-    if (existing.has(key)) { skipped++; continue; }
-    const buf = await readFile(path.join(linksDir, f));
-    const ext = path.extname(f).toLowerCase();
-    const ct =
-      ext === ".png" ? "image/png" :
-      ext === ".tif" || ext === ".tiff" ? "image/tiff" :
-      ext === ".psd" ? "image/vnd.adobe.photoshop" :
-      "image/jpeg";
-    await uploadToR2(buf, key, ct);
-    uploaded++;
+  let failed = 0;
+  let bytesUploaded = 0;
+
+  for (const f of allFiles) {
+    const slug = stableSlug(f);
+    const displayKey = `features/gj${num}/${slug}.webp`;
+    const thumbKey = `features/gj${num}/${slug}.thumb.webp`;
+    if (existing.has(displayKey) && existing.has(thumbKey)) {
+      skipped++;
+      continue;
+    }
+    try {
+      const buf = await readFile(path.join(linksDir, f));
+      const pipeline = sharp(buf, { failOn: "none" }).rotate();  // auto-orient
+      const display = await pipeline
+        .clone()
+        .resize({ width: DISPLAY_MAX, withoutEnlargement: true })
+        .webp({ quality: DISPLAY_QUALITY })
+        .toBuffer();
+      const thumb = await pipeline
+        .clone()
+        .resize({ width: THUMB_MAX, withoutEnlargement: true })
+        .webp({ quality: THUMB_QUALITY })
+        .toBuffer();
+
+      if (!existing.has(displayKey)) {
+        await uploadToR2(display, displayKey, "image/webp");
+        bytesUploaded += display.length;
+      }
+      if (!existing.has(thumbKey)) {
+        await uploadToR2(thumb, thumbKey, "image/webp");
+        bytesUploaded += thumb.length;
+      }
+      processed++;
+    } catch (err: any) {
+      console.warn(`  feature-import: failed to process ${f}: ${err.message}`);
+      failed++;
+    }
   }
-  return { uploaded, skipped, total: files.length };
+  return { processed, skipped, failed, total: allFiles.length, bytesUploaded };
 }
 
 /** Build the gallery HTML block to append to article content. */
@@ -129,7 +193,7 @@ export function buildGalleryHtml(imageUrls: string[]): string {
   return `\n\n<h2>Gallery</h2>\n${figs}\n`;
 }
 
-/** Public URL for an issue image. */
+/** Public URL for the display variant of an issue image. */
 export function publicUrlForIssueImage(num: number, filename: string): string {
-  return `${R2_PUBLIC}/features/gj${num}/_all/${encodeURIComponent(filename)}`;
+  return `${R2_PUBLIC}/features/gj${num}/${stableSlug(filename)}.webp`;
 }
