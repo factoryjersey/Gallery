@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { sql, and, eq, ne, desc, asc } from "drizzle-orm";
+import { sql, and, eq, ne, desc, asc, inArray } from "drizzle-orm";
 import { articles, authors, categories, tags, articleTags, issues, issueContributors } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema, insertSubscriberSchema } from "@shared/schema";
@@ -11,6 +11,14 @@ import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
 import { processImage, getPublicUrl } from "./imageProcessor";
 import { r2Client, uploadToR2, getR2PublicUrl, getR2UrlPattern, getR2ImagePattern, extractR2Key, isR2Url, R2_PUBLIC_URL } from "./r2Client";
+import {
+  archiveAvailable,
+  listPackagedIssues,
+  listIssueImages,
+  syncIssueImagesToR2,
+  buildGalleryHtml,
+  publicUrlForIssueImage,
+} from "./featureImport";
 import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -2944,6 +2952,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err) {
       console.error("Unsubscribe failed:", err);
       res.status(500).send("Unsubscribe failed");
+    }
+  });
+
+  // ===========================================================================
+  // Feature image import (Phase B) — admin tool for backfilling missing
+  // article images from packaged InDesign folders on Google Drive.
+  // Local-dev only: requires the archive folder to be mounted at
+  // GALLERY_ARCHIVE_ROOT (defaults to the standard Drive path).
+  // ===========================================================================
+
+  // What issues do we have packages for, and how many of their articles still
+  // need images?
+  app.get("/api/admin/feature-import/issues", async (_req, res) => {
+    try {
+      if (!archiveAvailable()) {
+        return res.json({ archiveAvailable: false, issues: [] });
+      }
+      const packaged = await listPackagedIssues();
+      const counts = packaged.length === 0
+        ? []
+        : await db
+            .select({
+              issueNumber: articles.issueNumber,
+              total: sql<number>`count(*)::int`,
+              missing: sql<number>`sum(case when ${articles.featuredImage} is null then 1 else 0 end)::int`,
+            })
+            .from(articles)
+            .where(inArray(articles.issueNumber, packaged))
+            .groupBy(articles.issueNumber);
+      const counter = new Map(counts.map((c) => [c.issueNumber, c]));
+      const result = packaged.map((n) => ({
+        issue: n,
+        total: counter.get(n)?.total ?? 0,
+        missing: counter.get(n)?.missing ?? 0,
+      }));
+      res.json({ archiveAvailable: true, issues: result });
+    } catch (err: any) {
+      console.error("feature-import/issues failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Articles in a specific issue that still need an image, plus the bucket of
+  // images available from the packaged folder.
+  app.get("/api/admin/feature-import/issues/:n", async (req, res) => {
+    try {
+      const num = parseInt(req.params.n, 10);
+      if (isNaN(num)) return res.status(400).json({ error: "invalid issue" });
+      const articlesMissing = await db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          excerpt: articles.excerpt,
+          featuredImage: articles.featuredImage,
+        })
+        .from(articles)
+        .where(and(eq(articles.issueNumber, num), sql`${articles.featuredImage} is null`))
+        .orderBy(asc(articles.title));
+      const images = await listIssueImages(num);
+      res.json({ issue: num, articles: articlesMissing, images });
+    } catch (err: any) {
+      console.error("feature-import/issues/:n failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Upload all of an issue's images from the local Drive folder to R2.
+  // Idempotent — skips images already on R2.
+  app.post("/api/admin/feature-import/issues/:n/sync", async (req, res) => {
+    try {
+      const num = parseInt(req.params.n, 10);
+      if (isNaN(num)) return res.status(400).json({ error: "invalid issue" });
+      const result = await syncIssueImagesToR2(num);
+      res.json({ issue: num, ...result });
+    } catch (err: any) {
+      console.error("feature-import sync failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Attach hero + gallery to an article. Body:
+  //   { articleId, issue, hero: filename, gallery: [filename…] }
+  app.post("/api/admin/feature-import/attach", async (req, res) => {
+    try {
+      const { articleId, issue, hero, gallery = [] } = req.body || {};
+      if (!articleId || !issue || !hero) {
+        return res.status(400).json({ error: "articleId, issue, hero required" });
+      }
+      const heroUrl = publicUrlForIssueImage(issue, hero);
+      const galleryUrls = (gallery as string[]).map((f) => publicUrlForIssueImage(issue, f));
+
+      // Append gallery HTML — idempotent on the same prefix.
+      const existing = await db
+        .select({ content: articles.content })
+        .from(articles)
+        .where(eq(articles.id, articleId))
+        .limit(1);
+      if (existing.length === 0) return res.status(404).json({ error: "article not found" });
+
+      const prefix = `features/gj${issue}/_all/`;
+      const baseContent = existing[0].content || "";
+      const galleryBlock =
+        galleryUrls.length > 0 && !baseContent.includes(prefix)
+          ? buildGalleryHtml(galleryUrls)
+          : "";
+
+      const [updated] = await db
+        .update(articles)
+        .set({
+          featuredImage: heroUrl,
+          content: baseContent + galleryBlock,
+          updatedAt: new Date(),
+        })
+        .where(eq(articles.id, articleId))
+        .returning({ id: articles.id, title: articles.title, featuredImage: articles.featuredImage });
+
+      res.json({ ok: true, article: updated, heroUrl, galleryCount: galleryUrls.length });
+    } catch (err: any) {
+      console.error("feature-import attach failed:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 
