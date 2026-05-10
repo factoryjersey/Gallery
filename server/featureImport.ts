@@ -141,48 +141,66 @@ export async function syncIssueImagesToR2(num: number): Promise<{ processed: num
   } while (token);
 
   const allFiles = (await readdir(linksDir)).filter((f) => IMAGE_RE.test(f) && !/\.psd$/i.test(f));
+  const total = allFiles.length;
   let processed = 0;
   let skipped = 0;
   let failed = 0;
   let bytesUploaded = 0;
+  let started = 0;
 
-  for (const f of allFiles) {
+  console.log(`[feature-import] gj${num}: ${total} images to consider, syncing with concurrency=4`);
+  const t0 = Date.now();
+
+  const CONCURRENCY = 4;
+
+  async function processOne(f: string) {
     const slug = stableSlug(f);
     const displayKey = `features/gj${num}/${slug}.webp`;
     const thumbKey = `features/gj${num}/${slug}.thumb.webp`;
     if (existing.has(displayKey) && existing.has(thumbKey)) {
       skipped++;
-      continue;
+      return;
     }
     try {
       const buf = await readFile(path.join(linksDir, f));
-      const pipeline = sharp(buf, { failOn: "none" }).rotate();  // auto-orient
-      const display = await pipeline
-        .clone()
-        .resize({ width: DISPLAY_MAX, withoutEnlargement: true })
-        .webp({ quality: DISPLAY_QUALITY })
-        .toBuffer();
-      const thumb = await pipeline
-        .clone()
-        .resize({ width: THUMB_MAX, withoutEnlargement: true })
-        .webp({ quality: THUMB_QUALITY })
-        .toBuffer();
-
+      const pipeline = sharp(buf, { failOn: "none" }).rotate(); // auto-orient
+      const [display, thumb] = await Promise.all([
+        pipeline.clone().resize({ width: DISPLAY_MAX, withoutEnlargement: true }).webp({ quality: DISPLAY_QUALITY }).toBuffer(),
+        pipeline.clone().resize({ width: THUMB_MAX, withoutEnlargement: true }).webp({ quality: THUMB_QUALITY }).toBuffer(),
+      ]);
+      const uploads: Promise<unknown>[] = [];
       if (!existing.has(displayKey)) {
-        await uploadToR2(display, displayKey, "image/webp");
+        uploads.push(uploadToR2(display, displayKey, "image/webp"));
         bytesUploaded += display.length;
       }
       if (!existing.has(thumbKey)) {
-        await uploadToR2(thumb, thumbKey, "image/webp");
+        uploads.push(uploadToR2(thumb, thumbKey, "image/webp"));
         bytesUploaded += thumb.length;
       }
+      await Promise.all(uploads);
       processed++;
     } catch (err: any) {
-      console.warn(`  feature-import: failed to process ${f}: ${err.message}`);
+      console.warn(`[feature-import] gj${num}: failed ${f}: ${err.message}`);
       failed++;
     }
   }
-  return { processed, skipped, failed, total: allFiles.length, bytesUploaded };
+
+  // Process with a concurrency pool — simple Promise.all on slices.
+  for (let i = 0; i < allFiles.length; i += CONCURRENCY) {
+    const batch = allFiles.slice(i, i + CONCURRENCY);
+    started += batch.length;
+    await Promise.all(batch.map(processOne));
+    const done = processed + skipped + failed;
+    if (done % 40 === 0 || done === total) {
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+      console.log(`[feature-import] gj${num}: ${done}/${total} (${processed} new, ${skipped} skip, ${failed} fail) in ${elapsed}s`);
+    }
+  }
+
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`[feature-import] gj${num}: DONE in ${elapsed}s. ${processed} processed, ${skipped} skipped, ${failed} failed, ${(bytesUploaded / 1024 / 1024).toFixed(1)} MB`);
+
+  return { processed, skipped, failed, total, bytesUploaded };
 }
 
 /** Build the gallery HTML block to append to article content. */
