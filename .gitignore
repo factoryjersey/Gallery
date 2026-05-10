@@ -6,3 +6,6 @@ vite.config.ts.*
 *.tar.gz
 proposals/
 .tmp-pdfs/
+.env
+.env.local
+.env.*.local
