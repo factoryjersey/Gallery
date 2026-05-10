@@ -16,11 +16,28 @@ export default function Footer() {
     .filter((c: any) => !c.parentId)
     .slice(0, 6);
 
-  const handleNewsletterSignup = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+  const handleNewsletterSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    toast({ title: "Subscribed!", description: "Thanks — we'll be in touch." });
-    setEmail("");
+    if (!email || submitting) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch("/api/subscribers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, source: "footer" }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || "Subscribe failed");
+      }
+      toast({ title: "Subscribed!", description: "Thanks — we'll be in touch." });
+      setEmail("");
+    } catch (err: any) {
+      toast({ title: "Hmm…", description: err.message || "Try again in a sec.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

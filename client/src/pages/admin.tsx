@@ -22,7 +22,8 @@ import {
   Database,
   Pencil,
   BookOpen,
-  TrendingUp
+  TrendingUp,
+  Mail
 } from "lucide-react";
 import ArticleEditor from "@/components/ArticleEditor";
 import ArticleList from "@/components/ArticleList";
@@ -41,6 +42,7 @@ import { DataMigration } from "@/components/DataMigration";
 import IssuesManager from "@/components/IssuesManager";
 import { ContributorsManager } from "@/components/ContributorsManager";
 import { PageViewsReport } from "@/components/PageViewsReport";
+import SubscribersList from "@/components/SubscribersList";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Admin() {
@@ -298,6 +300,18 @@ export default function Admin() {
                   <TrendingUp className="w-5 h-5 mr-3" />
                   Page Views
                 </button>
+                <button
+                  onClick={() => setActiveTab("subscribers")}
+                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
+                    activeTab === "subscribers"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-accent"
+                  }`}
+                  data-testid="nav-subscribers"
+                >
+                  <Mail className="w-5 h-5 mr-3" />
+                  Subscribers
+                </button>
               </nav>
             </div>
 
@@ -498,6 +512,10 @@ export default function Admin() {
 
               {activeTab === "pageviews" && (
                 <PageViewsReport />
+              )}
+
+              {activeTab === "subscribers" && (
+                <SubscribersList />
               )}
             </div>
           </div>

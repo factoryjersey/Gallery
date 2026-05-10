@@ -219,6 +219,30 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
 });
 
+// Newsletter subscribers
+export const subscribers = pgTable("subscribers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  source: text("source").default("web"), // "footer" | "sidebar" | "admin" | …
+  unsubscribeToken: varchar("unsubscribe_token")
+    .notNull()
+    .default(sql`gen_random_uuid()`),
+  subscribedAt: timestamp("subscribed_at").defaultNow().notNull(),
+  unsubscribedAt: timestamp("unsubscribed_at"),
+});
+
+export const insertSubscriberSchema = createInsertSchema(subscribers, {
+  email: (schema) => schema.email("Please enter a valid email"),
+}).pick({
+  email: true,
+  name: true,
+  source: true,
+});
+
+export type Subscriber = typeof subscribers.$inferSelect;
+export type InsertSubscriber = z.infer<typeof insertSubscriberSchema>;
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,

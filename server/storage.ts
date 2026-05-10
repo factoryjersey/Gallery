@@ -1,11 +1,12 @@
-import { 
+import {
   Article, InsertArticle, ArticleWithDetails,
   Author, InsertAuthor,
   Category, InsertCategory,
   Tag, InsertTag,
   Media, InsertMedia,
   User, InsertUser,
-  articles, authors, categories, tags, articleTags, media, users
+  Subscriber, InsertSubscriber,
+  articles, authors, categories, tags, articleTags, media, users, subscribers
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, like, ilike, and, or, inArray, count, sql, isNotNull, ne } from "drizzle-orm";
@@ -93,6 +94,11 @@ export interface IStorage {
   getFeaturedArticles(limit?: number): Promise<ArticleWithDetails[]>;
   getTrendingArticles(limit?: number): Promise<ArticleWithDetails[]>;
   incrementArticleViews(id: string): Promise<void>;
+
+  // Subscribers
+  createSubscriber(input: InsertSubscriber): Promise<Subscriber>;
+  listSubscribers(options?: { activeOnly?: boolean; limit?: number; offset?: number }): Promise<{ subscribers: Subscriber[]; total: number }>;
+  unsubscribeByToken(token: string): Promise<boolean>;
 
   // Media methods
   createMedia(mediaData: InsertMedia): Promise<Media>;
@@ -688,6 +694,55 @@ export class DatabaseStorage implements IStorage {
       draftArticles: draftResult.count,
       totalViews: viewsResult[0]?.total || 0,
     };
+  }
+
+  // Subscribers
+  async createSubscriber(input: InsertSubscriber): Promise<Subscriber> {
+    const email = input.email.trim().toLowerCase();
+    // Re-subscribe if a previously-unsubscribed row exists
+    const existing = await db.select().from(subscribers).where(eq(subscribers.email, email)).limit(1);
+    if (existing[0]) {
+      if (existing[0].unsubscribedAt) {
+        const [reactivated] = await db
+          .update(subscribers)
+          .set({ unsubscribedAt: null, subscribedAt: new Date(), source: input.source ?? existing[0].source })
+          .where(eq(subscribers.id, existing[0].id))
+          .returning();
+        return reactivated;
+      }
+      return existing[0];
+    }
+    const [created] = await db
+      .insert(subscribers)
+      .values({ email, name: input.name ?? null, source: input.source ?? 'web' })
+      .returning();
+    return created;
+  }
+
+  async listSubscribers(options: { activeOnly?: boolean; limit?: number; offset?: number } = {}): Promise<{ subscribers: Subscriber[]; total: number }> {
+    const { activeOnly = false, limit = 200, offset = 0 } = options;
+    const where = activeOnly ? sql`unsubscribed_at is null` : undefined;
+    const rows = await db
+      .select()
+      .from(subscribers)
+      .where(where)
+      .orderBy(desc(subscribers.subscribedAt))
+      .limit(limit)
+      .offset(offset);
+    const [{ count: total }] = await db
+      .select({ count: count() })
+      .from(subscribers)
+      .where(where);
+    return { subscribers: rows, total };
+  }
+
+  async unsubscribeByToken(token: string): Promise<boolean> {
+    const [row] = await db
+      .update(subscribers)
+      .set({ unsubscribedAt: new Date() })
+      .where(and(eq(subscribers.unsubscribeToken, token), sql`unsubscribed_at is null`))
+      .returning();
+    return Boolean(row);
   }
 }
 

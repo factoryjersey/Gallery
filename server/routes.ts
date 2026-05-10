@@ -5,7 +5,7 @@ import { db } from "./db";
 import { sql, and, eq, ne, desc, asc } from "drizzle-orm";
 import { articles, authors, categories, tags, articleTags, issues, issueContributors } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
-import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema } from "@shared/schema";
+import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema, insertSubscriberSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
@@ -2886,6 +2886,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ===========================================================================
+  // Subscribers (newsletter)
+  // ===========================================================================
+
+  // Public signup — used by Footer/Sidebar forms
+  app.post("/api/subscribers", async (req, res) => {
+    try {
+      const data = insertSubscriberSchema.parse({
+        email: req.body.email,
+        name: req.body.name,
+        source: req.body.source || "web",
+      });
+      const sub = await storage.createSubscriber(data);
+      res.json({ ok: true, subscriber: { id: sub.id, email: sub.email } });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid email", details: err.errors });
+      }
+      console.error("Subscribe failed:", err);
+      res.status(500).json({ error: "Subscribe failed" });
+    }
+  });
+
+  // Admin list
+  app.get("/api/admin/subscribers", async (req, res) => {
+    try {
+      const activeOnly = req.query.activeOnly === "true";
+      const limit = req.query.limit ? Number(req.query.limit) : 500;
+      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const result = await storage.listSubscribers({ activeOnly, limit, offset });
+      res.json(result);
+    } catch (err) {
+      console.error("List subscribers failed:", err);
+      res.status(500).json({ error: "Failed to list subscribers" });
+    }
+  });
+
+  // Public unsubscribe via token (GET so links in emails work without JS)
+  app.get("/unsubscribe/:token", async (req, res) => {
+    try {
+      const ok = await storage.unsubscribeByToken(req.params.token);
+      const message = ok
+        ? "You've been unsubscribed. Sorry to see you go."
+        : "Already unsubscribed (or invalid link).";
+      res
+        .status(200)
+        .set("Content-Type", "text/html; charset=utf-8")
+        .send(
+          `<!doctype html><html><head><title>Unsubscribed</title>
+          <style>body{font-family:Georgia,serif;max-width:520px;margin:80px auto;padding:0 24px;color:#222}h1{font-size:28px}p{font-size:16px;line-height:1.6}</style>
+          </head><body><h1>${ok ? "Unsubscribed" : "Already unsubscribed"}</h1><p>${message}</p><p><a href="/">← Back to gallery.je</a></p></body></html>`,
+        );
+    } catch (err) {
+      console.error("Unsubscribe failed:", err);
+      res.status(500).send("Unsubscribe failed");
     }
   });
 
