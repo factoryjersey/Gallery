@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Image as ImageIcon, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Image as ImageIcon, RefreshCw, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 
 type IssueSummary = { issue: number; total: number; missing: number };
 type IssuesResp = { archiveAvailable: boolean; issues: IssueSummary[] };
@@ -16,9 +16,16 @@ type Article = {
   featuredImage: string | null;
 };
 
-type ImageItem = { filename: string; sourceSize: number; displayKey: string; thumbKey: string; displayUrl: string; thumbUrl: string };
+type ImageItem = { filename: string; thumbUrl: string; displayUrl: string };
+type LayoutGroup = {
+  layoutName: string;
+  source: "idml" | "indd";
+  pages: number[];
+  images: ImageItem[];
+};
 
 type IssueDetail = { issue: number; articles: Article[]; images: ImageItem[] };
+type LayoutsResp = { issue: number; groups: LayoutGroup[]; unmatched: ImageItem[] };
 
 export default function FeatureImporter() {
   const qc = useQueryClient();
@@ -27,10 +34,16 @@ export default function FeatureImporter() {
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [hero, setHero] = useState<string | null>(null);
   const [gallery, setGallery] = useState<Set<string>>(new Set());
+  const [openLayouts, setOpenLayouts] = useState<Set<string>>(new Set());
+  const [showUnmatched, setShowUnmatched] = useState(false);
 
   const issuesQ = useQuery<IssuesResp>({ queryKey: ["/api/admin/feature-import/issues"] });
   const detailQ = useQuery<IssueDetail>({
     queryKey: [`/api/admin/feature-import/issues/${selectedIssue}`],
+    enabled: selectedIssue !== null,
+  });
+  const layoutsQ = useQuery<LayoutsResp>({
+    queryKey: [`/api/admin/feature-import/issues/${selectedIssue}/layouts`],
     enabled: selectedIssue !== null,
   });
 
@@ -47,6 +60,7 @@ export default function FeatureImporter() {
         description: `${d.processed} processed, ${d.skipped} already up to date, ${d.failed} failed. ${mb} MB uploaded.`,
       });
       qc.invalidateQueries({ queryKey: [`/api/admin/feature-import/issues/${selectedIssue}`] });
+      qc.invalidateQueries({ queryKey: [`/api/admin/feature-import/issues/${selectedIssue}/layouts`] });
     },
     onError: (e: Error) => toast({ title: "Sync failed", description: e.message, variant: "destructive" }),
   });
@@ -63,7 +77,6 @@ export default function FeatureImporter() {
     },
     onSuccess: (d) => {
       toast({ title: "Attached", description: `Hero + ${d.galleryCount} gallery images on "${d.article.title}"` });
-      // Reset & refresh
       setSelectedArticle(null);
       setHero(null);
       setGallery(new Set());
@@ -72,6 +85,31 @@ export default function FeatureImporter() {
     },
     onError: (e: Error) => toast({ title: "Attach failed", description: e.message, variant: "destructive" }),
   });
+
+  // Auto-suggest the layout group whose name best matches the article title
+  const suggestedLayout = useMemo(() => {
+    if (!selectedArticle || !layoutsQ.data) return null;
+    const title = selectedArticle.title.toLowerCase();
+    const titleTokens = new Set(
+      title
+        .replace(/[^a-z0-9 ]/g, " ")
+        .split(/\s+/)
+        .filter((t) => t.length > 3),
+    );
+    let best: { group: LayoutGroup; score: number } | null = null;
+    for (const g of layoutsQ.data.groups) {
+      const name = g.layoutName.toLowerCase().replace(/[^a-z0-9 ]/g, " ");
+      let score = 0;
+      for (const t of titleTokens) if (name.includes(t)) score += 1;
+      if (score > 0 && (!best || score > best.score)) best = { group: g, score };
+    }
+    return best?.group ?? null;
+  }, [selectedArticle, layoutsQ.data]);
+
+  // Once a suggestion exists, open it by default
+  useMemo(() => {
+    if (suggestedLayout) setOpenLayouts((prev) => new Set([...prev, suggestedLayout.layoutName]));
+  }, [suggestedLayout?.layoutName]);
 
   if (issuesQ.isLoading) return <p>Loading…</p>;
   if (issuesQ.data && !issuesQ.data.archiveAvailable) {
@@ -95,6 +133,85 @@ export default function FeatureImporter() {
   const heroAlreadyPicked = selectedArticle?.featuredImage;
   const canAttach = !!selectedArticle && !!hero && !attach.isPending;
 
+  const toggleImage = (filename: string) => {
+    if (!selectedArticle) return;
+    if (!hero) { setHero(filename); return; }
+    if (filename === hero) { setHero(null); return; }
+    const next = new Set(gallery);
+    if (next.has(filename)) next.delete(filename);
+    else next.add(filename);
+    setGallery(next);
+  };
+
+  const renderGroup = (g: LayoutGroup) => {
+    const isOpen = openLayouts.has(g.layoutName);
+    const isSuggested = suggestedLayout?.layoutName === g.layoutName;
+    return (
+      <div key={g.layoutName} className={`border rounded ${isSuggested ? "border-primary" : "border-border"}`}>
+        <button
+          className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+          onClick={() => {
+            const next = new Set(openLayouts);
+            if (isOpen) next.delete(g.layoutName);
+            else next.add(g.layoutName);
+            setOpenLayouts(next);
+          }}
+        >
+          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <span className="font-medium text-sm">{g.layoutName}</span>
+          <span className="text-xs text-muted-foreground">
+            {g.images.length} image{g.images.length !== 1 ? "s" : ""}
+            {g.pages.length > 0 && ` · pages ${g.pages[0]}-${g.pages.at(-1)}`}
+            {g.source === "indd" && " · binary parse"}
+          </span>
+          {isSuggested && (
+            <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">suggested</span>
+          )}
+        </button>
+        {isOpen && (
+          <div className="p-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+            {g.images.map((img) => renderTile(img))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderTile = (img: ImageItem) => {
+    const isHero = hero === img.filename;
+    const inGallery = gallery.has(img.filename) && !isHero;
+    return (
+      <button
+        key={img.filename}
+        disabled={!selectedArticle}
+        onClick={() => toggleImage(img.filename)}
+        className={`group relative aspect-square overflow-hidden rounded border-2 ${
+          isHero ? "border-primary"
+          : inGallery ? "border-secondary"
+          : "border-transparent hover:border-border"
+        } ${!selectedArticle ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        title={img.filename}
+        data-testid={`image-${img.filename}`}
+      >
+        <img
+          src={img.thumbUrl}
+          alt={img.filename}
+          loading="lazy"
+          className="w-full h-full object-cover bg-muted"
+          onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.2"; }}
+        />
+        {isHero && (
+          <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] px-1 py-0.5 rounded">HERO</span>
+        )}
+        {inGallery && (
+          <span className="absolute top-1 left-1 bg-secondary text-secondary-foreground text-[10px] px-1 py-0.5 rounded">
+            {[...gallery].indexOf(img.filename) + 1}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -113,7 +230,13 @@ export default function FeatureImporter() {
               .map((i) => (
                 <button
                   key={i.issue}
-                  onClick={() => { setSelectedIssue(i.issue); setSelectedArticle(null); setHero(null); setGallery(new Set()); }}
+                  onClick={() => {
+                    setSelectedIssue(i.issue);
+                    setSelectedArticle(null);
+                    setHero(null);
+                    setGallery(new Set());
+                    setOpenLayouts(new Set());
+                  }}
                   className={`px-2.5 py-1 text-xs border rounded ${
                     selectedIssue === i.issue
                       ? "bg-primary text-primary-foreground border-primary"
@@ -132,18 +255,22 @@ export default function FeatureImporter() {
       </Card>
 
       {selectedIssue && detailQ.data && (
-        <div className="grid lg:grid-cols-2 gap-4">
+        <div className="grid lg:grid-cols-[1fr_2fr] gap-4">
           {/* LEFT — Articles missing images */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Issue #{selectedIssue} — articles needing images</CardTitle>
               <p className="text-xs text-muted-foreground">{detailQ.data.articles.length} articles. Click one to start.</p>
             </CardHeader>
-            <CardContent className="max-h-[60vh] overflow-y-auto space-y-1">
+            <CardContent className="max-h-[70vh] overflow-y-auto space-y-1">
               {detailQ.data.articles.map((a) => (
                 <button
                   key={a.id}
-                  onClick={() => { setSelectedArticle(a); setHero(null); setGallery(new Set()); }}
+                  onClick={() => {
+                    setSelectedArticle(a);
+                    setHero(null);
+                    setGallery(new Set());
+                  }}
                   className={`block w-full text-left p-2 rounded border text-sm ${
                     selectedArticle?.id === a.id ? "bg-primary/10 border-primary" : "border-border hover:bg-accent"
                   }`}
@@ -161,16 +288,18 @@ export default function FeatureImporter() {
             </CardContent>
           </Card>
 
-          {/* RIGHT — Image picker */}
+          {/* RIGHT — Image picker grouped by layout */}
           <Card>
             <CardHeader>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-base">Available images ({detailQ.data.images.length})</CardTitle>
+                  <CardTitle className="text-base">
+                    Available images — grouped by feature spread
+                  </CardTitle>
                   {selectedArticle ? (
                     <p className="text-xs text-muted-foreground mt-1">
-                      <strong>Click 1 image</strong> to set as hero, then click more to add to a body gallery.
-                      Currently picking for: <span className="font-medium">"{selectedArticle.title.trim()}"</span>
+                      <strong>Click 1 image</strong> = hero, then more = body gallery.
+                      Picking for: <span className="font-medium">"{selectedArticle.title.trim()}"</span>
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground mt-1">Select an article on the left first.</p>
@@ -212,55 +341,33 @@ export default function FeatureImporter() {
                 </div>
               )}
 
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-[60vh] overflow-y-auto">
-                {detailQ.data.images.map((img) => {
-                  const isHero = hero === img.filename;
-                  const inGallery = gallery.has(img.filename) && !isHero;
-                  return (
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {layoutsQ.isLoading && <p className="text-sm text-muted-foreground">Reading layouts…</p>}
+                {layoutsQ.data?.groups.map(renderGroup)}
+
+                {layoutsQ.data && layoutsQ.data.unmatched.length > 0 && (
+                  <div className="border border-dashed border-border rounded">
                     <button
-                      key={img.filename}
-                      disabled={!selectedArticle}
-                      onClick={() => {
-                        if (!selectedArticle) return;
-                        if (!hero) { setHero(img.filename); return; }
-                        if (img.filename === hero) { setHero(null); return; }
-                        const next = new Set(gallery);
-                        if (next.has(img.filename)) next.delete(img.filename);
-                        else next.add(img.filename);
-                        setGallery(next);
-                      }}
-                      className={`group relative aspect-square overflow-hidden rounded border-2 ${
-                        isHero ? "border-primary"
-                        : inGallery ? "border-secondary"
-                        : "border-transparent hover:border-border"
-                      } ${!selectedArticle ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                      title={img.filename}
-                      data-testid={`image-${img.filename}`}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                      onClick={() => setShowUnmatched((v) => !v)}
                     >
-                      <img
-                        src={img.thumbUrl}
-                        alt={img.filename}
-                        loading="lazy"
-                        className="w-full h-full object-cover bg-muted"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.opacity = "0.2";
-                        }}
-                      />
-                      {isHero && (
-                        <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] px-1 py-0.5 rounded">HERO</span>
-                      )}
-                      {inGallery && (
-                        <span className="absolute top-1 left-1 bg-secondary text-secondary-foreground text-[10px] px-1 py-0.5 rounded">{[...gallery].indexOf(img.filename) + 1}</span>
-                      )}
+                      {showUnmatched ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <span className="font-medium text-sm">Unmatched</span>
+                      <span className="text-xs text-muted-foreground">
+                        {layoutsQ.data.unmatched.length} image{layoutsQ.data.unmatched.length !== 1 ? "s" : ""} not referenced by any feature spread
+                      </span>
                     </button>
-                  );
-                })}
+                    {showUnmatched && (
+                      <div className="p-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                        {layoutsQ.data.unmatched.map((img) => renderTile(img))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              {detailQ.data.images.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Thumbnails load from R2. If they don't render, click "Sync to R2" first.
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground mt-3">
+                Thumbnails load from R2. If they don't render, click "Sync to R2" first.
+              </p>
             </CardContent>
           </Card>
         </div>

@@ -7,6 +7,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import sharp from "sharp";
 import {
   PutObjectCommand,
@@ -196,4 +197,118 @@ export function buildGalleryHtml(imageUrls: string[]): string {
 /** Public URL for the display variant of an issue image. */
 export function publicUrlForIssueImage(num: number, filename: string): string {
   return `${R2_PUBLIC}/features/gj${num}/${stableSlug(filename)}.webp`;
+}
+
+// ===========================================================================
+// Layout-grouped image discovery
+//
+// For each .idml/.indd in the packaged folder, return the set of Links/ images
+// it references. Lets the admin UI show images grouped by feature spread
+// rather than as a flat list of hundreds.
+// ===========================================================================
+
+const SKIP_LAYOUT = /\b(IFC|IBC|cover|contents|back ?cover|inside ?back|directory|numbers|edito|brand ?news|advert|DPS|misc|finishing|template|fonts|background|placeholder|toc|sample|gallery_cover|cover_top)\b/i;
+
+async function imagesFromIDMLFile(file: string): Promise<{ pages: number[]; refs: string[] }> {
+  const tmp = `/tmp/idml-images-${Math.random().toString(36).slice(2)}`;
+  spawnSync("unzip", ["-q", "-o", file, "-d", tmp]);
+  try {
+    const refs = new Set<string>();
+    const pages = new Set<number>();
+    const xmls: string[] = [];
+    async function walk(d: string) {
+      let entries;
+      try { entries = await readdir(d, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) await walk(p);
+        else if (e.name.endsWith(".xml")) xmls.push(p);
+      }
+    }
+    await walk(tmp);
+    for (const x of xmls) {
+      const t = await readFile(x, "utf8");
+      for (const m of t.matchAll(/(?:Links\/|file:|file:\/\/[^"<>]*\/)([^"<>\s]+?\.(?:jpe?g|png|tiff?|psd))/gi)) {
+        const name = m[1].replace(/\\/g, "/").split("/").pop()!;
+        try { refs.add(decodeURIComponent(name)); } catch { refs.add(name); }
+      }
+      // Page numbers
+      for (const m of t.matchAll(/<Page\b[^>]*Name="(\d+)"/g)) {
+        pages.add(parseInt(m[1], 10));
+      }
+    }
+    return { pages: [...pages].sort((a, b) => a - b), refs: [...refs] };
+  } finally {
+    spawnSync("rm", ["-rf", tmp]);
+  }
+}
+
+function imagesFromINDDFile(file: string): { pages: number[]; refs: string[] } {
+  const out = spawnSync("strings", [file], { encoding: "utf8" }).stdout || "";
+  const refs = new Set<string>();
+  for (const m of out.matchAll(/[A-Za-z0-9_.%() -]+?\.(?:jpe?g|png|tiff?|psd)/gi)) {
+    let f = m[0].trim();
+    try { f = decodeURIComponent(f); } catch {}
+    if (f.length < 6) continue;
+    refs.add(f);
+  }
+  return { pages: [], refs: [...refs] };
+}
+
+export type LayoutGroup = {
+  layoutName: string;
+  source: "idml" | "indd";
+  pages: number[];
+  /** Filenames in Links/ that this layout uses. Only ones that resolve to an actual file. */
+  images: string[];
+};
+
+/** Group an issue's images by layout (.idml/.indd) file. */
+export async function listLayoutsForIssue(num: number): Promise<{ groups: LayoutGroup[]; unmatched: string[] }> {
+  const pkg = await packagedFolderForIssue(num);
+  if (!pkg) return { groups: [], unmatched: [] };
+  const linksDir = path.join(pkg, "Links");
+  if (!existsSync(linksDir)) return { groups: [], unmatched: [] };
+
+  // Build a lower-case → original-cased map of files in Links/
+  const linksFiles = (await readdir(linksDir)).filter((f) => IMAGE_RE.test(f) && !/\.psd$/i.test(f));
+  const linksLower = new Map(linksFiles.map((f) => [f.toLowerCase(), f]));
+
+  const entries = await readdir(pkg);
+  const idmls = entries.filter((e) => e.toLowerCase().endsWith(".idml"));
+  const indds = entries.filter((e) => e.toLowerCase().endsWith(".indd"));
+  const useIdml = idmls.length > 0;
+  const layoutFiles = (useIdml ? idmls : indds).filter((f) => !SKIP_LAYOUT.test(f));
+
+  const groups: LayoutGroup[] = [];
+  const usedFiles = new Set<string>();
+
+  for (const f of layoutFiles.sort()) {
+    const filePath = path.join(pkg, f);
+    const { pages, refs } = useIdml
+      ? await imagesFromIDMLFile(filePath)
+      : imagesFromINDDFile(filePath);
+
+    // Resolve refs against actual Links/ filenames
+    const resolved: string[] = [];
+    for (const r of refs) {
+      const actual = linksLower.get(r.toLowerCase());
+      if (actual) {
+        resolved.push(actual);
+        usedFiles.add(actual);
+      }
+    }
+    if (resolved.length === 0) continue;
+
+    groups.push({
+      layoutName: path.basename(f, path.extname(f)),
+      source: useIdml ? "idml" : "indd",
+      pages,
+      images: resolved.sort(),
+    });
+  }
+
+  // Anything in Links/ that no layout referenced
+  const unmatched = linksFiles.filter((f) => !usedFiles.has(f)).sort();
+  return { groups, unmatched };
 }

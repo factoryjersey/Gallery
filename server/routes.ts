@@ -15,6 +15,7 @@ import {
   archiveAvailable,
   listPackagedIssues,
   listIssueImages,
+  listLayoutsForIssue,
   syncIssueImagesToR2,
   buildGalleryHtml,
   publicUrlForIssueImage,
@@ -3015,6 +3016,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ issue: num, articles: articlesMissing, images });
     } catch (err: any) {
       console.error("feature-import/issues/:n failed:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Layout-grouped image discovery: returns each .idml/.indd's image set.
+  app.get("/api/admin/feature-import/issues/:n/layouts", async (req, res) => {
+    try {
+      const num = parseInt(req.params.n, 10);
+      if (isNaN(num)) return res.status(400).json({ error: "invalid issue" });
+      const result = await listLayoutsForIssue(num);
+      // Decorate with R2 URLs so the client doesn't have to compute them
+      const decorate = (filenames: string[]) =>
+        filenames.map((filename) => ({
+          filename,
+          thumbUrl: `${process.env.R2_PUBLIC_URL || "https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev"}/features/gj${num}/${filename.replace(/\.[^.]+$/, "").replace(/\s+/g, "-").replace(/[^a-zA-Z0-9._-]/g, "")}.thumb.webp`,
+          displayUrl: `${process.env.R2_PUBLIC_URL || "https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev"}/features/gj${num}/${filename.replace(/\.[^.]+$/, "").replace(/\s+/g, "-").replace(/[^a-zA-Z0-9._-]/g, "")}.webp`,
+        }));
+      res.json({
+        issue: num,
+        groups: result.groups.map((g) => ({ ...g, images: decorate(g.images) })),
+        unmatched: decorate(result.unmatched),
+      });
+    } catch (err: any) {
+      console.error("feature-import/issues/:n/layouts failed:", err);
       res.status(500).json({ error: err.message });
     }
   });
