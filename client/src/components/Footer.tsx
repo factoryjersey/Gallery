@@ -90,9 +90,21 @@ export default function Footer() {
           <div>
             <h4 className="font-bold mb-4 uppercase tracking-widest text-xs text-foreground">Legal</h4>
             <ul className="space-y-2.5 text-muted-foreground">
-              {[["Privacy Policy", "#"], ["Terms of Service", "#"], ["Cookie Policy", "#"], ["Sitemap", "#"]].map(([label, href]) => (
-                <li key={label}><a href={href} className="hover:text-foreground transition-colors">{label}</a></li>
-              ))}
+              <li>
+                <Link href="/privacy">
+                  <span className="hover:text-foreground transition-colors cursor-pointer">Privacy Policy</span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms">
+                  <span className="hover:text-foreground transition-colors cursor-pointer">Terms of Service</span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/cookies">
+                  <span className="hover:text-foreground transition-colors cursor-pointer">Cookie Policy</span>
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -145,9 +157,9 @@ export default function Footer() {
         >
           <p data-testid="footer-copyright">© {new Date().getFullYear()} Gallery Magazine. All rights reserved.</p>
           <div className="flex gap-5">
-            <a href="#" className="hover:text-foreground transition-colors" data-testid="footer-terms">Terms</a>
-            <a href="#" className="hover:text-foreground transition-colors" data-testid="footer-cookies">Cookies</a>
-            <a href="#" className="hover:text-foreground transition-colors" data-testid="footer-sitemap">Sitemap</a>
+            <Link href="/terms"><span className="hover:text-foreground transition-colors cursor-pointer" data-testid="footer-terms">Terms</span></Link>
+            <Link href="/cookies"><span className="hover:text-foreground transition-colors cursor-pointer" data-testid="footer-cookies">Cookies</span></Link>
+            <Link href="/privacy"><span className="hover:text-foreground transition-colors cursor-pointer" data-testid="footer-privacy">Privacy</span></Link>
           </div>
         </div>
 
