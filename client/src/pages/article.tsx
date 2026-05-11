@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { Link } from "wouter";
 import ArticleGallery from "@/components/ArticleGallery";
 import PaparazziGallery from "@/components/PaparazziGallery";
+import PhotoshootSlider from "@/components/PhotoshootSlider";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -81,8 +82,11 @@ export default function Article() {
           <button
             type="button"
             onClick={() => {
-              // Go back if there's history within our site, else fall back to /
-              if (window.history.length > 1 && document.referrer && new URL(document.referrer).origin === window.location.origin) {
+              // Use the browser history. SPA pushState navigations are
+              // tracked correctly here; the referrer check we had before
+              // didn't work for in-app links because document.referrer
+              // only updates on full page loads.
+              if (window.history.length > 1) {
                 window.history.back();
               } else {
                 navigate("/");
@@ -202,15 +206,9 @@ export default function Article() {
           </div>
         </header>
 
-        {/* Photoshoots: full-bleed gallery layout — featured image + body imgs as one grid, no body prose */}
-        {isPhotoshoot ? (
-          (() => {
-            const heroHtml = article.featuredImage
-              ? `<figure class="wp-block-image"><img src="${article.featuredImage}" alt="${article.title.replace(/"/g, "&quot;")}" /></figure>`
-              : "";
-            return <PaparazziGallery content={heroHtml + (article.content || "")} />;
-          })()
-        ) : (
+        {/* Body content — non-photoshoot. Photoshoots render outside this
+            container so the slider can be full-page width (see below). */}
+        {!isPhotoshoot && (
           <>
             {/* Lead image */}
             {article.featuredImage && article.contentType !== "gallery" && (
@@ -225,7 +223,6 @@ export default function Article() {
               </figure>
             )}
 
-            {/* Body content */}
             {article.contentType === "gallery" ? (
               <PaparazziGallery content={article.content} />
             ) : (
@@ -274,6 +271,21 @@ export default function Article() {
               </Link>
             ) : <span />}
           </nav>
+        )}
+
+        {/* Photoshoot slider rendered full-bleed by breaking out of the
+            760px article container with negative-margin trick. */}
+        {isPhotoshoot && (
+          <div
+            className="my-8"
+            style={{ marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}
+          >
+            <PhotoshootSlider
+              hero={article.featuredImage}
+              content={article.content}
+              altPrefix={article.title}
+            />
+          </div>
         )}
 
         {/* Author bio footer */}
