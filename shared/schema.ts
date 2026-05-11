@@ -3,12 +3,18 @@ import { pgTable, text, varchar, timestamp, integer, boolean, json } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// "authors" is now the unified people table — used for article bylines
+// AND for issue contributors. The legacy "authors_email_unique" constraint
+// is replaced with a partial unique index in the DB (only enforced when
+// email is non-null), since contributors don't always have an email.
 export const authors = pgTable("authors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email"), // nullable — contributors usually don't have one
   bio: text("bio"),
   avatar: text("avatar"),
+  photoUrl: text("photo_url"),         // alternate photo (e.g. contributor portrait)
+  defaultRole: text("default_role"),    // optional, e.g. "Photographer", "Editorial"
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -193,11 +199,14 @@ export type ArticleWithDetails = Article & {
   tags: Tag[];
 };
 
-// Legacy user table (keeping for compatibility)
+// Issue contributors — now an associative table linking authors to issues.
+// The legacy name/bio/photoUrl columns remain as a backstop for rows that
+// pre-date the merge; new rows should write only authorId + role + pageRef.
 export const issueContributors = pgTable("issue_contributors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   issueNumber: integer("issue_number").notNull(),
-  name: text("name").notNull(),
+  authorId: varchar("author_id").references(() => authors.id, { onDelete: "set null" }),
+  name: text("name").notNull(),  // kept for fallback; canonical source is authors.name
   bio: text("bio"),
   pageRef: text("page_ref"),
   role: text("role"),

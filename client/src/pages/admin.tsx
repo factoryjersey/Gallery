@@ -30,6 +30,7 @@ import ArticleList from "@/components/ArticleList";
 import CategoryList from "@/components/CategoryList";
 import { CategoryHierarchyUpdater } from "@/components/CategoryHierarchyUpdater";
 import AuthorList from "@/components/AuthorList";
+import PeopleManager from "@/components/PeopleManager";
 import WordPressImporter from "@/components/WordPressImporter";
 import WordPressDBMigration from "@/components/WordPressDBMigration";
 import WordPressAuthorUpdater from "@/components/WordPressAuthorUpdater";
@@ -170,16 +171,16 @@ export default function Admin() {
                   Categories
                 </button>
                 <button
-                  onClick={() => setActiveTab("authors")}
+                  onClick={() => setActiveTab("people")}
                   className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
-                    activeTab === "authors" 
-                      ? "bg-primary text-primary-foreground" 
+                    activeTab === "people"
+                      ? "bg-primary text-primary-foreground"
                       : "text-foreground hover:bg-accent"
                   }`}
-                  data-testid="nav-authors"
+                  data-testid="nav-people"
                 >
                   <Users className="w-5 h-5 mr-3" />
-                  Authors
+                  People
                 </button>
                 <button
                   onClick={() => setActiveTab("media")}
@@ -287,7 +288,7 @@ export default function Admin() {
                   data-testid="nav-contributors"
                 >
                   <Users className="w-5 h-5 mr-3" />
-                  Contributors
+                  Issue contributors
                 </button>
                 <button
                   onClick={() => setActiveTab("pageviews")}
@@ -487,8 +488,8 @@ export default function Admin() {
                 </div>
               )}
 
-              {activeTab === "authors" && (
-                <AuthorList />
+              {activeTab === "people" && (
+                <PeopleManager />
               )}
 
               {activeTab === "media" && (

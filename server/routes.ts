@@ -2808,12 +2808,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/contributors", async (req, res) => {
     try {
       const { issueNumber, search } = req.query;
-      let query = db.select().from(issueContributors) as any;
+      // Join authors so the canonical profile (bio, photo, default_role)
+      // wins over the row's legacy columns.
       const conditions: any[] = [];
       if (issueNumber) conditions.push(eq(issueContributors.issueNumber, Number(issueNumber)));
       if (search) conditions.push(sql`${issueContributors.name} ilike ${'%' + search + '%'}`);
-      if (conditions.length > 0) query = query.where(and(...conditions));
-      const rows = await query.orderBy(asc(issueContributors.issueNumber), asc(issueContributors.name));
+      const rows = await db
+        .select({
+          id: issueContributors.id,
+          issueNumber: issueContributors.issueNumber,
+          authorId: issueContributors.authorId,
+          name: sql<string>`coalesce(${authors.name}, ${issueContributors.name})`,
+          bio: sql<string | null>`coalesce(${authors.bio}, ${issueContributors.bio})`,
+          photoUrl: sql<string | null>`coalesce(${authors.photoUrl}, ${authors.avatar}, ${issueContributors.photoUrl})`,
+          pageRef: issueContributors.pageRef,
+          role: issueContributors.role,
+        })
+        .from(issueContributors)
+        .leftJoin(authors, eq(authors.id, issueContributors.authorId))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(asc(issueContributors.issueNumber), asc(issueContributors.name));
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -2834,9 +2848,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/contributors", async (req, res) => {
     try {
-      const { issueNumber, name, bio, pageRef, role, photoUrl } = req.body;
+      const { issueNumber, authorId: authorIdInput, name, bio, pageRef, role, photoUrl } = req.body;
       if (!issueNumber || !name) return res.status(400).json({ error: "issueNumber and name required" });
-      const [row] = await db.insert(issueContributors).values({ issueNumber: Number(issueNumber), name, bio, pageRef, role, photoUrl }).returning();
+
+      // Resolve author: explicit authorId wins; else find existing author by
+      // case-insensitive name; else create a new author row.
+      let authorId: string | null = authorIdInput || null;
+      if (!authorId) {
+        const trimmed = String(name).trim();
+        const found = await db
+          .select({ id: authors.id })
+          .from(authors)
+          .where(sql`lower(trim(${authors.name})) = lower(trim(${trimmed}))`)
+          .limit(1);
+        if (found.length > 0) {
+          authorId = found[0].id;
+        } else {
+          const [created] = await db
+            .insert(authors)
+            .values({ name: trimmed, bio: bio || null, photoUrl: photoUrl || null, defaultRole: role || null })
+            .returning({ id: authors.id });
+          authorId = created.id;
+        }
+      }
+
+      const [row] = await db
+        .insert(issueContributors)
+        .values({ issueNumber: Number(issueNumber), authorId, name, bio, pageRef, role, photoUrl })
+        .returning();
       res.json(row);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -2845,11 +2884,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/contributors/:id", async (req, res) => {
     try {
-      const { name, bio, pageRef, role, photoUrl } = req.body;
+      const { name, bio, pageRef, role, photoUrl, authorId } = req.body;
       const [row] = await db.update(issueContributors)
-        .set({ name, bio, pageRef, role, photoUrl })
+        .set({ name, bio, pageRef, role, photoUrl, ...(authorId !== undefined && { authorId }) })
         .where(eq(issueContributors.id, req.params.id))
         .returning();
+      // Mirror profile-level changes (bio / photo) to the linked author row
+      if (row?.authorId && (bio !== undefined || photoUrl !== undefined || name !== undefined)) {
+        await db
+          .update(authors)
+          .set({
+            ...(name !== undefined && { name }),
+            ...(bio !== undefined && { bio }),
+            ...(photoUrl !== undefined && { photoUrl }),
+          })
+          .where(eq(authors.id, row.authorId));
+      }
       res.json(row);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
