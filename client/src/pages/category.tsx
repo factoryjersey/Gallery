@@ -1,12 +1,14 @@
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ArticleGrid from "@/components/ArticleGrid";
 import Sidebar from "@/components/Sidebar";
 import { ArrowLeft, Image, ImageOff } from "lucide-react";
 import { Link } from "wouter";
+
+type Category = { id: string; name: string; slug: string; parentId: string | null; description?: string };
 
 export default function Category() {
   const { slug } = useParams();
@@ -16,6 +18,25 @@ export default function Category() {
   const { data: categoryData } = useQuery({
     queryKey: [`/api/categories/by-slug/${slug}`],
   });
+
+  // Subcategory navigation: figure out parent + siblings if this category
+  // belongs to a hierarchy.
+  const { data: allCategoriesData } = useQuery<{ categories: Category[] }>({
+    queryKey: ["/api/categories"],
+  });
+
+  const nav = useMemo(() => {
+    const all = allCategoriesData?.categories || [];
+    const current = categoryData?.category as Category | undefined;
+    if (!current) return null;
+    const parent = current.parentId
+      ? all.find((c) => c.id === current.parentId) ?? null
+      : current; // if we're a parent, treat ourselves as the parent
+    if (!parent) return null;
+    const children = all.filter((c) => c.parentId === parent.id);
+    if (children.length === 0) return null;
+    return { parent, children, currentIsParent: current.id === parent.id };
+  }, [allCategoriesData, categoryData]);
 
   const queryParams = new URLSearchParams({
     ...(categoryData?.category?.id && { categoryId: categoryData.category.id }),
@@ -88,6 +109,42 @@ export default function Category() {
           </div>
         </div>
       </section>
+
+      {/* Sub-category tabs (only when hierarchy exists) */}
+      {nav && (
+        <section className="bg-white border-b border-border">
+          <div className="max-w-[1296px] mx-auto px-6">
+            <div className="flex items-center gap-0 overflow-x-auto" style={{ fontFamily: "Arial, sans-serif", fontSize: 13 }}>
+              <Link href={`/category/${nav.parent.slug}`}>
+                <span
+                  className={`shrink-0 py-4 px-4 border-b-[3px] transition-colors whitespace-nowrap cursor-pointer ${
+                    nav.currentIsParent
+                      ? "border-secondary text-foreground font-semibold"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                  data-testid={`subnav-parent-${nav.parent.slug}`}
+                >
+                  All {nav.parent.name}
+                </span>
+              </Link>
+              {nav.children.map((c) => (
+                <Link key={c.id} href={`/category/${c.slug}`}>
+                  <span
+                    className={`shrink-0 py-4 px-4 border-b-[3px] transition-colors whitespace-nowrap cursor-pointer ${
+                      category.id === c.id
+                        ? "border-secondary text-foreground font-semibold"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                    data-testid={`subnav-child-${c.slug}`}
+                  >
+                    {c.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Articles */}
       <section className="py-10 bg-background">

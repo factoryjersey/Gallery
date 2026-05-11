@@ -19,6 +19,7 @@ export default function Article() {
   });
 
   const article = data?.article;
+  const isPhotoshoot = article?.category?.slug === "fashion-shoots";
 
   const { data: adjacentData } = useQuery({
     queryKey: [`/api/articles/by-slug/${slug}/adjacent`],
@@ -192,7 +193,7 @@ export default function Article() {
             <span data-testid="article-date">
               {format(new Date(article.publishedAt || article.createdAt), "d MMMM yyyy")}
             </span>
-            {article.contentType !== "gallery" && (
+            {article.contentType !== "gallery" && !isPhotoshoot && (
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 <span data-testid="article-read-time">{article.readTime} min read</span>
@@ -201,27 +202,39 @@ export default function Article() {
           </div>
         </header>
 
-        {/* Lead image */}
-        {article.featuredImage && article.contentType !== "gallery" && (
-          <figure className="mb-8 -mx-6 sm:mx-0">
-            <img
-              src={article.featuredImage}
-              alt={article.title}
-              className="w-full h-auto block"
-              loading="eager"
-              data-testid="article-featured-image"
-            />
-          </figure>
-        )}
-
-        {/* Body content */}
-        {article.contentType === "gallery" ? (
-          <PaparazziGallery content={article.content} />
+        {/* Photoshoots: full-bleed gallery layout — featured image + body imgs as one grid, no body prose */}
+        {isPhotoshoot ? (
+          (() => {
+            const heroHtml = article.featuredImage
+              ? `<figure class="wp-block-image"><img src="${article.featuredImage}" alt="${article.title.replace(/"/g, "&quot;")}" /></figure>`
+              : "";
+            return <PaparazziGallery content={heroHtml + (article.content || "")} />;
+          })()
         ) : (
-          <ArticleGallery
-            content={article.content}
-            className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
-          />
+          <>
+            {/* Lead image */}
+            {article.featuredImage && article.contentType !== "gallery" && (
+              <figure className="mb-8 -mx-6 sm:mx-0">
+                <img
+                  src={article.featuredImage}
+                  alt={article.title}
+                  className="w-full h-auto block"
+                  loading="eager"
+                  data-testid="article-featured-image"
+                />
+              </figure>
+            )}
+
+            {/* Body content */}
+            {article.contentType === "gallery" ? (
+              <PaparazziGallery content={article.content} />
+            ) : (
+              <ArticleGallery
+                content={article.content}
+                className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
+              />
+            )}
+          </>
         )}
 
         {/* Cartoon prev/next navigation */}
