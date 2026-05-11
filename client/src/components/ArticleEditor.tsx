@@ -24,6 +24,7 @@ import {
   Heading
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import AuthorPicker from "@/components/AuthorPicker";
 import { apiRequest } from "@/lib/queryClient";
 
 const articleSchema = z.object({
@@ -399,18 +400,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
 
               <div className="space-y-2">
                 <Label>Author</Label>
-                <Select onValueChange={(value) => form.setValue("authorId", value)} data-testid="article-author-select">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select author" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {authors.map((author) => (
-                      <SelectItem key={author.id} value={author.id}>
-                        {author.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <AuthorPicker
+                  value={form.watch("authorId")}
+                  onChange={(id) => form.setValue("authorId", id, { shouldValidate: true })}
+                />
                 {form.formState.errors.authorId && (
                   <p className="text-sm text-destructive">{form.formState.errors.authorId.message}</p>
                 )}
