@@ -9,3 +9,4 @@ proposals/
 .env
 .env.local
 .env.*.local
+.reversibility-logs/
