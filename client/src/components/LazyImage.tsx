@@ -23,6 +23,7 @@ export default function LazyImage({
 }: LazyImageProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(false);
+  const [hasErrored, setHasErrored] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
@@ -69,6 +70,17 @@ export default function LazyImage({
   // Generate a tiny blur placeholder (base64 encoded 1x1 transparent pixel)
   const defaultPlaceholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"%3E%3Crect fill="%23e5e7eb" width="1" height="1"/%3E%3C/svg%3E';
 
+  if (hasErrored) {
+    return (
+      <div
+        className={`${className} bg-[hsl(0,0%,92%)]`}
+        data-testid="lazy-image-error"
+        aria-label={alt}
+        role="img"
+      />
+    );
+  }
+
   return (
     <img
       ref={imgRef}
@@ -80,6 +92,7 @@ export default function LazyImage({
       height={height}
       className={`lazy-image ${isLoaded ? 'loaded' : ''} ${className}`}
       onLoad={handleLoad}
+      onError={() => setHasErrored(true)}
       loading="lazy" // Native lazy loading as fallback
       data-testid="lazy-image"
     />
