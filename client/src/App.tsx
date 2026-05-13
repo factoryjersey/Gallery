@@ -19,11 +19,21 @@ import Terms from "@/pages/terms";
 import Cookies from "@/pages/cookies";
 import Sitemap from "@/pages/sitemap";
 import NotFound from "@/pages/not-found";
+import Splash from "@/components/Splash";
+
+function HomeRouteWithSplash() {
+  return (
+    <>
+      <Splash />
+      <Home />
+    </>
+  );
+}
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={HomeRouteWithSplash} />
       <Route path="/admin" component={Admin} />
       <Route path="/article/:slug" component={Article} />
       <Route path="/category/:slug" component={Category} />
