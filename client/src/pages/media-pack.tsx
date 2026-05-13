@@ -97,27 +97,36 @@ export default function MediaPack() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Hero */}
-      <section className="bg-foreground text-white py-16 border-b border-border">
-        <div className="max-w-[1296px] mx-auto px-6">
-          <div className="max-w-[640px]">
-            <div
-              className="mb-4"
-              style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "hsl(182 55% 56%)" }}
-            >
-              Media Pack & Rate Card 2026
-            </div>
-            <h1
-              className="mb-6"
-              style={{ fontFamily: "Georgia, serif", fontSize: "clamp(32px, 5vw, 52px)", fontWeight: 400, lineHeight: 1.1, letterSpacing: "-0.5px" }}
-            >
-              Jersey's Life &amp; Style Magazine
-            </h1>
-            <p style={{ fontFamily: "Georgia, serif", fontSize: 18, lineHeight: 1.7, color: "hsl(0 0% 75%)", fontStyle: "italic" }}>
-              20 years of reflecting on Jersey — the best way for quality brands to reach an engaged, discerning local audience.
-            </p>
+      {/* Hero banner — matches the /about page style */}
+      <div
+        className="w-full flex items-center justify-center text-center px-6"
+        style={{
+          minHeight: "clamp(320px, 45vw, 560px)",
+          backgroundImage: "linear-gradient(rgba(80,30,120,0.55), rgba(80,30,120,0.55)), url('/media/gallery-collage.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center top",
+          backgroundRepeat: "no-repeat",
+        }}
+      >
+        <div className="flex flex-col items-center">
+          <div
+            className="mb-4"
+            style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}
+          >
+            Media Pack &amp; Rate Card 2026
           </div>
-          <div className="mt-10">
+          <h1
+            style={{ fontFamily: "Georgia, serif", fontSize: "clamp(28px, 5vw, 52px)", fontWeight: 400, letterSpacing: "-0.5px", color: "#fff", margin: 0 }}
+          >
+            Jersey's Life &amp; Style Magazine
+          </h1>
+          <p
+            className="max-w-xl"
+            style={{ fontFamily: "Georgia, serif", fontSize: "clamp(14px, 1.8vw, 18px)", color: "rgba(255,255,255,0.85)", lineHeight: 1.6, margin: "20px auto 0" }}
+          >
+            20 years of reflecting on Jersey — the best way for quality brands to reach an engaged, discerning local audience.
+          </p>
+          <div className="mt-8">
             <a
               href="/media-pack-2026.pdf"
               download
@@ -130,7 +139,7 @@ export default function MediaPack() {
             </a>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* Intro */}
       <section className="py-16 bg-white border-b border-border">
