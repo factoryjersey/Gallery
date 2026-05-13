@@ -19,14 +19,13 @@ import Terms from "@/pages/terms";
 import Cookies from "@/pages/cookies";
 import Sitemap from "@/pages/sitemap";
 import NotFound from "@/pages/not-found";
-import Splash from "@/components/Splash";
+import SplashLayout from "@/components/SplashLayout";
 
 function HomeRouteWithSplash() {
   return (
-    <>
-      <Splash />
+    <SplashLayout>
       <Home />
-    </>
+    </SplashLayout>
   );
 }
 

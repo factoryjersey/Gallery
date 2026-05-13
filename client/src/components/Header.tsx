@@ -5,6 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Menu, X, UserCircle, ChevronDown, BookOpen } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import GalleryWordmark from "@/components/GalleryWordmark";
+import { useSplashPhase } from "@/components/SplashLayout";
 
 const PRIMARY_SLUGS = ["people", "fashion", "appetite-1", "culture", "travel-1", "interiors", "business", "events"];
 
@@ -149,6 +151,28 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
   );
 }
 
+// The logo slot the splash wordmark animates into. Fades its own copy out
+// while the splash overlay is still painting on top of the page, so we never
+// see two wordmarks at once.
+function HeaderLogoSlot() {
+  const phase = useSplashPhase();
+  const hidden = phase !== "done";
+  return (
+    <div
+      data-testid="header-logo-slot"
+      className="cursor-pointer h-[22px] lg:h-[33px]"
+      style={{
+        aspectRatio: "972.24 / 130.4",
+        color: "hsl(0 0% 30%)",
+        opacity: hidden ? 0 : 1,
+        transition: "opacity 200ms ease",
+      }}
+    >
+      <GalleryWordmark ariaLabel="Gallery — home" />
+    </div>
+  );
+}
+
 export default function Header({ onSearch }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
@@ -239,16 +263,12 @@ export default function Header({ onSearch }: HeaderProps) {
           {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
 
-        {/* Logo — centred on mobile (absolute), left on desktop (static, larger) */}
+        {/* Logo — centred on mobile (absolute), left on desktop (static, larger).
+            Marked as the morph target for the splash wordmark. */}
         <Link href="/"
           className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 lg:ml-[10px]"
         >
-          <img
-            src="/gallery-logo.png"
-            alt="Gallery"
-            className="cursor-pointer h-[22px] lg:h-[33px] w-auto"
-            data-testid="site-logo"
-          />
+          <HeaderLogoSlot />
         </Link>
 
         {/* Push right-side items */}
