@@ -14,18 +14,8 @@ type DirectoryAuthor = {
   defaultRole: string | null;
   articleCount: number;
   categoryNames: string[];
+  recentArticle: { title: string; slug: string } | null;
 };
-
-// Auto-derive a "Writes about X, Y & Z" sentence from the categories this
-// author has published in. Caps at three categories so it fits on a card.
-function writesAbout(cats: string[]): string {
-  const clean = (cats || []).filter(Boolean);
-  if (clean.length === 0) return "";
-  const top = clean.slice(0, 3);
-  if (top.length === 1) return `Writes about ${top[0].toLowerCase()}.`;
-  if (top.length === 2) return `Writes about ${top[0].toLowerCase()} and ${top[1].toLowerCase()}.`;
-  return `Writes about ${top[0].toLowerCase()}, ${top[1].toLowerCase()} and ${top[2].toLowerCase()}.`;
-}
 
 function initials(name: string): string {
   return name
@@ -149,11 +139,15 @@ export default function Authors() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {list.map((a: DirectoryAuthor) => {
                 const photo = a.photoUrl || a.avatar;
-                const tagline = a.bio?.trim() || writesAbout(a.categoryNames);
+                const authorHref = a.slug ? `/author/${a.slug}` : "#";
                 return (
-                  <Link key={a.id} href={a.slug ? `/author/${a.slug}` : `#`}>
-                    <a className="group flex gap-4 p-3 rounded hover:bg-muted/40 transition-colors" data-testid={`author-${a.slug ?? a.id}`}>
-                      <div className="shrink-0">
+                  <div
+                    key={a.id}
+                    className="flex gap-4 p-3 rounded hover:bg-muted/40 transition-colors"
+                    data-testid={`author-${a.slug ?? a.id}`}
+                  >
+                    <Link href={authorHref}>
+                      <a className="shrink-0" aria-label={a.name}>
                         {photo ? (
                           <img
                             src={photo}
@@ -170,37 +164,42 @@ export default function Authors() {
                             {initials(a.name)}
                           </div>
                         )}
-                      </div>
-                      <div className="min-w-0">
-                        <div
-                          className="group-hover:underline"
+                      </a>
+                    </Link>
+                    <div className="min-w-0">
+                      <Link href={authorHref}>
+                        <a
+                          className="hover:underline block"
                           style={{ fontFamily: "Georgia, serif", fontSize: 19, fontWeight: 500 }}
                         >
                           {a.name}
-                        </div>
-                        {a.defaultRole && (
-                          <div
-                            style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2 }}
-                          >
-                            {a.defaultRole}
-                          </div>
-                        )}
-                        {tagline && (
-                          <div
-                            className="line-clamp-2"
-                            style={{ fontFamily: "Georgia, serif", fontSize: 14, color: "#555", marginTop: 4, lineHeight: 1.45 }}
-                          >
-                            {tagline}
-                          </div>
-                        )}
+                        </a>
+                      </Link>
+                      {a.defaultRole && (
                         <div
-                          style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "#888", marginTop: 6 }}
+                          style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 2 }}
                         >
-                          {a.articleCount} {a.articleCount === 1 ? "article" : "articles"}
+                          {a.defaultRole}
                         </div>
+                      )}
+                      {a.recentArticle && (
+                        <Link href={`/article/${a.recentArticle.slug}`}>
+                          <a
+                            className="line-clamp-2 hover:underline block"
+                            style={{ fontFamily: "Georgia, serif", fontSize: 14, fontStyle: "italic", color: "#555", marginTop: 4, lineHeight: 1.45 }}
+                            data-testid={`author-${a.slug ?? a.id}-example`}
+                          >
+                            {a.recentArticle.title}
+                          </a>
+                        </Link>
+                      )}
+                      <div
+                        style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "#888", marginTop: 6 }}
+                      >
+                        {a.articleCount} {a.articleCount === 1 ? "article" : "articles"}
                       </div>
-                    </a>
-                  </Link>
+                    </div>
+                  </div>
                 );
               })}
             </div>

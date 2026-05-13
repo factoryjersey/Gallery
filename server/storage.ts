@@ -158,16 +158,30 @@ export class DatabaseStorage implements IStorage {
     return author ? normaliseAuthor(author) : undefined;
   }
 
-  async getDirectoryAuthors(): Promise<Array<Author & { articleCount: number; categoryNames: string[] }>> {
-    // Authors who have at least one published, non-cartoon article.
-    // Returns article count + distinct category names per author so the
-    // directory can render a "Writes about Food, Music & Travel" line for
-    // contributors who don't have a manual bio.
+  async getDirectoryAuthors(): Promise<Array<Author & {
+    articleCount: number;
+    categoryNames: string[];
+    recentArticle: { title: string; slug: string } | null;
+  }>> {
+    // Authors who have at least one published, non-cartoon article. The
+    // subselect picks the author's most recent published article — shown on
+    // the directory card as an example of their work.
+    const recentArticleSql = sql<{ title: string; slug: string } | null>`(
+      SELECT json_build_object('title', a.title, 'slug', a.slug)
+      FROM ${articles} a
+      WHERE a.author_id = ${authors.id}
+        AND a.status = 'published'
+        AND a.content_type <> 'cartoon'
+      ORDER BY a.published_at DESC NULLS LAST, a.created_at DESC
+      LIMIT 1
+    )`;
+
     const rows = await db
       .select({
         author: authors,
         articleCount: sql<number>`count(distinct ${articles.id})::int`,
         categoryNames: sql<string[]>`array_agg(distinct ${categories.name})`,
+        recentArticle: recentArticleSql,
       })
       .from(authors)
       .innerJoin(articles, eq(articles.authorId, authors.id))
@@ -183,6 +197,7 @@ export class DatabaseStorage implements IStorage {
       ...normaliseAuthor(r.author),
       articleCount: r.articleCount,
       categoryNames: (r.categoryNames || []).filter(Boolean),
+      recentArticle: r.recentArticle,
     }));
   }
 
