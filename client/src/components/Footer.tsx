@@ -79,6 +79,11 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/authors">
+                  <span className="hover:text-foreground transition-colors cursor-pointer">Authors &amp; Contributors</span>
+                </Link>
+              </li>
+              <li>
                 <Link href="/media-pack">
                   <span className="hover:text-foreground transition-colors cursor-pointer">Advertise</span>
                 </Link>

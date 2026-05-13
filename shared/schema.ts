@@ -10,6 +10,7 @@ import { z } from "zod";
 export const authors = pgTable("authors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  slug: text("slug").unique(),          // URL slug for /author/:slug — backfilled from name
   email: text("email"), // nullable — contributors usually don't have one
   bio: text("bio"),
   avatar: text("avatar"),

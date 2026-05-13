@@ -192,7 +192,18 @@ export default function Article() {
             className="flex flex-wrap items-center gap-4 pb-6 border-b border-border"
             style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}
           >
-            <span data-testid="article-author">By <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.author.name}</strong></span>
+            <span data-testid="article-author">
+              By{" "}
+              {article.author.slug ? (
+                <Link href={`/author/${article.author.slug}`}>
+                  <a className="hover:underline">
+                    <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.author.name}</strong>
+                  </a>
+                </Link>
+              ) : (
+                <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.author.name}</strong>
+              )}
+            </span>
             <span>—</span>
             <span data-testid="article-date">
               {format(new Date(article.publishedAt || article.createdAt), "d MMMM yyyy")}
@@ -310,7 +321,13 @@ export default function Article() {
                 style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 400, color: "hsl(0 0% 4%)" }}
                 data-testid="author-name-footer"
               >
-                {article.author.name}
+                {article.author.slug ? (
+                  <Link href={`/author/${article.author.slug}`}>
+                    <a className="hover:underline">{article.author.name}</a>
+                  </Link>
+                ) : (
+                  article.author.name
+                )}
               </h3>
               {article.author.bio && (
                 <p

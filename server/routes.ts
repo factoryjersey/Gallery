@@ -443,6 +443,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public directory: authors with at least one published article, plus
+  // article count and the categories they've written in (used to auto-derive
+  // a "Writes about X" line on the public /authors page).
+  app.get("/api/authors/directory", async (_req, res) => {
+    try {
+      const authors = await storage.getDirectoryAuthors();
+      res.json({ authors });
+    } catch (error) {
+      console.error("Error fetching author directory:", error);
+      res.status(500).json({ error: "Failed to fetch author directory" });
+    }
+  });
+
+  // Lookup by slug — used by the public author page.
+  app.get("/api/authors/by-slug/:slug", async (req, res) => {
+    try {
+      const author = await storage.getAuthorBySlug(req.params.slug);
+      if (!author) return res.status(404).json({ error: "Author not found" });
+      res.json({ author });
+    } catch (error) {
+      console.error("Error fetching author by slug:", error);
+      res.status(500).json({ error: "Failed to fetch author" });
+    }
+  });
+
   app.post("/api/authors", async (req, res) => {
     try {
       const validatedData = insertAuthorSchema.parse(req.body);

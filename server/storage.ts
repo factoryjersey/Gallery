@@ -10,6 +10,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, like, ilike, and, or, inArray, count, sql, isNotNull, ne } from "drizzle-orm";
+import { slugify as slugifyAuthor } from "@shared/slug";
 
 function decodeHtml(str: string): string {
   return str
@@ -50,11 +51,16 @@ export interface IStorage {
 
   // Author methods
   getAuthor(id: string): Promise<Author | undefined>;
+  getAuthorBySlug(slug: string): Promise<Author | undefined>;
   getAuthorByEmail(email: string): Promise<Author | undefined>;
   createAuthor(author: InsertAuthor): Promise<Author>;
   updateAuthor(id: string, author: Partial<InsertAuthor>): Promise<Author | undefined>;
   deleteAuthor(id: string): Promise<boolean>;
   getAllAuthors(): Promise<Author[]>;
+  // Directory view: authors with at least one published article, including
+  // article counts and the names of categories they've written in (used to
+  // auto-generate a "Writes about X, Y" summary on the directory).
+  getDirectoryAuthors(): Promise<Array<Author & { articleCount: number; categoryNames: string[] }>>;
 
   // Category methods
   getCategory(id: string): Promise<Category | undefined>;
@@ -147,8 +153,54 @@ export class DatabaseStorage implements IStorage {
     return author || undefined;
   }
 
+  async getAuthorBySlug(slug: string): Promise<Author | undefined> {
+    const [author] = await db.select().from(authors).where(eq(authors.slug, slug));
+    return author ? normaliseAuthor(author) : undefined;
+  }
+
+  async getDirectoryAuthors(): Promise<Array<Author & { articleCount: number; categoryNames: string[] }>> {
+    // Authors who have at least one published, non-cartoon article.
+    // Returns article count + distinct category names per author so the
+    // directory can render a "Writes about Food, Music & Travel" line for
+    // contributors who don't have a manual bio.
+    const rows = await db
+      .select({
+        author: authors,
+        articleCount: sql<number>`count(distinct ${articles.id})::int`,
+        categoryNames: sql<string[]>`array_agg(distinct ${categories.name})`,
+      })
+      .from(authors)
+      .innerJoin(articles, eq(articles.authorId, authors.id))
+      .leftJoin(categories, eq(categories.id, articles.categoryId))
+      .where(and(
+        eq(articles.status, "published"),
+        ne(articles.contentType, "cartoon"),
+      ))
+      .groupBy(authors.id)
+      .orderBy(asc(authors.name));
+
+    return rows.map((r) => ({
+      ...normaliseAuthor(r.author),
+      articleCount: r.articleCount,
+      categoryNames: (r.categoryNames || []).filter(Boolean),
+    }));
+  }
+
   async createAuthor(author: InsertAuthor): Promise<Author> {
-    const [newAuthor] = await db.insert(authors).values(author).returning();
+    // Auto-generate a unique slug if one wasn't supplied — appends a
+    // numeric suffix if the base slug is already taken.
+    let values: InsertAuthor = author;
+    if (!author.slug && author.name) {
+      const base = slugifyAuthor(author.name) || "contributor";
+      let candidate = base;
+      let n = 2;
+      // eslint-disable-next-line no-await-in-loop
+      while (await this.getAuthorBySlug(candidate)) {
+        candidate = `${base}-${n++}`;
+      }
+      values = { ...author, slug: candidate };
+    }
+    const [newAuthor] = await db.insert(authors).values(values).returning();
     return newAuthor;
   }
 
