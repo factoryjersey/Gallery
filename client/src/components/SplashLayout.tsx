@@ -58,13 +58,23 @@ export default function SplashLayout({ children }: SplashLayoutProps) {
   );
   const stageRef = useRef<HTMLDivElement>(null);
 
-  // Featured stories drive the slide images.
-  const { data } = useQuery<{ articles: ArticleWithDetails[] }>({
-    queryKey: ["/api/articles/featured"],
+  // Admin-curated slides (preferred); falls back to featured stories so the
+  // splash still has something to show if the admin hasn't picked anything.
+  const { data: curatedData } = useQuery<{ slides: ArticleWithDetails[] }>({
+    queryKey: ["/api/splash-slides"],
     enabled: phase !== "done",
   });
+  const curated = (curatedData?.slides || []).filter((a) => !!a.featuredImage);
 
-  const slides = (data?.articles || []).filter((a) => !!a.featuredImage).slice(0, 3);
+  const { data: featuredData } = useQuery<{ articles: ArticleWithDetails[] }>({
+    queryKey: ["/api/articles/featured"],
+    enabled: phase !== "done" && curated.length < 3,
+  });
+
+  const slides = (curated.length >= 3
+    ? curated
+    : (featuredData?.articles || []).filter((a) => !!a.featuredImage)
+  ).slice(0, 3);
 
   // Measure the header logo so the splash wordmark can morph into its slot.
   // The site stage is currently translated below the fold (translateY(100vh)),

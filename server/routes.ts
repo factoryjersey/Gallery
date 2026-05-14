@@ -148,6 +148,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Curated splash intro slides (three articles, admin-picked)
+  app.get("/api/splash-slides", async (_req, res) => {
+    try {
+      const slides = await storage.getSplashSlides();
+      res.json({ slides });
+    } catch (error) {
+      console.error("Error fetching splash slides:", error);
+      res.status(500).json({ error: "Failed to fetch splash slides" });
+    }
+  });
+
+  app.put("/api/splash-slides", async (req, res) => {
+    try {
+      const { articleIds } = req.body as { articleIds?: unknown };
+      if (!Array.isArray(articleIds)) {
+        return res.status(400).json({ error: "articleIds must be an array" });
+      }
+      const cleaned = articleIds
+        .slice(0, 3)
+        .map((v) => (typeof v === "string" && v.length > 0 ? v : null));
+      await storage.setSplashSlides(cleaned);
+      const slides = await storage.getSplashSlides();
+      res.json({ slides });
+    } catch (error) {
+      console.error("Error setting splash slides:", error);
+      res.status(500).json({ error: "Failed to set splash slides" });
+    }
+  });
+
   app.get("/api/articles/trending", async (req, res) => {
     try {
       const limit = Number(req.query.limit) || 5;

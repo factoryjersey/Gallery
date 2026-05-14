@@ -6,7 +6,7 @@ import {
   Media, InsertMedia,
   User, InsertUser,
   Subscriber, InsertSubscriber,
-  articles, authors, categories, tags, articleTags, media, users, subscribers
+  articles, authors, categories, tags, articleTags, media, users, subscribers, splashSlides
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, like, ilike, and, or, inArray, count, sql, isNotNull, ne } from "drizzle-orm";
@@ -100,6 +100,10 @@ export interface IStorage {
   getFeaturedArticles(limit?: number): Promise<ArticleWithDetails[]>;
   getTrendingArticles(limit?: number): Promise<ArticleWithDetails[]>;
   incrementArticleViews(id: string): Promise<void>;
+
+  // Splash intro slides (three positions, each backed by an article)
+  getSplashSlides(): Promise<(ArticleWithDetails & { position: number })[]>;
+  setSplashSlides(articleIds: (string | null)[]): Promise<void>;
 
   // Subscribers
   createSubscriber(input: InsertSubscriber): Promise<Subscriber>;
@@ -668,10 +672,56 @@ export class DatabaseStorage implements IStorage {
   async incrementArticleViews(id: string): Promise<void> {
     await db
       .update(articles)
-      .set({ 
+      .set({
         views: sql`${articles.views} + 1`
       })
       .where(eq(articles.id, id));
+  }
+
+  async getSplashSlides(): Promise<(ArticleWithDetails & { position: number })[]> {
+    // Join splashSlides → articles/authors/categories so callers get everything
+    // they need in one round-trip. Empty positions (articleId NULL) are skipped.
+    const rows = await db
+      .select({
+        position: splashSlides.position,
+        article: articles,
+        author: authors,
+        category: categories,
+      })
+      .from(splashSlides)
+      .leftJoin(articles, eq(splashSlides.articleId, articles.id))
+      .leftJoin(authors, eq(articles.authorId, authors.id))
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .orderBy(asc(splashSlides.position));
+
+    const out: (ArticleWithDetails & { position: number })[] = [];
+    for (const r of rows) {
+      if (!r.article || !r.author || !r.category) continue;
+      out.push({
+        ...r.article,
+        author: r.author,
+        category: r.category,
+        tags: [],
+        position: r.position,
+      });
+    }
+    return out;
+  }
+
+  async setSplashSlides(articleIds: (string | null)[]): Promise<void> {
+    // Replace all three positions in one transaction so the splash never sees
+    // a half-updated state.
+    await db.transaction(async (tx) => {
+      await tx.delete(splashSlides);
+      const values = articleIds.slice(0, 3).map((articleId, position) => ({
+        position,
+        articleId: articleId || null,
+        updatedAt: new Date(),
+      }));
+      if (values.length > 0) {
+        await tx.insert(splashSlides).values(values);
+      }
+    });
   }
 
   // Media methods

@@ -103,6 +103,15 @@ export const media = pgTable("media", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Curated images for the homepage splash intro. Position is the slide index
+// (0, 1, 2). Three rows total; managed via /admin → Splash Intro.
+export const splashSlides = pgTable("splash_slides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  position: integer("position").notNull().unique(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Relations
 export const authorsRelations = relations(authors, ({ many }) => ({
   articles: many(articles),
