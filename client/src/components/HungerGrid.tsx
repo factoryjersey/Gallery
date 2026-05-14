@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
+import { format } from "date-fns";
 import type { ArticleWithDetails } from "@shared/schema";
 import LazyImage from "@/components/LazyImage";
 
@@ -18,18 +19,15 @@ interface HungerGridProps {
   onItemsPerPageChange?: (limit: number) => void;
 }
 
-// Pick a tile aspect ratio: mostly 16:9, with every 5th tile square so the
-// grid has the same broken-rhythm feel as hungermag.com.
-function aspectFor(i: number): string {
-  return i % 5 === 4 ? "1 / 1" : "16 / 9";
-}
-
-function SkeletonTile({ aspect }: { aspect: string }) {
+function SkeletonTile() {
   return (
-    <div
-      className="border border-black/10 -ml-[1px] -mt-[1px] bg-[hsl(0,0%,96%)] animate-pulse"
-      style={{ aspectRatio: aspect }}
-    />
+    <div className="flex flex-col gap-3">
+      <div className="bg-[hsl(0,0%,94%)] animate-pulse" style={{ aspectRatio: "1 / 1" }} />
+      <div className="h-3 bg-border rounded w-16 animate-pulse" />
+      <div className="h-5 bg-border rounded w-3/4 animate-pulse" />
+      <div className="h-3 bg-border rounded w-full animate-pulse" />
+      <div className="h-3 bg-border rounded w-2/3 animate-pulse" />
+    </div>
   );
 }
 
@@ -48,17 +46,15 @@ export default function HungerGrid({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 -mb-[1px]">
-        {Array.from({ length: 9 }).map((_, i) => (
-          <SkeletonTile key={i} aspect={aspectFor(i)} />
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-14 px-6">
+        {Array.from({ length: 9 }).map((_, i) => <SkeletonTile key={i} />)}
       </div>
     );
   }
 
   if (articles.length === 0) {
     return (
-      <div className="py-16 text-center border border-black/15">
+      <div className="py-16 text-center border border-black/15 mx-6">
         <p style={{ fontFamily: "Arial, sans-serif", fontSize: 14, color: "hsl(0 0% 43%)" }}>
           No articles found. Try adjusting your filters.
         </p>
@@ -68,82 +64,107 @@ export default function HungerGrid({
 
   return (
     <div>
-      {/* Tile grid — overlapping hairline borders, mixed 16:9 / square ratios */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 border-t border-l border-black/15">
-        {articles.map((article, i) => (
+      {/* Square tiles with title + excerpt below */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-14 px-6">
+        {articles.map((article) => (
           <Link key={article.id} href={`/article/${article.slug}`}>
             <article
-              className="relative block overflow-hidden border-r border-b border-black/15 group cursor-pointer bg-black"
-              style={{ aspectRatio: aspectFor(i) }}
+              className="group cursor-pointer flex flex-col gap-3"
               data-testid={`article-card-${article.slug}`}
             >
-              {/* Image */}
-              {article.featuredImage ? (
-                <LazyImage
-                  src={article.featuredImage}
-                  alt={article.title}
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-[2500ms] ease-out group-hover:scale-[1.05]"
-                />
-              ) : (
-                <div className="absolute inset-0 w-full h-full bg-[hsl(0,0%,12%)] flex items-center justify-center">
-                  <span
-                    style={{
-                      fontFamily: "Arial, sans-serif",
-                      fontSize: 11,
-                      letterSpacing: "0.16em",
-                      textTransform: "uppercase",
-                      color: "rgba(255,255,255,0.55)",
-                    }}
-                  >
-                    {article.category.name}
-                  </span>
-                </div>
-              )}
-
-              {/* Darkening overlay — keeps text readable, deepens on hover */}
+              {/* Square image */}
               <div
-                className="absolute inset-0 transition-opacity duration-500"
-                style={{
-                  background: "linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.65) 100%)",
-                }}
-              />
+                className="relative overflow-hidden bg-[hsl(0,0%,94%)]"
+                style={{ aspectRatio: "1 / 1" }}
+              >
+                {article.featuredImage ? (
+                  <LazyImage
+                    src={article.featuredImage}
+                    alt={article.title}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-[2500ms] ease-out group-hover:scale-[1.04]"
+                  />
+                ) : (
+                  <div className="absolute inset-0 w-full h-full flex items-center justify-center">
+                    <span
+                      style={{
+                        fontFamily: "Arial, sans-serif",
+                        fontSize: 11,
+                        letterSpacing: "0.16em",
+                        textTransform: "uppercase",
+                        color: "hsl(0 0% 55%)",
+                      }}
+                    >
+                      {article.category.name}
+                    </span>
+                  </div>
+                )}
+              </div>
 
-              {/* Category tag */}
-              <span
-                className="absolute top-3 left-3"
+              {/* Category */}
+              <div
                 style={{
                   fontFamily: "Arial, sans-serif",
-                  fontSize: 10,
-                  letterSpacing: "0.18em",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
                   textTransform: "uppercase",
-                  color: "#fff",
-                  padding: "4px 8px",
-                  border: "1px solid rgba(255,255,255,0.5)",
-                  background: "rgba(0,0,0,0.25)",
-                  backdropFilter: "blur(2px)",
+                  color: "hsl(182 55% 56%)",
+                  marginTop: 2,
                 }}
                 data-testid={`article-category-${article.slug}`}
               >
                 {article.category.name}
-              </span>
+              </div>
 
               {/* Title */}
               <h3
-                className="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-10 line-clamp-2"
+                className="group-hover:text-secondary transition-colors line-clamp-2"
                 style={{
                   fontFamily: "Georgia, serif",
-                  fontSize: "clamp(18px, 1.6vw, 26px)",
+                  fontSize: "clamp(20px, 1.5vw, 26px)",
                   fontWeight: 400,
-                  lineHeight: 1.18,
+                  lineHeight: 1.2,
                   letterSpacing: "-0.2px",
-                  color: "#fff",
+                  color: "hsl(0 0% 4%)",
                   margin: 0,
-                  textShadow: "0 1px 12px rgba(0,0,0,0.4)",
                 }}
                 data-testid={`article-title-${article.slug}`}
               >
                 {article.title}
               </h3>
+
+              {/* Excerpt */}
+              {article.excerpt && (
+                <p
+                  className="line-clamp-3"
+                  style={{
+                    fontFamily: "Georgia, serif",
+                    fontSize: 15,
+                    lineHeight: 1.55,
+                    color: "hsl(0 0% 35%)",
+                    margin: 0,
+                  }}
+                  data-testid={`article-excerpt-${article.slug}`}
+                >
+                  {article.excerpt}
+                </p>
+              )}
+
+              {/* Meta */}
+              <div
+                style={{
+                  fontFamily: "Arial, sans-serif",
+                  fontSize: 12,
+                  color: "hsl(0 0% 50%)",
+                  marginTop: 2,
+                }}
+              >
+                <span data-testid={`article-author-${article.slug}`}>By {article.author.name}</span>
+                <span className="mx-2">—</span>
+                <span data-testid={`article-date-${article.slug}`}>
+                  {format(new Date(article.publishedAt || article.createdAt), "d MMM yyyy")}
+                </span>
+              </div>
             </article>
           </Link>
         ))}
