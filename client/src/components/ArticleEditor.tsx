@@ -37,6 +37,7 @@ const articleSchema = z.object({
   status: z.enum(["draft", "published"]),
   contentType: z.enum(["article", "cartoon", "gallery"]).default("article"),
   featuredImage: z.string().optional(),
+  splashImage: z.string().optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
   readTime: z.number().min(1).default(5),
@@ -97,6 +98,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         status: article.status,
         contentType: article.contentType || "article",
         featuredImage: article.featuredImage || "",
+        splashImage: article.splashImage || "",
         metaTitle: article.metaTitle || "",
         metaDescription: article.metaDescription || "",
         readTime: article.readTime,
@@ -238,54 +240,51 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     setSelectedTags(selectedTags.filter(tag => tag !== tagToRemove));
   };
 
-  const handleImageUpload = async (file: File) => {
+  const handleImageUpload = async (file: File, target: "featuredImage" | "splashImage" = "featuredImage") => {
     let uploadSucceeded = false;
     try {
       const formData = new FormData();
       formData.append('image', file);
-      
+
       const response = await fetch("/api/media/upload", {
         method: "POST",
         body: formData,
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Upload failed:", errorText);
         throw new Error("Upload failed");
       }
-      
+
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const responseText = await response.text();
         console.error("Expected JSON, got:", responseText.substring(0, 200));
         throw new Error("Invalid response format");
       }
-      
+
       const data = await response.json();
-      // Try multiple paths to get the image URL
-      const imageUrl = data.media?.urls?.original || 
-                       data.media?.variants?.original || 
+      const imageUrl = data.media?.urls?.original ||
+                       data.media?.variants?.original ||
                        data.media?.objectPath;
-      
+
       if (!imageUrl) {
         console.error("No image URL in response:", data);
         throw new Error("No image URL returned");
       }
-      
-      console.log("Setting featured image:", imageUrl);
-      
-      // Set as featured image
-      form.setValue("featuredImage", imageUrl);
+
+      form.setValue(target, imageUrl);
       uploadSucceeded = true;
-      
+
       toast({
         title: "Image uploaded",
-        description: "Featured image has been uploaded successfully.",
+        description: target === "splashImage"
+          ? "Splash image has been uploaded successfully."
+          : "Featured image has been uploaded successfully.",
       });
     } catch (error) {
       console.error("Upload error:", error);
-      // Only show error toast if upload actually failed
       if (!uploadSucceeded) {
         toast({
           title: "Upload failed",
@@ -445,7 +444,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      handleImageUpload(file);
+                      handleImageUpload(file, "featuredImage");
                     }
                   }}
                   data-testid="featured-image-input"
@@ -453,6 +452,50 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                 {form.watch("featuredImage") && (
                   <div className="text-sm text-muted-foreground">
                     ✓ Featured image uploaded
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Splash Image — optional, higher-res for the homepage intro */}
+            <div className="space-y-2">
+              <Label>Splash Image (optional)</Label>
+              <p className="text-xs text-muted-foreground -mt-1">
+                Upload a higher-resolution image (ideally ≥ 1920×1080, portrait or
+                landscape) used when this article appears in the homepage splash
+                intro. Falls back to the featured image if not set.
+              </p>
+              <div className="flex gap-4 items-start">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageUpload(file, "splashImage");
+                    }
+                  }}
+                  data-testid="splash-image-input"
+                />
+                {form.watch("splashImage") ? (
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={form.watch("splashImage")}
+                      alt="Splash preview"
+                      className="h-10 w-16 object-cover border border-border"
+                    />
+                    <button
+                      type="button"
+                      className="text-xs underline text-muted-foreground hover:text-foreground"
+                      onClick={() => form.setValue("splashImage", "")}
+                      data-testid="splash-image-clear"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground self-center">
+                    Not set — splash will use the featured image
                   </div>
                 )}
               </div>

@@ -58,13 +58,17 @@ export default function SplashLayout({ children }: SplashLayoutProps) {
   );
   const stageRef = useRef<HTMLDivElement>(null);
 
+  // Prefer the per-article splashImage (uploaded specifically for the
+  // intro, usually higher-res) and fall back to featuredImage otherwise.
+  const splashUrl = (a: ArticleWithDetails) => a.splashImage || a.featuredImage || null;
+
   // Admin-curated slides (preferred); falls back to featured stories so the
   // splash still has something to show if the admin hasn't picked anything.
   const { data: curatedData } = useQuery<{ slides: ArticleWithDetails[] }>({
     queryKey: ["/api/splash-slides"],
     enabled: phase !== "done",
   });
-  const curated = (curatedData?.slides || []).filter((a) => !!a.featuredImage);
+  const curated = (curatedData?.slides || []).filter((a) => !!splashUrl(a));
 
   const { data: featuredData } = useQuery<{ articles: ArticleWithDetails[] }>({
     queryKey: ["/api/articles/featured"],
@@ -73,7 +77,7 @@ export default function SplashLayout({ children }: SplashLayoutProps) {
 
   const slides = (curated.length >= 3
     ? curated
-    : (featuredData?.articles || []).filter((a) => !!a.featuredImage)
+    : (featuredData?.articles || []).filter((a) => !!splashUrl(a))
   ).slice(0, 3);
 
   // Measure the header logo so the splash wordmark can morph into its slot.
@@ -97,9 +101,10 @@ export default function SplashLayout({ children }: SplashLayoutProps) {
   useEffect(() => {
     if (phase === "done") return;
     for (const s of slides) {
-      if (s.featuredImage) {
+      const url = splashUrl(s);
+      if (url) {
         const img = new Image();
-        img.src = s.featuredImage;
+        img.src = url;
       }
     }
   }, [phase, slides]);
@@ -180,7 +185,7 @@ export default function SplashLayout({ children }: SplashLayoutProps) {
             style={{
               position: "absolute",
               inset: 0,
-              backgroundImage: `url('${s.featuredImage}')`,
+              backgroundImage: `url('${splashUrl(s)}')`,
               backgroundSize: "cover",
               backgroundPosition: "center",
               opacity: i === index && phase === "playing" ? 1 : i === index ? 1 : 0,

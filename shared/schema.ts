@@ -44,6 +44,9 @@ export const articles = pgTable("articles", {
   excerpt: text("excerpt"),
   content: text("content").notNull(),
   featuredImage: text("featured_image"),
+  // Higher-resolution image used in the splash intro slideshow. Optional;
+  // falls back to featuredImage when null.
+  splashImage: text("splash_image"),
   status: text("status").notNull().default("draft"), // draft, published, archived
   views: integer("views").default(0).notNull(),
   readTime: integer("read_time").default(5).notNull(), // in minutes

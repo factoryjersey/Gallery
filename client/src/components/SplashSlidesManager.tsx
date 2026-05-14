@@ -91,12 +91,21 @@ export function SplashSlidesManager() {
           <Card key={i} className="overflow-hidden">
             <CardContent className="p-0">
               <div className="relative bg-[hsl(0,0%,94%)]" style={{ aspectRatio: "16 / 9" }}>
-                {slot?.featuredImage ? (
-                  <img
-                    src={slot.featuredImage}
-                    alt={slot.title}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
+                {slot ? (
+                  (() => {
+                    const url = slot.splashImage || slot.featuredImage;
+                    return url ? (
+                      <img
+                        src={url}
+                        alt={slot.title}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                        No image
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
                     Slot {i + 1} — empty
@@ -112,6 +121,17 @@ export function SplashSlidesManager() {
                     <X className="w-4 h-4" />
                   </button>
                 )}
+                {slot && (
+                  <div
+                    className="absolute bottom-2 left-2 px-2 py-0.5 text-[10px] uppercase tracking-wider"
+                    style={{
+                      background: slot.splashImage ? "rgba(0,160,140,0.85)" : "rgba(160,90,0,0.85)",
+                      color: "#fff",
+                    }}
+                  >
+                    {slot.splashImage ? "Splash image set" : "Using featured image"}
+                  </div>
+                )}
               </div>
               <div className="p-3 space-y-2">
                 {slot ? (
@@ -122,6 +142,12 @@ export function SplashSlidesManager() {
                     <div className="font-medium leading-tight line-clamp-2" style={{ fontFamily: "Georgia, serif" }}>
                       {slot.title}
                     </div>
+                    {!slot.splashImage && (
+                      <div className="text-xs text-muted-foreground">
+                        Tip: open this article in the editor to upload a higher-resolution
+                        splash image.
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-xs text-muted-foreground">Position {i + 1}</div>
