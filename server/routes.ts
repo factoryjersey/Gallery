@@ -11,6 +11,7 @@ import multer from "multer";
 import { DOMParser } from "@xmldom/xmldom";
 import { processImage, getPublicUrl } from "./imageProcessor";
 import { r2Client, uploadToR2, getR2PublicUrl, getR2UrlPattern, getR2ImagePattern, extractR2Key, isR2Url, R2_PUBLIC_URL } from "./r2Client";
+import { gateMutations, adminLoginHandler, adminLogoutHandler, adminMeHandler } from "./adminAuth";
 import {
   archiveAvailable,
   listPackagedIssues,
@@ -26,6 +27,14 @@ import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjec
 const upload = multer({ storage: multer.memoryStorage() });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Admin auth — gate mutations BEFORE any routes are registered so every
+  // POST/PUT/PATCH/DELETE under /api/ is checked (except the public whitelist
+  // inside gateMutations).
+  app.use(gateMutations);
+  app.post("/api/admin/login", adminLoginHandler);
+  app.post("/api/admin/logout", adminLogoutHandler);
+  app.get("/api/admin/me", adminMeHandler);
+
   // API Routes
 
   // Articles

@@ -47,12 +47,16 @@ import { PageViewsReport } from "@/components/PageViewsReport";
 import SubscribersList from "@/components/SubscribersList";
 import FeatureImporter from "@/components/FeatureImporter";
 import { useAdmin } from "@/contexts/AdminContext";
+import { Input } from "@/components/ui/input";
+import { LogOut, LogIn } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [showArticleEditor, setShowArticleEditor] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | undefined>(undefined);
-  const { isAdmin, toggleAdmin } = useAdmin();
+  const { isAdmin, configured, isLoading, login, logout } = useAdmin();
+  const { toast } = useToast();
 
   const handleEditArticle = useCallback((articleId: string) => {
     setEditingArticleId(articleId);
@@ -64,13 +68,6 @@ export default function Admin() {
     setShowArticleEditor(false);
     setEditingArticleId(undefined);
   }, []);
-
-  // Enable admin mode when entering admin page
-  useEffect(() => {
-    if (!isAdmin) {
-      toggleAdmin();
-    }
-  }, [isAdmin, toggleAdmin]);
 
   // Check for article edit request from URL
   useEffect(() => {
@@ -96,6 +93,15 @@ export default function Admin() {
 
   const stats = statsData?.stats;
 
+  // Gate: while we don't know yet whether the visitor is admin, render nothing;
+  // if they're not admin, show the password prompt instead of the dashboard.
+  if (isLoading) {
+    return <div className="min-h-screen" />;
+  }
+  if (!isAdmin) {
+    return <AdminLoginGate configured={configured} onSubmit={login} toast={toast} />;
+  }
+
   return (
     <div className="min-h-screen bg-muted">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -111,9 +117,9 @@ export default function Admin() {
                     View Site
                   </Button>
                 </Link>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="text-primary-foreground hover:bg-primary-foreground/10"
                   onClick={() => {
                     setActiveTab("articles");
@@ -123,6 +129,16 @@ export default function Admin() {
                 >
                   <PlusCircle className="h-4 w-4 mr-2" />
                   New Article
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-primary-foreground hover:bg-primary-foreground/10"
+                  onClick={() => logout()}
+                  data-testid="button-admin-logout"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign out
                 </Button>
               </div>
             </div>
@@ -554,6 +570,83 @@ export default function Admin() {
               )}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminLoginGate({
+  configured,
+  onSubmit,
+  toast,
+}: {
+  configured: boolean;
+  onSubmit: (password: string) => Promise<{ ok: boolean; error?: string }>;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    setSubmitting(true);
+    const result = await onSubmit(password);
+    setSubmitting(false);
+    if (!result.ok) {
+      toast({
+        title: "Sign-in failed",
+        description: result.error || "Incorrect password.",
+        variant: "destructive",
+      });
+      setPassword("");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-muted flex items-center justify-center px-6">
+      <div className="bg-card border border-border shadow-lg w-full max-w-sm p-8">
+        <h1
+          className="mb-1"
+          style={{ fontFamily: "Georgia, serif", fontSize: 24, fontWeight: 400 }}
+        >
+          Admin sign-in
+        </h1>
+        <p
+          className="mb-6 text-sm"
+          style={{ color: "hsl(0 0% 45%)", fontFamily: "Georgia, serif" }}
+        >
+          {configured
+            ? "Enter the admin password to manage Gallery."
+            : "Admin access is not yet configured on this server (ADMIN_PASSWORD / ADMIN_COOKIE_SECRET unset)."}
+        </p>
+        <form onSubmit={handle} className="space-y-4">
+          <Input
+            type="password"
+            autoFocus
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={submitting || !configured}
+            data-testid="admin-login-password"
+          />
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={submitting || !configured || !password}
+            data-testid="admin-login-submit"
+          >
+            <LogIn className="h-4 w-4 mr-2" />
+            {submitting ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
+        <div className="mt-6 text-center">
+          <Link href="/">
+            <span className="text-xs underline text-muted-foreground hover:text-foreground cursor-pointer">
+              Back to the site
+            </span>
+          </Link>
         </div>
       </div>
     </div>
