@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
 import ArticleGallery from "@/components/ArticleGallery";
+import RichContent from "@/components/RichContent";
 import PaparazziGallery from "@/components/PaparazziGallery";
 import PhotoshootSlider from "@/components/PhotoshootSlider";
 import GalleryCarousel from "@/components/GalleryCarousel";
@@ -247,7 +248,7 @@ export default function Article() {
             {article.contentType === "gallery" ? (
               <PaparazziGallery content={article.content} />
             ) : (
-              <ArticleGallery
+              <RichContent
                 content={article.content}
                 className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
               />

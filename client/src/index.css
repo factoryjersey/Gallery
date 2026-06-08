@@ -187,3 +187,41 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* TipTap editor surface — editorial typography that roughly mirrors the
+   public article page so authors get a fair preview while composing. */
+.tiptap-prose {
+  font-family: Georgia, serif;
+  font-size: 17px;
+  line-height: 1.7;
+  color: hsl(0 0% 10%);
+}
+.tiptap-prose h1 { font-size: 32px; font-weight: 400; line-height: 1.15; margin: 1.4em 0 0.5em; letter-spacing: -0.5px; }
+.tiptap-prose h2 { font-size: 26px; font-weight: 400; line-height: 1.2; margin: 1.4em 0 0.5em; letter-spacing: -0.3px; }
+.tiptap-prose h3 { font-size: 21px; font-weight: 400; line-height: 1.25; margin: 1.3em 0 0.4em; }
+.tiptap-prose p { margin: 0 0 1em; }
+.tiptap-prose ul, .tiptap-prose ol { margin: 0 0 1em 1.5em; }
+.tiptap-prose ul { list-style: disc; }
+.tiptap-prose ol { list-style: decimal; }
+.tiptap-prose li { margin: 0.25em 0; }
+.tiptap-prose blockquote {
+  border-left: 3px solid hsl(182 55% 56%);
+  padding: 0.2em 0 0.2em 1em;
+  margin: 1em 0;
+  color: hsl(0 0% 30%);
+  font-style: italic;
+}
+.tiptap-prose a { color: hsl(182 55% 36%); text-decoration: underline; }
+.tiptap-prose img.tiptap-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1em 0;
+}
+.tiptap-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: hsl(0 0% 60%);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

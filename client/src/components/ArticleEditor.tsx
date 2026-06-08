@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AuthorPicker from "@/components/AuthorPicker";
+import TipTapEditor from "@/components/TipTapEditor";
 import { apiRequest } from "@/lib/queryClient";
 
 const articleSchema = z.object({
@@ -645,69 +646,39 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               )}
             </div>
 
-            {/* Content Editor */}
+            {/* Content Editor — TipTap WYSIWYG. HTML output drops straight
+                into the existing articles.content column; old WordPress
+                imports parse cleanly because TipTap reads <h2>, <img>,
+                <blockquote>, etc. natively. */}
             <div className="space-y-2">
               <Label>Content</Label>
-              <div className="border border-input rounded-lg overflow-hidden">
-                {/* Toolbar */}
-                <div className="bg-muted border-b border-border px-3 py-2 flex items-center space-x-2 flex-wrap">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => insertTextAtCursor("**Bold Text**")}
-                    data-testid="toolbar-bold"
-                  >
-                    <Bold className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => insertTextAtCursor("*Italic Text*")}
-                    data-testid="toolbar-italic"
-                  >
-                    <Italic className="h-4 w-4" />
-                  </Button>
-                  <Separator orientation="vertical" className="h-6" />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => insertTextAtCursor("# Heading\n")}
-                    data-testid="toolbar-heading"
-                  >
-                    <Heading className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => insertTextAtCursor("[Link Text](URL)")}
-                    data-testid="toolbar-link"
-                  >
-                    <LinkIcon className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => insertTextAtCursor("- List item\n")}
-                    data-testid="toolbar-list"
-                  >
-                    <List className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                <Textarea
-                  ref={contentRef}
-                  placeholder="Start writing your article..."
-                  className="min-h-[300px] border-0 focus-visible:ring-0"
-                  value={form.watch("content") || ""}
-                  onChange={handleContentChange}
-                  data-testid="article-content-textarea"
-                />
-              </div>
+              <TipTapEditor
+                value={form.watch("content") || ""}
+                onChange={(html) => form.setValue("content", html, { shouldDirty: true })}
+                placeholder="Start writing your article — use the toolbar to add headings, lists, links, or insert an image at the cursor."
+                onUpload={async (file) => {
+                  const formData = new FormData();
+                  formData.append("image", file);
+                  try {
+                    const res = await fetch("/api/media/upload", { method: "POST", body: formData });
+                    if (!res.ok) throw new Error("Upload failed");
+                    const data = await res.json();
+                    return (
+                      data.media?.urls?.original ||
+                      data.media?.variants?.original ||
+                      data.media?.objectPath ||
+                      null
+                    );
+                  } catch (err) {
+                    toast({
+                      title: "Image upload failed",
+                      description: err instanceof Error ? err.message : "Unknown error",
+                      variant: "destructive",
+                    });
+                    return null;
+                  }
+                }}
+              />
               {form.formState.errors.content && (
                 <p className="text-sm text-destructive">{form.formState.errors.content.message}</p>
               )}
