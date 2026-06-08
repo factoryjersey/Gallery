@@ -8,6 +8,7 @@ import { Link } from "wouter";
 import ArticleGallery from "@/components/ArticleGallery";
 import PaparazziGallery from "@/components/PaparazziGallery";
 import PhotoshootSlider from "@/components/PhotoshootSlider";
+import GalleryCarousel from "@/components/GalleryCarousel";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -232,6 +233,15 @@ export default function Article() {
                   data-testid="article-featured-image"
                 />
               </figure>
+            )}
+
+            {/* Sliding image gallery (admin-curated, in article.galleryImages).
+                Sits between the lead image and the body so it reads as a
+                supplementary spread rather than as the lead. */}
+            {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (
+              <div className="mb-10 -mx-6 sm:mx-0">
+                <GalleryCarousel images={article.galleryImages} altPrefix={article.title} />
+              </div>
             )}
 
             {article.contentType === "gallery" ? (

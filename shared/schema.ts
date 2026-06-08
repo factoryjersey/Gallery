@@ -47,6 +47,10 @@ export const articles = pgTable("articles", {
   // Higher-resolution image used in the splash intro slideshow. Optional;
   // falls back to featuredImage when null.
   splashImage: text("splash_image"),
+  // Optional ordered image gallery for the article page. JSON-encoded array
+  // of { url: string, caption?: string }; rendered as a slider above the
+  // body when present.
+  galleryImages: json("gallery_images").$type<{ url: string; caption?: string }[]>(),
   status: text("status").notNull().default("draft"), // draft, published, archived
   views: integer("views").default(0).notNull(),
   readTime: integer("read_time").default(5).notNull(), // in minutes

@@ -21,7 +21,10 @@ import {
   Italic,
   Link as LinkIcon,
   List,
-  Heading
+  Heading,
+  ArrowUp,
+  ArrowDown,
+  Upload as UploadIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AuthorPicker from "@/components/AuthorPicker";
@@ -38,6 +41,7 @@ const articleSchema = z.object({
   contentType: z.enum(["article", "cartoon", "gallery"]).default("article"),
   featuredImage: z.string().optional(),
   splashImage: z.string().optional(),
+  galleryImages: z.array(z.object({ url: z.string(), caption: z.string().optional() })).optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
   readTime: z.number().min(1).default(5),
@@ -99,6 +103,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         contentType: article.contentType || "article",
         featuredImage: article.featuredImage || "",
         splashImage: article.splashImage || "",
+        galleryImages: Array.isArray(article.galleryImages) ? article.galleryImages : [],
         metaTitle: article.metaTitle || "",
         metaDescription: article.metaDescription || "",
         readTime: article.readTime,
@@ -279,9 +284,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
 
       toast({
         title: "Image uploaded",
-        description: target === "splashImage"
-          ? "Splash image has been uploaded successfully."
-          : "Featured image has been uploaded successfully.",
+        description:
+          target === "splashImage"
+            ? "Splash image has been uploaded successfully."
+            : "Featured image has been uploaded successfully.",
       });
     } catch (error) {
       console.error("Upload error:", error);
@@ -293,6 +299,55 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         });
       }
     }
+  };
+
+  const handleGalleryUpload = async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    const uploaded: { url: string }[] = [];
+    for (const file of list) {
+      try {
+        const formData = new FormData();
+        formData.append("image", file);
+        const response = await fetch("/api/media/upload", { method: "POST", body: formData });
+        if (!response.ok) throw new Error("Upload failed");
+        const data = await response.json();
+        const url =
+          data.media?.urls?.original || data.media?.variants?.original || data.media?.objectPath;
+        if (url) uploaded.push({ url });
+      } catch (err) {
+        console.error("Gallery upload failed for", file.name, err);
+      }
+    }
+    if (uploaded.length === 0) {
+      toast({ title: "Upload failed", description: "No images uploaded.", variant: "destructive" });
+      return;
+    }
+    const existing = form.getValues("galleryImages") || [];
+    form.setValue("galleryImages", [...existing, ...uploaded], { shouldDirty: true });
+    toast({
+      title: `Added ${uploaded.length} image${uploaded.length === 1 ? "" : "s"} to gallery`,
+    });
+  };
+
+  const moveGalleryImage = (from: number, to: number) => {
+    const current = form.getValues("galleryImages") || [];
+    if (to < 0 || to >= current.length) return;
+    const next = [...current];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    form.setValue("galleryImages", next, { shouldDirty: true });
+  };
+
+  const removeGalleryImage = (i: number) => {
+    const current = form.getValues("galleryImages") || [];
+    form.setValue("galleryImages", current.filter((_, idx) => idx !== i), { shouldDirty: true });
+  };
+
+  const updateGalleryCaption = (i: number, caption: string) => {
+    const current = form.getValues("galleryImages") || [];
+    const next = current.map((img, idx) => (idx === i ? { ...img, caption } : img));
+    form.setValue("galleryImages", next, { shouldDirty: true });
   };
 
   const onSubmit = (data: ArticleFormData) => {
@@ -499,6 +554,95 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Image Gallery — sliding carousel rendered on the article page */}
+            <div className="space-y-2">
+              <Label>Image Gallery (optional)</Label>
+              <p className="text-xs text-muted-foreground -mt-1">
+                Upload one or more images to attach a sliding gallery to this article.
+                Drag-and-drop reorder via the arrow buttons. Captions are optional.
+              </p>
+
+              <div className="flex gap-4 items-start">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleGalleryUpload(e.target.files);
+                      e.target.value = "";
+                    }
+                  }}
+                  data-testid="gallery-image-input"
+                />
+                <span className="text-xs text-muted-foreground self-center whitespace-nowrap">
+                  {(form.watch("galleryImages")?.length ?? 0)} image
+                  {(form.watch("galleryImages")?.length ?? 0) === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {(form.watch("galleryImages")?.length ?? 0) > 0 && (
+                <div className="space-y-2 mt-2">
+                  {(form.watch("galleryImages") || []).map((img, i, arr) => (
+                    <div
+                      key={`${img.url}-${i}`}
+                      className="flex gap-3 items-start p-2 border border-border rounded"
+                      data-testid={`gallery-item-${i}`}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.caption || `Gallery image ${i + 1}`}
+                        className="h-16 w-24 object-cover border border-border shrink-0"
+                      />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <Input
+                          placeholder="Caption (optional)"
+                          value={img.caption || ""}
+                          onChange={(e) => updateGalleryCaption(i, e.target.value)}
+                          className="text-sm"
+                          data-testid={`gallery-caption-${i}`}
+                        />
+                        <div className="text-xs text-muted-foreground truncate" title={img.url}>
+                          {img.url}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          type="button"
+                          className="p-1 hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                          onClick={() => moveGalleryImage(i, i - 1)}
+                          disabled={i === 0}
+                          title="Move up"
+                          data-testid={`gallery-up-${i}`}
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                          onClick={() => moveGalleryImage(i, i + 1)}
+                          disabled={i === arr.length - 1}
+                          title="Move down"
+                          data-testid={`gallery-down-${i}`}
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={() => removeGalleryImage(i)}
+                          title="Remove"
+                          data-testid={`gallery-remove-${i}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Content Editor */}
