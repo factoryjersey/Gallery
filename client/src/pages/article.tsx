@@ -24,7 +24,14 @@ export default function Article() {
   });
 
   const article = data?.article;
-  const isPhotoshoot = article?.category?.slug === "fashion-shoots";
+  // Fashion-shoots historically used PhotoshootSlider, which extracted
+  // images from the body HTML. Now that we recover their images into the
+  // proper galleryImages column, we only fall back to PhotoshootSlider
+  // when galleryImages is empty (i.e. older articles that haven't been
+  // migrated yet).
+  const isPhotoshoot =
+    article?.category?.slug === "fashion-shoots" &&
+    !(Array.isArray(article?.galleryImages) && article!.galleryImages!.length > 0);
 
   // Desktop layout preference: 1-col reads like classic editorial, 2-col
   // puts the featured image on the left with body copy on the right
@@ -341,6 +348,8 @@ export default function Article() {
                   article.contentType === "gallery" ||
                   article.category?.slug === "paparazzi" ||
                   article.category?.slug === "events" ||
+                  article.category?.slug === "fashion-shoots" ||
+                  article.category?.slug === "fashion" ||
                   imgs.length >= 12;
                 return (
                   <div className="mb-10 -mx-6 sm:mx-0">

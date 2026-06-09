@@ -125,19 +125,36 @@ async function headOk(url) {
   }
 }
 
-function extractGalleryImagesFromLiveHtml(html) {
-  // Live WP pages render gallery blocks with nested <figure> tags, which
-  // breaks a naive outer-figure regex. Instead, find every
-  // <figure class="wp-block-image"> directly and only keep ones whose
-  // src looks like a content upload (skips logos, avatars, theme assets).
+function extractGalleryImagesFromLiveHtml(html, title) {
+  // Two patterns to catch:
+  //   (a) Newer gutenberg posts: <figure class="wp-block-image"><img …/></figure>
+  //   (b) Older photoshoots: <p><a href="full.jpg"><img class="wp-image-NNN" …/></a></p>
+  // For both, only keep images whose src is in /wp-content/uploads/ (skips
+  // logos, theme assets). Anchor the scan AFTER the article <h1> so sidebar
+  // / related-posts images don't leak in.
   if (!html) return [];
+
+  let scanFrom = 0;
+  if (title) {
+    const h1Re = /<h1[^>]*>([\s\S]*?)<\/h1>/gi;
+    for (const m of html.matchAll(h1Re)) {
+      const inner = m[1].replace(/<[^>]+>/g, "").trim();
+      if (inner.toLowerCase().includes(title.toLowerCase().slice(0, 30))) {
+        scanFrom = m.index + m[0].length;
+        break;
+      }
+    }
+  }
+  const body = html.slice(scanFrom);
+
   const out = new Map(); // url → caption (preserves first-seen order)
+
+  // Pattern (a): wp-block-image figures
   const figureRe = /<figure[^>]+class="[^"]*wp-block-image[^"]*"[^>]*>([\s\S]*?)<\/figure>/gi;
-  for (const figMatch of html.matchAll(figureRe)) {
+  for (const figMatch of body.matchAll(figureRe)) {
     const inner = figMatch[1];
     const imgSrc = inner.match(/<img[^>]+src="([^"]+)"/i)?.[1];
     if (!imgSrc) continue;
-    // Only accept uploads from the WP media library, not theme/header images
     if (!/\/wp-content\/uploads\//i.test(imgSrc)) continue;
     const cap = inner
       .match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/i)?.[1]
@@ -145,6 +162,20 @@ function extractGalleryImagesFromLiveHtml(html) {
       .trim();
     if (!out.has(imgSrc)) out.set(imgSrc, cap || "");
   }
+
+  // Pattern (b): bare <img class="…wp-image-NNN…"> — classic photoshoot
+  // markup. Use full-size href when wrapped in <a>, else use the img src
+  // with the "-WIDTHxHEIGHT" sizing suffix stripped.
+  const imgRe = /<a[^>]+href="([^"]+\.(?:jpe?g|png|webp))"[^>]*>\s*<img[^>]+class="[^"]*wp-image-\d+[^"]*"[^>]*>\s*<\/a>|<img[^>]+class="[^"]*wp-image-\d+[^"]*"[^>]*src="([^"]+)"/gi;
+  for (const m of body.matchAll(imgRe)) {
+    let url = m[1] || m[2];
+    if (!url) continue;
+    if (!/\/wp-content\/uploads\//i.test(url)) continue;
+    // If no <a href> wrap, strip size suffix so we land on the original.
+    if (!m[1]) url = url.replace(/-\d+x\d+(\.[a-z]+)(\?.*)?$/i, "$1");
+    if (!out.has(url)) out.set(url, "");
+  }
+
   return Array.from(out.entries()).map(([url, caption]) => ({ url, caption: caption || undefined }));
 }
 
@@ -198,7 +229,7 @@ async function processArticle(article) {
   const html = await fetchHtml(link);
   if (!html) return { article, status: "fetch-failed", link };
 
-  const rawImages = extractGalleryImagesFromLiveHtml(html);
+  const rawImages = extractGalleryImagesFromLiveHtml(html, article.title);
   if (rawImages.length === 0) return { article, status: "no-images-on-live", link };
 
   // Try R2 first; fall back to the original WP URL when --fallback-wp is set
