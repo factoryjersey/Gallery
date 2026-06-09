@@ -103,12 +103,29 @@ function BigTile({ article, preferGallery }: { article: ArticleWithDetails; pref
   );
 }
 
-function SmallTile({ article, preferGallery }: { article: ArticleWithDetails; preferGallery: boolean }) {
+function SmallTile({
+  article,
+  preferGallery,
+  fillHeight = false,
+}: {
+  article: ArticleWithDetails;
+  preferGallery: boolean;
+  /** When true, image stretches to fill the grid cell (used in the
+   *  feature layout so two small tiles together match the big tile's
+   *  height). When false, image keeps a square aspect ratio. */
+  fillHeight?: boolean;
+}) {
   const img = tileImage(article, preferGallery);
   return (
     <Link href={`/article/${article.slug}`}>
-      <article className="group cursor-pointer flex flex-col gap-2" data-testid={`section-smalltile-${article.slug}`}>
-        <div className="relative overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
+      <article
+        className={`group cursor-pointer flex flex-col gap-2 ${fillHeight ? "h-full" : ""}`}
+        data-testid={`section-smalltile-${article.slug}`}
+      >
+        <div
+          className={`relative overflow-hidden ${fillHeight ? "flex-1 min-h-0" : ""}`}
+          style={fillHeight ? undefined : { aspectRatio: "1 / 1" }}
+        >
           {img ? (
             <LazyImage
               src={img}
@@ -207,15 +224,18 @@ export default function CategorySection({
   );
 
   const body = variant === "feature" ? (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2">
+    // CSS grid trick: big tile spans 2 cols × 2 rows; each small tile
+    // takes 1 col × 1 row in the right column. Row heights auto-size to
+    // the big tile, so the two small tiles together exactly match the
+    // big tile's height (minus the inter-row gap). Small tiles stretch
+    // their image area to fill their cell via fillHeight.
+    <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-2 gap-4 lg:gap-6">
+      <div className="lg:col-span-2 lg:row-span-2">
         {articles[0] && <BigTile article={articles[0]} preferGallery={preferGallery} />}
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
-        {articles.slice(1, 4).map((a) => (
-          <SmallTile key={a.id} article={a} preferGallery={preferGallery} />
-        ))}
-      </div>
+      {articles.slice(1, 3).map((a) => (
+        <SmallTile key={a.id} article={a} preferGallery={preferGallery} fillHeight />
+      ))}
     </div>
   ) : (
     <div className="grid grid-cols-1 gap-4">
