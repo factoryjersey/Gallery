@@ -38,6 +38,8 @@ const articleSchema = z.object({
   content: z.string().min(1, "Content is required"),
   categoryId: z.string().min(1, "Category is required"),
   authorId: z.string().min(1, "Author is required"),
+  photographer: z.string().optional(),
+  illustrator: z.string().optional(),
   status: z.enum(["draft", "published"]),
   contentType: z.enum(["article", "cartoon", "gallery"]).default("article"),
   featuredImage: z.string().optional(),
@@ -100,6 +102,8 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         content: article.content,
         categoryId: article.categoryId,
         authorId: article.authorId,
+        photographer: article.photographer || "",
+        illustrator: article.illustrator || "",
         status: article.status,
         contentType: article.contentType || "article",
         featuredImage: article.featuredImage || "",
@@ -462,6 +466,28 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                 {form.formState.errors.authorId && (
                   <p className="text-sm text-destructive">{form.formState.errors.authorId.message}</p>
                 )}
+              </div>
+            </div>
+
+            {/* Optional credits — shown in the byline alongside the author */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="photographer">Photographer (optional)</Label>
+                <Input
+                  id="photographer"
+                  placeholder="e.g. Oliver Doran"
+                  {...form.register("photographer")}
+                  data-testid="article-photographer"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="illustrator">Illustrator (optional)</Label>
+                <Input
+                  id="illustrator"
+                  placeholder="e.g. Jamie Willow"
+                  {...form.register("illustrator")}
+                  data-testid="article-illustrator"
+                />
               </div>
             </div>
 

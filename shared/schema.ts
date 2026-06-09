@@ -55,6 +55,12 @@ export const articles = pgTable("articles", {
   views: integer("views").default(0).notNull(),
   readTime: integer("read_time").default(5).notNull(), // in minutes
   authorId: varchar("author_id").references(() => authors.id).notNull(),
+  // Optional credit fields. The "Words: …" byline normally matches the
+  // article's set author; these capture the OTHER credits that often
+  // appeared as a leading "Photography: X, Illustration: Y" sentence in
+  // imported WordPress content.
+  photographer: text("photographer"),
+  illustrator: text("illustrator"),
   categoryId: varchar("category_id").references(() => categories.id).notNull(),
   publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

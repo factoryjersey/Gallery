@@ -207,6 +207,18 @@ export default function Article() {
                 <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.author.name}</strong>
               )}
             </span>
+            {article.photographer && (
+              <span data-testid="article-photographer">
+                Photography{" "}
+                <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.photographer}</strong>
+              </span>
+            )}
+            {article.illustrator && (
+              <span data-testid="article-illustrator">
+                Illustration{" "}
+                <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.illustrator}</strong>
+              </span>
+            )}
             <span>—</span>
             <span data-testid="article-date">
               {format(new Date(article.publishedAt || article.createdAt), "d MMMM yyyy")}
