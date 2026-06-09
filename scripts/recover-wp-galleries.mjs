@@ -26,6 +26,9 @@
 //   --slug=foo           target one article by slug
 //   --concurrency=N      parallel WP fetches (default 4 — easy on the host)
 //   --keep-html          don't strip the empty gallery markup from content
+//   --fallback-wp        when an R2 equivalent is missing, fall back to the
+//                        original https://www.gallery.je/wp-content/... URL
+//                        (handy for posts added after the R2 migration ran)
 //
 // Usage:
 //   railway run node scripts/recover-wp-galleries.mjs --category=events --limit=5
@@ -35,6 +38,7 @@ import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 
 const APPLY = process.argv.includes("--apply");
 const KEEP_HTML = process.argv.includes("--keep-html");
+const FALLBACK_WP = process.argv.includes("--fallback-wp");
 const LIMIT = Number((process.argv.find((a) => a.startsWith("--limit=")) || "").split("=")[1] || 0);
 const SLUG = (process.argv.find((a) => a.startsWith("--slug=")) || "").split("=")[1] || "";
 const CATEGORY = (process.argv.find((a) => a.startsWith("--category=")) || "").split("=")[1] || "";
@@ -51,9 +55,16 @@ if (SLUG) {
   conditions.push(`a.slug = $${params.length + 1}`);
   params.push(SLUG);
 } else {
-  conditions.push(`a.content LIKE '%wp-block-gallery%'`);
-  conditions.push(`(a.gallery_images IS NULL OR jsonb_typeof(a.gallery_images) = 'null' OR a.gallery_images = '[]'::jsonb)`);
+  // Always: must have wp_data (for originalLink) + empty galleryImages
   conditions.push(`a.wp_data IS NOT NULL`);
+  conditions.push(`(a.gallery_images IS NULL OR jsonb_typeof(a.gallery_images) = 'null' OR a.gallery_images = '[]'::jsonb)`);
+  // When no category filter is given, restrict to articles that show signs
+  // of having had a gallery (empty wp-block-gallery shell) — without this
+  // bulk runs would scrape every article on the site. With a category filter
+  // the operator has opted in; try every candidate.
+  if (!CATEGORY) {
+    conditions.push(`a.content LIKE '%wp-block-gallery%'`);
+  }
 }
 if (CATEGORY) {
   conditions.push(`c.slug = $${params.length + 1}`);
@@ -190,18 +201,23 @@ async function processArticle(article) {
   const rawImages = extractGalleryImagesFromLiveHtml(html);
   if (rawImages.length === 0) return { article, status: "no-images-on-live", link };
 
-  // Map to R2 URLs, HEAD-check each, drop any that don't resolve
-  const candidates = rawImages
-    .map((img) => ({ ...img, url: wpToR2(img.url) }))
-    .filter((img) => img.url);
-
+  // Try R2 first; fall back to the original WP URL when --fallback-wp is set
+  // AND the live image responds 200.
   const alive = [];
-  for (const img of candidates) {
-    if (await headOk(img.url)) alive.push(img);
+  let fellBack = 0;
+  for (const img of rawImages) {
+    const r2 = wpToR2(img.url);
+    if (r2 && (await headOk(r2))) {
+      alive.push({ ...img, url: r2 });
+    } else if (FALLBACK_WP && (await headOk(img.url))) {
+      alive.push({ ...img, url: img.url });
+      fellBack++;
+    }
   }
-  if (alive.length === 0) return { article, status: "no-r2-match", link, attempted: candidates.length };
-
-  return { article, status: "ok", link, images: alive };
+  if (alive.length === 0) {
+    return { article, status: "no-r2-match", link, attempted: rawImages.length };
+  }
+  return { article, status: "ok", link, images: alive, fellBack };
 }
 
 let okCount = 0;
