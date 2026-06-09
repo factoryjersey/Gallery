@@ -238,24 +238,21 @@ export default function Article() {
             )}
 
             {/* Curated image gallery (admin-curated, in article.galleryImages).
-                For paparazzi-style spreads — gallery-typed articles or any
-                gallery with 12+ images — render a tiled grid that opens a
-                lightbox on click. Smaller editorial galleries get the
-                carousel treatment. */}
+                Photo-heavy categories (paparazzi, events) and gallery-typed
+                articles get a 3-column masonry grid with click-to-lightbox.
+                Smaller editorial galleries (under 12 images, non photo
+                category) get the inline-flow carousel treatment. */}
             {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (() => {
               const imgs = article.galleryImages;
               const useGrid =
                 article.contentType === "gallery" ||
                 article.category?.slug === "paparazzi" ||
+                article.category?.slug === "events" ||
                 imgs.length >= 12;
               return (
                 <div className="mb-10 -mx-6 sm:mx-0">
                   {useGrid ? (
-                    <GalleryGrid
-                      images={imgs}
-                      altPrefix={article.title}
-                      largeCols={imgs.length >= 30 ? 5 : 4}
-                    />
+                    <GalleryGrid images={imgs} altPrefix={article.title} />
                   ) : (
                     <GalleryCarousel images={imgs} altPrefix={article.title} />
                   )}
