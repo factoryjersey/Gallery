@@ -3,8 +3,27 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CategoryFilter from "@/components/CategoryFilter";
 import HungerGrid from "@/components/HungerGrid";
+import CategorySection from "@/components/CategorySection";
 import { useState, useMemo, useEffect } from "react";
 import { useSearch } from "wouter";
+
+// Large hero sections at the top of the home — each gets its own band with
+// one big tile + 3 smaller ones. Order is editorial: events feel timely
+// first, then editorial spreads, then culture, then paparazzi (the most
+// image-driven of the four).
+const FEATURE_SECTIONS: { slug: string; label: string; preferGallery?: boolean }[] = [
+  { slug: "events", label: "Events" },
+  { slug: "fashion-shoots", label: "Fashion Shoots" },
+  { slug: "culture", label: "Culture" },
+  { slug: "paparazzi", label: "Paparazzi", preferGallery: true },
+];
+
+// Smaller categories combined into a final "More to read" block.
+const COMPACT_SECTIONS: { slug: string; label: string }[] = [
+  { slug: "business", label: "Business" },
+  { slug: "appetite-1", label: "Appetite" },
+  { slug: "interiors", label: "Interiors" },
+];
 
 export default function Home() {
   const searchString = useSearch();
@@ -27,6 +46,10 @@ export default function Home() {
 
   const { data: categoriesData } = useQuery({ queryKey: ["/api/categories"] });
 
+  const hasActiveFilters = searchTerm || selectedCategory || selectedYear !== "all";
+
+  // Only fetch the flat grid when a filter is active (otherwise the sections
+  // take over). Skips a needless 20-row query on a vanilla homepage visit.
   const queryParams = new URLSearchParams({
     ...(selectedCategory && { categoryId: selectedCategory }),
     ...(searchTerm && { search: searchTerm }),
@@ -38,6 +61,7 @@ export default function Home() {
 
   const { data: articlesData, isLoading } = useQuery({
     queryKey: [`/api/articles?${queryParams.toString()}`],
+    enabled: !!hasActiveFilters,
   });
 
   const availableYears = useMemo(() => {
@@ -73,7 +97,6 @@ export default function Home() {
     setCurrentPage(1);
   };
 
-  const hasActiveFilters = searchTerm || selectedCategory || selectedYear !== "all";
   const selectedCategoryName = categoriesData?.categories?.find(
     (cat: any) => cat.id === selectedCategory
   )?.name;
@@ -89,54 +112,98 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <Header onSearch={handleSearch} />
 
-      <CategoryFilter
-        categories={categoriesData?.categories || []}
-        selectedCategory={selectedCategory}
-        onSelectCategory={handleCategoryFilter}
-        selectedYear={selectedYear}
-        onSelectYear={handleYearFilter}
-        availableYears={availableYears}
-        withImage={withImage}
-        onToggleWithImage={handleToggleWithImage}
-      />
-
-      <section className="pb-12 bg-background">
-        {hasActiveFilters && (
-          <div
-            className="max-w-[1600px] mx-auto px-6 mb-6 flex items-center gap-3 flex-wrap"
-            style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 43%)" }}
-          >
-            <span>Showing:</span>
-            {searchTerm && (
-              <span className="px-2 py-0.5 bg-foreground text-white text-xs">"{searchTerm}"</span>
-            )}
-            {selectedCategoryName && (
-              <span className="px-2 py-0.5 border border-border text-xs">{selectedCategoryName}</span>
-            )}
-            {selectedYear !== "all" && (
-              <span className="px-2 py-0.5 border border-border text-xs">{selectedYear}</span>
-            )}
-            <button
-              onClick={clearAllFilters}
-              className="underline hover:text-foreground transition-colors"
-              data-testid="button-clear-filters"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
-
-        <div className="max-w-[1600px] mx-auto">
-          <HungerGrid
-            articles={articlesData?.articles || []}
-            isLoading={isLoading}
-            pagination={articlesData?.pagination}
-            onPageChange={setCurrentPage}
-            itemsPerPage={itemsPerPage}
-            onItemsPerPageChange={handleItemsPerPageChange}
+      {/* When the visitor lands on a clean home URL, show the editorial
+          category sections. When they arrive with search/filter params
+          (e.g. via the header search), fall back to the flat HungerGrid
+          so the filter UI keeps working. */}
+      {hasActiveFilters ? (
+        <>
+          <CategoryFilter
+            categories={categoriesData?.categories || []}
+            selectedCategory={selectedCategory}
+            onSelectCategory={handleCategoryFilter}
+            selectedYear={selectedYear}
+            onSelectYear={handleYearFilter}
+            availableYears={availableYears}
+            withImage={withImage}
+            onToggleWithImage={handleToggleWithImage}
           />
-        </div>
-      </section>
+          <section className="pb-12 bg-background">
+            <div
+              className="max-w-[1600px] mx-auto px-6 mb-6 flex items-center gap-3 flex-wrap"
+              style={{ fontFamily: "Arial, sans-serif", fontSize: 13, color: "hsl(0 0% 43%)" }}
+            >
+              <span>Showing:</span>
+              {searchTerm && (
+                <span className="px-2 py-0.5 bg-foreground text-white text-xs">"{searchTerm}"</span>
+              )}
+              {selectedCategoryName && (
+                <span className="px-2 py-0.5 border border-border text-xs">{selectedCategoryName}</span>
+              )}
+              {selectedYear !== "all" && (
+                <span className="px-2 py-0.5 border border-border text-xs">{selectedYear}</span>
+              )}
+              <button
+                onClick={clearAllFilters}
+                className="underline hover:text-foreground transition-colors"
+                data-testid="button-clear-filters"
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="max-w-[1600px] mx-auto">
+              <HungerGrid
+                articles={articlesData?.articles || []}
+                isLoading={isLoading}
+                pagination={articlesData?.pagination}
+                onPageChange={setCurrentPage}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={handleItemsPerPageChange}
+              />
+            </div>
+          </section>
+        </>
+      ) : (
+        <main>
+          {FEATURE_SECTIONS.map((s) => (
+            <CategorySection
+              key={s.slug}
+              slug={s.slug}
+              label={s.label}
+              variant="feature"
+              preferGallery={s.preferGallery}
+            />
+          ))}
+
+          {/* Combined "more to read" strip — three small categories rendered
+              as one section so they don't dominate the page. */}
+          <section className="py-10 border-t border-border" data-testid="more-to-read">
+            <div className="max-w-[1600px] mx-auto px-6">
+              <h2
+                className="mb-6"
+                style={{
+                  fontFamily: "Georgia, serif",
+                  fontSize: "clamp(24px, 2.4vw, 38px)",
+                  fontWeight: 400,
+                  lineHeight: 1.1,
+                  letterSpacing: "-0.4px",
+                  color: "hsl(0 0% 4%)",
+                  margin: 0,
+                }}
+              >
+                More to read
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                {COMPACT_SECTIONS.map((s) => (
+                  <div key={s.slug}>
+                    <CategorySection slug={s.slug} label={s.label} variant="compact" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </main>
+      )}
 
       <Footer />
     </div>
