@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Clock, ArrowLeft, ArrowRight, Edit } from "lucide-react";
+import { Clock, ArrowLeft, ArrowRight, Edit, Columns, AlignLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
@@ -24,6 +25,18 @@ export default function Article() {
 
   const article = data?.article;
   const isPhotoshoot = article?.category?.slug === "fashion-shoots";
+
+  // Desktop layout preference: 1-col reads like classic editorial, 2-col
+  // puts the featured image on the left with body copy on the right
+  // (image is sticky so it stays in view while you read). Persisted to
+  // localStorage so it sticks across visits.
+  const [layout, setLayout] = useState<"one-col" | "two-col">(() => {
+    if (typeof window === "undefined") return "one-col";
+    return (window.localStorage.getItem("gallery-article-layout") as "one-col" | "two-col") || "one-col";
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("gallery-article-layout", layout); } catch {}
+  }, [layout]);
 
   const { data: adjacentData } = useQuery({
     queryKey: [`/api/articles/by-slug/${slug}/adjacent`],
@@ -77,11 +90,16 @@ export default function Article() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Article */}
-      <article className="max-w-[760px] mx-auto px-6 py-10">
+      {/* Article — container width adapts to layout choice. 2-col gives the
+          image room to sit alongside the body without cramping either. */}
+      <article
+        className={`mx-auto px-6 py-10 ${
+          layout === "two-col" ? "max-w-[1200px]" : "max-w-[760px]"
+        }`}
+      >
 
-        {/* Back + Edit */}
-        <div className="flex justify-between items-center mb-8">
+        {/* Back + layout toggle + Edit */}
+        <div className="flex justify-between items-center mb-8 gap-3 flex-wrap">
           <button
             type="button"
             onClick={() => {
@@ -101,6 +119,7 @@ export default function Article() {
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Articles
           </button>
+          <LayoutToggle layout={layout} setLayout={setLayout} />
           {isAdmin && article && (
             <button
               onClick={() => {
@@ -286,54 +305,64 @@ export default function Article() {
         </header>
 
         {/* Body content — non-photoshoot. Photoshoots render outside this
-            container so the slider can be full-page width (see below). */}
+            container so the slider can be full-page width (see below).
+            2-col mode wraps the lead image + body in a grid so the image
+            sits left (sticky on desktop) while the copy reads right. */}
         {!isPhotoshoot && (
-          <>
+          <div className={layout === "two-col" ? "lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10 lg:items-start" : ""}>
             {/* Lead image */}
             {article.featuredImage && article.contentType !== "gallery" && (
-              <figure className="mb-8 -mx-6 sm:mx-0">
+              <figure
+                className={
+                  layout === "two-col"
+                    ? "mb-8 -mx-6 sm:mx-0 lg:m-0 lg:sticky lg:top-24"
+                    : "mb-8 -mx-6 sm:mx-0"
+                }
+              >
                 <img
                   src={article.featuredImage}
                   alt={article.title}
-                  className="w-full h-auto block"
+                  className="w-full h-auto block lg:max-h-[calc(100vh-140px)] lg:object-contain"
                   loading="eager"
                   data-testid="article-featured-image"
                 />
               </figure>
             )}
 
-            {/* Curated image gallery (admin-curated, in article.galleryImages).
-                Photo-heavy categories (paparazzi, events) and gallery-typed
-                articles get a 3-column masonry grid with click-to-lightbox.
-                Smaller editorial galleries (under 12 images, non photo
-                category) get the inline-flow carousel treatment. */}
-            {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (() => {
-              const imgs = article.galleryImages;
-              const useGrid =
-                article.contentType === "gallery" ||
-                article.category?.slug === "paparazzi" ||
-                article.category?.slug === "events" ||
-                imgs.length >= 12;
-              return (
-                <div className="mb-10 -mx-6 sm:mx-0">
-                  {useGrid ? (
-                    <GalleryGrid images={imgs} altPrefix={article.title} />
-                  ) : (
-                    <GalleryCarousel images={imgs} altPrefix={article.title} />
-                  )}
-                </div>
-              );
-            })()}
+            <div className={layout === "two-col" ? "lg:min-w-0" : ""}>
+              {/* Curated image gallery (admin-curated, in article.galleryImages).
+                  Photo-heavy categories (paparazzi, events) and gallery-typed
+                  articles get a 3-column masonry grid with click-to-lightbox.
+                  Smaller editorial galleries (under 12 images, non photo
+                  category) get the inline-flow carousel treatment. */}
+              {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (() => {
+                const imgs = article.galleryImages;
+                const useGrid =
+                  article.contentType === "gallery" ||
+                  article.category?.slug === "paparazzi" ||
+                  article.category?.slug === "events" ||
+                  imgs.length >= 12;
+                return (
+                  <div className="mb-10 -mx-6 sm:mx-0">
+                    {useGrid ? (
+                      <GalleryGrid images={imgs} altPrefix={article.title} />
+                    ) : (
+                      <GalleryCarousel images={imgs} altPrefix={article.title} />
+                    )}
+                  </div>
+                );
+              })()}
 
-            {article.contentType === "gallery" ? (
-              <PaparazziGallery content={article.content} />
-            ) : (
-              <RichContent
-                content={article.content}
-                className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
-              />
-            )}
-          </>
+              {article.contentType === "gallery" ? (
+                <PaparazziGallery content={article.content} />
+              ) : (
+                <RichContent
+                  content={article.content}
+                  className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
+                />
+              )}
+            </div>
+          </div>
         )}
 
         {/* Cartoon prev/next navigation */}
@@ -435,6 +464,51 @@ export default function Article() {
       </article>
 
       <Footer />
+    </div>
+  );
+}
+
+// Segmented control to switch between single-column (classic editorial)
+// and two-column (image-on-left, copy-on-right) reading layouts. Hidden
+// on mobile where two-col would never have enough room.
+function LayoutToggle({
+  layout,
+  setLayout,
+}: {
+  layout: "one-col" | "two-col";
+  setLayout: (l: "one-col" | "two-col") => void;
+}) {
+  const baseBtn =
+    "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs uppercase tracking-wider transition-colors";
+  return (
+    <div
+      className="hidden lg:inline-flex items-center border border-border"
+      role="radiogroup"
+      aria-label="Article layout"
+      style={{ fontFamily: "Arial, sans-serif" }}
+    >
+      <button
+        type="button"
+        className={`${baseBtn} ${layout === "one-col" ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground"}`}
+        onClick={() => setLayout("one-col")}
+        aria-pressed={layout === "one-col"}
+        title="Single column"
+        data-testid="layout-one-col"
+      >
+        <AlignLeft className="h-3.5 w-3.5" />
+        One column
+      </button>
+      <button
+        type="button"
+        className={`${baseBtn} ${layout === "two-col" ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground"}`}
+        onClick={() => setLayout("two-col")}
+        aria-pressed={layout === "two-col"}
+        title="Image left, copy right"
+        data-testid="layout-two-col"
+      >
+        <Columns className="h-3.5 w-3.5" />
+        Two columns
+      </button>
     </div>
   );
 }
