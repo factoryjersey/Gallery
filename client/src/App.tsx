@@ -13,6 +13,7 @@ import Archive from "@/pages/archive";
 import About from "@/pages/about";
 import Authors from "@/pages/authors";
 import AuthorPage from "@/pages/author";
+import ContributorPage from "@/pages/contributor";
 import MediaPack from "@/pages/media-pack";
 import Privacy from "@/pages/privacy";
 import Terms from "@/pages/terms";
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/about" component={About} />
       <Route path="/authors" component={Authors} />
       <Route path="/author/:slug" component={AuthorPage} />
+      <Route path="/contributor/:slug" component={ContributorPage} />
       <Route path="/media-pack" component={MediaPack} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/terms" component={Terms} />

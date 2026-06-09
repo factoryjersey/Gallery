@@ -175,6 +175,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public contributor profile lookup
+  app.get("/api/contributors/by-slug/:slug", async (req, res) => {
+    try {
+      const contributor = await storage.getContributorBySlug(req.params.slug);
+      if (!contributor) return res.status(404).json({ error: "Contributor not found" });
+      const articles = await storage.getArticlesByContributor(contributor.id);
+      res.json({ contributor, articles });
+    } catch (error) {
+      console.error("Error fetching contributor:", error);
+      res.status(500).json({ error: "Failed to fetch contributor" });
+    }
+  });
+
   app.get("/api/articles/:id/contributors", async (req, res) => {
     try {
       const credits = await storage.getArticleContributors(req.params.id);

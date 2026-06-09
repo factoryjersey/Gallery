@@ -113,6 +113,7 @@ export interface IStorage {
   upsertContributorByName(name: string, defaultRole?: string): Promise<Contributor>;
   updateContributor(id: string, patch: Partial<InsertContributor>): Promise<Contributor | undefined>;
   getArticleContributors(articleId: string): Promise<Array<Contributor & { role: string; displayOrder: number }>>;
+  getArticlesByContributor(contributorId: string): Promise<Array<ArticleWithDetails & { roles: string[] }>>;
   setArticleContributors(
     articleId: string,
     credits: Array<{ contributorId: string; role: string; displayOrder?: number }>,
@@ -747,6 +748,43 @@ export class DatabaseStorage implements IStorage {
       .where(eq(articleContributors.articleId, articleId))
       .orderBy(asc(articleContributors.role), asc(articleContributors.displayOrder));
     return rows.map((r) => ({ ...r.c, role: r.role, displayOrder: r.displayOrder ?? 0 }));
+  }
+
+  /** All articles a contributor has been credited on, with the role(s) they
+   *  filled for each. Ordered most-recent first. Skips drafts. */
+  async getArticlesByContributor(contributorId: string): Promise<Array<ArticleWithDetails & { roles: string[] }>> {
+    const rows = await db
+      .select({
+        article: articles,
+        author: authors,
+        category: categories,
+        role: articleContributors.role,
+      })
+      .from(articleContributors)
+      .innerJoin(articles, eq(articleContributors.articleId, articles.id))
+      .leftJoin(authors, eq(articles.authorId, authors.id))
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .where(and(eq(articleContributors.contributorId, contributorId), eq(articles.status, "published")))
+      .orderBy(desc(articles.publishedAt));
+
+    // Collapse one article appearing in multiple roles into a single entry
+    const byArticleId = new Map<string, ArticleWithDetails & { roles: string[] }>();
+    for (const r of rows) {
+      if (!r.author || !r.category) continue;
+      const existing = byArticleId.get(r.article.id);
+      if (existing) {
+        if (!existing.roles.includes(r.role)) existing.roles.push(r.role);
+      } else {
+        byArticleId.set(r.article.id, {
+          ...r.article,
+          author: r.author,
+          category: r.category,
+          tags: [],
+          roles: [r.role],
+        });
+      }
+    }
+    return Array.from(byArticleId.values());
   }
 
   /** Replace the entire set of contributors on an article. */
