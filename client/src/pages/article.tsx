@@ -10,6 +10,7 @@ import RichContent from "@/components/RichContent";
 import PaparazziGallery from "@/components/PaparazziGallery";
 import PhotoshootSlider from "@/components/PhotoshootSlider";
 import GalleryCarousel from "@/components/GalleryCarousel";
+import GalleryGrid from "@/components/GalleryGrid";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -236,14 +237,31 @@ export default function Article() {
               </figure>
             )}
 
-            {/* Sliding image gallery (admin-curated, in article.galleryImages).
-                Sits between the lead image and the body so it reads as a
-                supplementary spread rather than as the lead. */}
-            {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (
-              <div className="mb-10 -mx-6 sm:mx-0">
-                <GalleryCarousel images={article.galleryImages} altPrefix={article.title} />
-              </div>
-            )}
+            {/* Curated image gallery (admin-curated, in article.galleryImages).
+                For paparazzi-style spreads — gallery-typed articles or any
+                gallery with 12+ images — render a tiled grid that opens a
+                lightbox on click. Smaller editorial galleries get the
+                carousel treatment. */}
+            {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (() => {
+              const imgs = article.galleryImages;
+              const useGrid =
+                article.contentType === "gallery" ||
+                article.category?.slug === "paparazzi" ||
+                imgs.length >= 12;
+              return (
+                <div className="mb-10 -mx-6 sm:mx-0">
+                  {useGrid ? (
+                    <GalleryGrid
+                      images={imgs}
+                      altPrefix={article.title}
+                      largeCols={imgs.length >= 30 ? 5 : 4}
+                    />
+                  ) : (
+                    <GalleryCarousel images={imgs} altPrefix={article.title} />
+                  )}
+                </div>
+              );
+            })()}
 
             {article.contentType === "gallery" ? (
               <PaparazziGallery content={article.content} />

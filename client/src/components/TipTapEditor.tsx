@@ -84,10 +84,18 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
     }
   }, [value, editor]);
 
-  const insertImage = useCallback(async (file: File) => {
-    const url = await onUpload(file);
-    if (!url || !editor) return;
-    editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+  const insertImages = useCallback(async (files: FileList | File[]) => {
+    if (!editor) return;
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    // Upload sequentially and insert each at the current cursor position,
+    // stacking them in selection order. Sequential keeps the inserted
+    // order stable; parallel uploads can interleave when network varies.
+    for (const file of list) {
+      const url = await onUpload(file);
+      if (!url) continue;
+      editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+    }
   }, [editor, onUpload]);
 
   const insertGalleryFromFiles = useCallback(async (files: FileList | File[]) => {
@@ -162,7 +170,7 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
         <button type="button" className={`${btnBase} ${active("link")}`} onClick={promptForLink} title="Link" data-testid="tiptap-link">
           <LinkIcon className="h-4 w-4" />
         </button>
-        <button type="button" className={btnBase} onClick={() => fileInputRef.current?.click()} title="Insert image at cursor" data-testid="tiptap-image">
+        <button type="button" className={btnBase} onClick={() => fileInputRef.current?.click()} title="Insert image(s) at cursor — pick one or more" data-testid="tiptap-image">
           <ImageIcon className="h-4 w-4" />
         </button>
         <button type="button" className={btnBase} onClick={() => galleryInputRef.current?.click()} title="Insert gallery at cursor" data-testid="tiptap-gallery">
@@ -182,10 +190,12 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) insertImage(file);
+            if (e.target.files && e.target.files.length > 0) {
+              insertImages(e.target.files);
+            }
             e.target.value = "";
           }}
           data-testid="tiptap-image-input"
