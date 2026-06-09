@@ -146,6 +146,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Distinct photographer + illustrator values for autocomplete in the
+  // article editor. Public read endpoint (admin gate only blocks mutations).
+  app.get("/api/articles/credit-suggestions", async (_req, res) => {
+    try {
+      const photographers = await db.execute(sql`
+        SELECT DISTINCT photographer FROM articles
+         WHERE photographer IS NOT NULL AND length(photographer) > 0
+         ORDER BY photographer
+      `);
+      const illustrators = await db.execute(sql`
+        SELECT DISTINCT illustrator FROM articles
+         WHERE illustrator IS NOT NULL AND length(illustrator) > 0
+         ORDER BY illustrator
+      `);
+      res.json({
+        photographers: photographers.rows.map((r: any) => r.photographer),
+        illustrators: illustrators.rows.map((r: any) => r.illustrator),
+      });
+    } catch (error) {
+      console.error("Error fetching credit suggestions:", error);
+      res.status(500).json({ error: "Failed to fetch credit suggestions" });
+    }
+  });
+
   app.get("/api/articles/featured", async (req, res) => {
     try {
       const limit = Number(req.query.limit) || 4;

@@ -91,6 +91,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     queryKey: ["/api/tags"],
   });
 
+  const { data: creditSuggestions } = useQuery<{ photographers: string[]; illustrators: string[] }>({
+    queryKey: ["/api/articles/credit-suggestions"],
+  });
+
   // Populate form when editing
   useEffect(() => {
     if (articleData?.article) {
@@ -470,25 +474,40 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               </div>
             </div>
 
-            {/* Optional credits — shown in the byline alongside the author */}
+            {/* Optional credits — shown in the byline alongside the author.
+                <datalist> gives a native browser autocomplete sourced from
+                previously-used values, while still allowing free text for
+                new names. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="photographer">Photographer (optional)</Label>
                 <Input
                   id="photographer"
+                  list="photographer-suggestions"
                   placeholder="e.g. Oliver Doran"
                   {...form.register("photographer")}
                   data-testid="article-photographer"
                 />
+                <datalist id="photographer-suggestions">
+                  {(creditSuggestions?.photographers || []).map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="illustrator">Illustrator (optional)</Label>
                 <Input
                   id="illustrator"
+                  list="illustrator-suggestions"
                   placeholder="e.g. Jamie Willow"
                   {...form.register("illustrator")}
                   data-testid="article-illustrator"
                 />
+                <datalist id="illustrator-suggestions">
+                  {(creditSuggestions?.illustrators || []).map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
               </div>
             </div>
 

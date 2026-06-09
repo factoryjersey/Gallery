@@ -39,7 +39,8 @@ if (SLUG) {
 }
 const limitClause = LIMIT > 0 ? `LIMIT ${LIMIT}` : "";
 const { rows } = await db.query(
-  `SELECT id, slug, title, content, excerpt, photographer, illustrator
+  `SELECT id, slug, title, content, excerpt, photographer, illustrator,
+          featured_image AS "featuredImage"
      FROM articles
     WHERE ${conds.join(" AND ")}
     ORDER BY published_at DESC NULLS LAST
@@ -123,20 +124,60 @@ function extractCredits(creditText) {
 
 // First "real" child element of <root>. Skips empty text nodes, comments,
 // and <p> nodes that are just whitespace/&nbsp;.
+// First "real" child element of <root>. Skips empty text nodes, comments,
+// and <p> nodes that are just whitespace/&nbsp;. Figures with images count
+// as significant (they have no text but matter for body structure).
 function firstSignificantChild(root) {
   let c = root?.firstChild;
   while (c) {
     if (c.nodeType === 1) {
-      const txt = textOf(c).replace(/[ \s]+/g, " ").trim();
-      if (txt.length > 0) return c;
-      // empty element — skip
+      const tag = c.tagName?.toLowerCase();
+      const txt = textOf(c).replace(/[\s]+/g, " ").trim();
+      if (txt.length > 0 || tag === "figure") return c;
     }
     c = c.nextSibling;
   }
   return null;
 }
 
+// Return up to N leading significant children (paragraphs, figures, headings).
+function leadingChildren(root, n) {
+  const out = [];
+  let c = root?.firstChild;
+  while (c && out.length < n) {
+    if (c.nodeType === 1) {
+      const tag = c.tagName?.toLowerCase();
+      const txt = textOf(c).replace(/[\s]+/g, " ").trim();
+      if (txt.length > 0 || tag === "figure") out.push(c);
+    }
+    c = c.nextSibling;
+  }
+  return out;
+}
+
+// Pull the first <img> src from a node, with any "-WIDTHxHEIGHT" sizing
+// suffix stripped so we can compare against the article featured_image.
+function firstImgBaseUrl(node) {
+  if (!node) return null;
+  let img = null;
+  (function walk(n) {
+    if (img || !n) return;
+    if (n.nodeType === 1 && n.tagName?.toLowerCase() === "img") { img = n; return; }
+    let c = n.firstChild;
+    while (c && !img) { walk(c); c = c.nextSibling; }
+  })(node);
+  if (!img) return null;
+  const src = img.getAttribute("src") || "";
+  return src.replace(/-\d+x\d+(\.[a-z]+)(\?.*)?$/i, "$1");
+}
+
+function baseOfUrl(url) {
+  if (!url) return null;
+  return url.replace(/-\d+x\d+(\.[a-z]+)(\?.*)?$/i, "$1");
+}
+
 let creditMatches = 0;
+let dupFeaturedStripped = 0;
 let creditSkippedAlreadySet = 0;
 let excerptStripped = 0;
 const samples = [];
@@ -148,35 +189,59 @@ for (const article of rows) {
   let extractedPhotographer = article.photographer;
   let extractedIllustrator = article.illustrator;
 
-  // --- 1. Credit-line extraction ---
-  if (!SKIP_CREDITS) {
+  // --- 1a. Strip a leading figure whose <img> is the article's featured
+  //          image (a common WP artefact when the editor pasted both). ---
+  if (article.featuredImage) {
     const first = firstSignificantChild(root);
-    if (first) {
-      const text = textOf(first).replace(/[ \s]+/g, " ").trim();
-      if (looksLikeCreditsParagraph(text)) {
-        const { photographer, illustrator } = extractCredits(text);
-        const wouldChange = (photographer && photographer !== article.photographer)
-          || (illustrator && illustrator !== article.illustrator);
-        if (wouldChange) {
-          // Only overwrite when the slot is empty — never clobber a manual edit.
-          if (photographer && !article.photographer) extractedPhotographer = photographer;
-          else if (article.photographer) creditSkippedAlreadySet++;
-          if (illustrator && !article.illustrator) extractedIllustrator = illustrator;
-          else if (article.illustrator) creditSkippedAlreadySet++;
-          // Remove the credit paragraph from the body
-          first.parentNode?.removeChild(first);
-          mutated = true;
-          creditMatches++;
-          if (samples.length < 5) {
-            samples.push({
-              kind: "credit",
-              slug: article.slug,
-              text: text.slice(0, 100),
-              photographer: extractedPhotographer,
-              illustrator: extractedIllustrator,
-            });
-          }
+    if (first && first.tagName?.toLowerCase() === "figure") {
+      const firstImg = firstImgBaseUrl(first);
+      const featuredBase = baseOfUrl(article.featuredImage);
+      if (firstImg && featuredBase && firstImg === featuredBase) {
+        first.parentNode?.removeChild(first);
+        mutated = true;
+        dupFeaturedStripped++;
+        if (samples.length < 8) {
+          samples.push({
+            kind: "dup-featured",
+            slug: article.slug,
+            text: firstImg,
+          });
         }
+      }
+    }
+  }
+
+  // --- 1b. Credit-line extraction ---
+  // Looks at the first ~5 leading children (paragraphs / figures / etc) and
+  // strips the first one that reads as a "Words: X, Photography: Y" credit.
+  if (!SKIP_CREDITS) {
+    const candidates = leadingChildren(root, 5);
+    let creditNode = null;
+    let creditText = "";
+    for (const c of candidates) {
+      const tag = c.tagName?.toLowerCase();
+      if (tag === "figure") continue; // skip image figures, look past them
+      const txt = textOf(c).replace(/[\s]+/g, " ").trim();
+      if (looksLikeCreditsParagraph(txt)) { creditNode = c; creditText = txt; break; }
+    }
+    if (creditNode) {
+      const { photographer, illustrator } = extractCredits(creditText);
+      // Only overwrite when the slot is empty — never clobber a manual edit.
+      if (photographer && !article.photographer) extractedPhotographer = photographer;
+      else if (article.photographer) creditSkippedAlreadySet++;
+      if (illustrator && !article.illustrator) extractedIllustrator = illustrator;
+      else if (article.illustrator) creditSkippedAlreadySet++;
+      creditNode.parentNode?.removeChild(creditNode);
+      mutated = true;
+      creditMatches++;
+      if (samples.length < 8) {
+        samples.push({
+          kind: "credit",
+          slug: article.slug,
+          text: creditText.slice(0, 100),
+          photographer: extractedPhotographer,
+          illustrator: extractedIllustrator,
+        });
       }
     }
   }
@@ -238,6 +303,7 @@ for (const article of rows) {
 
 console.log(`=== Result ===`);
 console.log(`  Credit paragraphs ${APPLY ? "removed" : "would be removed"}: ${creditMatches}`);
+console.log(`  Leading featured-image figures ${APPLY ? "stripped" : "would be stripped"}: ${dupFeaturedStripped}`);
 console.log(`  Credit fields already set (preserved)                    : ${creditSkippedAlreadySet}`);
 console.log(`  Excerpt duplicate paragraphs ${APPLY ? "stripped" : "would be stripped"} : ${excerptStripped}`);
 
@@ -248,7 +314,9 @@ if (samples.length) {
       console.log(`  [credit] ${s.slug}`);
       console.log(`    body: "${s.text}…"`);
       console.log(`    → photographer=${s.photographer || "—"}, illustrator=${s.illustrator || "—"}`);
-    } else {
+    } else if (s.kind === "dup-featured") {
+      console.log(`  [dup-featured] ${s.slug} — stripped leading figure: ${s.text}`);
+    } else if (s.kind === "excerpt") {
       console.log(`  [excerpt] ${s.slug} — stripped ${s.removed} leading paragraph(s)`);
     }
   }
