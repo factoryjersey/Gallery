@@ -146,6 +146,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Contributors — list / search for the article editor picker
+  app.get("/api/contributors", async (req, res) => {
+    try {
+      const search = (req.query.search as string)?.trim().toLowerCase() || "";
+      const all = await storage.listContributors();
+      const filtered = search
+        ? all.filter((c) => c.name.toLowerCase().includes(search))
+        : all;
+      res.json({ contributors: filtered });
+    } catch (error) {
+      console.error("Error listing contributors:", error);
+      res.status(500).json({ error: "Failed to list contributors" });
+    }
+  });
+
+  app.post("/api/contributors", async (req, res) => {
+    try {
+      const { name, defaultRole } = req.body as { name?: string; defaultRole?: string };
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ error: "name is required" });
+      }
+      const c = await storage.upsertContributorByName(name, defaultRole);
+      res.json({ contributor: c });
+    } catch (error) {
+      console.error("Error creating contributor:", error);
+      res.status(500).json({ error: "Failed to create contributor" });
+    }
+  });
+
+  app.get("/api/articles/:id/contributors", async (req, res) => {
+    try {
+      const credits = await storage.getArticleContributors(req.params.id);
+      res.json({ credits });
+    } catch (error) {
+      console.error("Error fetching article contributors:", error);
+      res.status(500).json({ error: "Failed to fetch contributors" });
+    }
+  });
+
+  app.put("/api/articles/:id/contributors", async (req, res) => {
+    try {
+      const { credits } = req.body as {
+        credits?: Array<{ contributorId: string; role: string; displayOrder?: number }>;
+      };
+      if (!Array.isArray(credits)) {
+        return res.status(400).json({ error: "credits must be an array" });
+      }
+      // Filter to entries with both fields; tolerate clients sending blanks
+      const cleaned = credits.filter(
+        (c) => typeof c.contributorId === "string" && typeof c.role === "string" && c.role.length > 0,
+      );
+      await storage.setArticleContributors(req.params.id, cleaned);
+      const updated = await storage.getArticleContributors(req.params.id);
+      res.json({ credits: updated });
+    } catch (error) {
+      console.error("Error setting article contributors:", error);
+      res.status(500).json({ error: "Failed to set contributors" });
+    }
+  });
+
   // Distinct photographer + illustrator values for autocomplete in the
   // article editor. Public read endpoint (admin gate only blocks mutations).
   app.get("/api/articles/credit-suggestions", async (_req, res) => {
@@ -248,7 +308,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Increment view count
       await storage.incrementArticleViews(article.id);
 
-      res.json({ article });
+      // Include non-author credits (photographer/illustrator/etc) so the
+      // byline can render them without an extra round-trip.
+      const credits = await storage.getArticleContributors(article.id);
+
+      res.json({ article: { ...article, credits } });
     } catch (error) {
       console.error("Error fetching article by slug:", error);
       res.status(500).json({ error: "Failed to fetch article" });

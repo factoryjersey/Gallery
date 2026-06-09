@@ -116,6 +116,39 @@ export const media = pgTable("media", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Contributors — non-author credits attached to articles (photographer,
+// illustrator, stylist, etc). Distinct from `authors` (which powers the
+// "By X" byline). Joined to articles via article_contributors so an
+// article can have multiple of each role.
+export const contributors = pgTable("contributors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  bio: text("bio"),
+  photoUrl: text("photo_url"),
+  email: text("email"),
+  defaultRole: text("default_role"),  // 'photographer' | 'illustrator' | 'stylist' | …
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const articleContributors = pgTable("article_contributors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  contributorId: varchar("contributor_id").references(() => contributors.id, { onDelete: "cascade" }).notNull(),
+  role: text("role").notNull(),       // 'photographer' | 'illustrator' | 'stylist' | …
+  displayOrder: integer("display_order").default(0),
+});
+
+export const insertContributorSchema = createInsertSchema(contributors).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type Contributor = typeof contributors.$inferSelect;
+export type InsertContributor = z.infer<typeof insertContributorSchema>;
+export type ArticleContributor = typeof articleContributors.$inferSelect;
+
 // Curated images for the homepage splash intro. Position is the slide index
 // (0, 1, 2). Three rows total; managed via /admin → Splash Intro.
 export const splashSlides = pgTable("splash_slides", {

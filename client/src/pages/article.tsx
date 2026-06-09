@@ -207,18 +207,71 @@ export default function Article() {
                 <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.author.name}</strong>
               )}
             </span>
-            {article.photographer && (
-              <span data-testid="article-photographer">
-                Photography{" "}
-                <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.photographer}</strong>
-              </span>
-            )}
-            {article.illustrator && (
-              <span data-testid="article-illustrator">
-                Illustration{" "}
-                <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.illustrator}</strong>
-              </span>
-            )}
+            {(() => {
+              // Group structured credits by role (photographer / illustrator / …).
+              // Falls back to the legacy text columns when an article hasn't
+              // been migrated to the contributors table yet.
+              const credits = Array.isArray((article as any).credits)
+                ? (article as any).credits as Array<{ id: string; name: string; slug: string; role: string }>
+                : [];
+              const grouped = new Map<string, typeof credits>();
+              for (const c of credits) {
+                const arr = grouped.get(c.role) || [];
+                arr.push(c);
+                grouped.set(c.role, arr);
+              }
+              const labels: Record<string, string> = {
+                photographer: "Photography",
+                illustrator: "Illustration",
+                stylist: "Styling",
+                hair: "Hair",
+                makeup: "Makeup",
+              };
+              const photogs = grouped.get("photographer") || [];
+              const illos = grouped.get("illustrator") || [];
+
+              const renderRoleCredit = (role: string, list: typeof credits, legacy?: string | null) => {
+                if (list.length > 0) {
+                  return (
+                    <span data-testid={`article-${role}`}>
+                      {labels[role] || role}{" "}
+                      {list.map((c, i) => (
+                        <span key={c.id}>
+                          {i > 0 && <span>, </span>}
+                          <Link href={`/contributor/${c.slug}`}>
+                            <a className="hover:underline">
+                              <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{c.name}</strong>
+                            </a>
+                          </Link>
+                        </span>
+                      ))}
+                    </span>
+                  );
+                }
+                if (legacy) {
+                  return (
+                    <span data-testid={`article-${role}`}>
+                      {labels[role] || role}{" "}
+                      <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{legacy}</strong>
+                    </span>
+                  );
+                }
+                return null;
+              };
+
+              return (
+                <>
+                  {renderRoleCredit("photographer", photogs, article.photographer)}
+                  {renderRoleCredit("illustrator", illos, article.illustrator)}
+                  {/* Render any other custom roles attached via the contributors picker */}
+                  {Array.from(grouped.entries())
+                    .filter(([role]) => role !== "photographer" && role !== "illustrator")
+                    .map(([role, list]) => (
+                      <span key={role}>{renderRoleCredit(role, list)}</span>
+                    ))}
+                </>
+              );
+            })()}
             <span>—</span>
             <span data-testid="article-date">
               {format(new Date(article.publishedAt || article.createdAt), "d MMMM yyyy")}

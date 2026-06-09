@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AuthorPicker from "@/components/AuthorPicker";
+import ContributorsPicker, { type CreditEntry } from "@/components/ContributorsPicker";
 import TipTapEditor from "@/components/TipTapEditor";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -60,6 +61,7 @@ interface ArticleEditorProps {
 export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
+  const [credits, setCredits] = useState<CreditEntry[]>([]);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -121,12 +123,54 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     }
   }, [articleData, form]);
 
+  // Load existing contributor credits when editing an article
+  const { data: creditsData } = useQuery<{
+    credits: Array<{ id: string; name: string; slug: string; role: string }>;
+  }>({
+    queryKey: [`/api/articles/${articleId}/contributors`],
+    enabled: !!articleId,
+  });
+  useEffect(() => {
+    if (creditsData?.credits) {
+      setCredits(
+        creditsData.credits.map((c) => ({
+          contributorId: c.id,
+          name: c.name,
+          slug: c.slug,
+          role: c.role,
+        })),
+      );
+    }
+  }, [creditsData]);
+
+  // After an article is saved (create or update), persist its credits to
+  // the contributors join. Runs once we know the article id.
+  async function persistCredits(savedArticleId: string) {
+    try {
+      await apiRequest("PUT", `/api/articles/${savedArticleId}/contributors`, {
+        credits: credits.map((c, i) => ({
+          contributorId: c.contributorId,
+          role: c.role,
+          displayOrder: i,
+        })),
+      });
+    } catch (err) {
+      console.error("Failed to save credits:", err);
+      toast({
+        title: "Credits not saved",
+        description: err instanceof Error ? err.message : "Could not save photographer/illustrator credits.",
+        variant: "destructive",
+      });
+    }
+  }
+
   const createArticleMutation = useMutation({
     mutationFn: async (data: ArticleFormData & { tags?: string[] }) => {
       const response = await apiRequest("POST", "/api/articles", data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
+      if (data?.article?.id) await persistCredits(data.article.id);
       toast({
         title: "Success!",
         description: "Article created successfully.",
@@ -156,7 +200,8 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       const response = await apiRequest("PUT", `/api/articles/${articleId}`, data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      if (articleId) await persistCredits(articleId);
       toast({
         title: "Success!",
         description: "Article updated successfully.",
@@ -474,41 +519,15 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               </div>
             </div>
 
-            {/* Optional credits — shown in the byline alongside the author.
-                <datalist> gives a native browser autocomplete sourced from
-                previously-used values, while still allowing free text for
-                new names. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="photographer">Photographer (optional)</Label>
-                <Input
-                  id="photographer"
-                  list="photographer-suggestions"
-                  placeholder="e.g. Oliver Doran"
-                  {...form.register("photographer")}
-                  data-testid="article-photographer"
-                />
-                <datalist id="photographer-suggestions">
-                  {(creditSuggestions?.photographers || []).map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="illustrator">Illustrator (optional)</Label>
-                <Input
-                  id="illustrator"
-                  list="illustrator-suggestions"
-                  placeholder="e.g. Jamie Willow"
-                  {...form.register("illustrator")}
-                  data-testid="article-illustrator"
-                />
-                <datalist id="illustrator-suggestions">
-                  {(creditSuggestions?.illustrators || []).map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
-              </div>
+            {/* Credits — managed via the contributors table so each
+                photographer / illustrator is a proper person with a
+                profile page. */}
+            <div className="space-y-2">
+              <Label>Credits</Label>
+              <ContributorsPicker
+                value={credits}
+                onChange={setCredits}
+              />
             </div>
 
             {/* Tags */}

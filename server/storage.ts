@@ -6,8 +6,10 @@ import {
   Media, InsertMedia,
   User, InsertUser,
   Subscriber, InsertSubscriber,
-  articles, authors, categories, tags, articleTags, media, users, subscribers, splashSlides
+  articles, authors, categories, tags, articleTags, media, users, subscribers, splashSlides,
+  contributors, articleContributors
 } from "@shared/schema";
+import type { Contributor, InsertContributor } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, like, ilike, and, or, inArray, count, sql, isNotNull, ne } from "drizzle-orm";
 import { slugify as slugifyAuthor } from "@shared/slug";
@@ -104,6 +106,17 @@ export interface IStorage {
   // Splash intro slides (three positions, each backed by an article)
   getSplashSlides(): Promise<(ArticleWithDetails & { position: number })[]>;
   setSplashSlides(articleIds: (string | null)[]): Promise<void>;
+
+  // Contributors (photographers, illustrators, etc — non-author credits)
+  listContributors(): Promise<Contributor[]>;
+  getContributorBySlug(slug: string): Promise<Contributor | undefined>;
+  upsertContributorByName(name: string, defaultRole?: string): Promise<Contributor>;
+  updateContributor(id: string, patch: Partial<InsertContributor>): Promise<Contributor | undefined>;
+  getArticleContributors(articleId: string): Promise<Array<Contributor & { role: string; displayOrder: number }>>;
+  setArticleContributors(
+    articleId: string,
+    credits: Array<{ contributorId: string; role: string; displayOrder?: number }>,
+  ): Promise<void>;
 
   // Subscribers
   createSubscriber(input: InsertSubscriber): Promise<Subscriber>;
@@ -676,6 +689,84 @@ export class DatabaseStorage implements IStorage {
         views: sql`${articles.views} + 1`
       })
       .where(eq(articles.id, id));
+  }
+
+  // ---------- Contributors ----------
+
+  async listContributors(): Promise<Contributor[]> {
+    const rows = await db.select().from(contributors).orderBy(asc(contributors.name));
+    return rows;
+  }
+
+  async getContributorBySlug(slug: string): Promise<Contributor | undefined> {
+    const [row] = await db.select().from(contributors).where(eq(contributors.slug, slug));
+    return row;
+  }
+
+  /** Find an existing contributor by name (case-insensitive) or create a new one. */
+  async upsertContributorByName(name: string, defaultRole?: string): Promise<Contributor> {
+    const trimmed = name.trim();
+    const existing = await db
+      .select()
+      .from(contributors)
+      .where(sql`lower(${contributors.name}) = lower(${trimmed})`)
+      .limit(1);
+    if (existing[0]) return existing[0];
+    // Generate a unique slug
+    let base = slugifyAuthor(trimmed) || "contributor";
+    let slug = base;
+    let suffix = 2;
+    while ((await db.select({ id: contributors.id }).from(contributors).where(eq(contributors.slug, slug))).length) {
+      slug = `${base}-${suffix++}`;
+    }
+    const [created] = await db
+      .insert(contributors)
+      .values({ name: trimmed, slug, defaultRole: defaultRole || null })
+      .returning();
+    return created;
+  }
+
+  async updateContributor(id: string, patch: Partial<InsertContributor>): Promise<Contributor | undefined> {
+    const [row] = await db
+      .update(contributors)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(contributors.id, id))
+      .returning();
+    return row;
+  }
+
+  async getArticleContributors(articleId: string): Promise<Array<Contributor & { role: string; displayOrder: number }>> {
+    const rows = await db
+      .select({
+        c: contributors,
+        role: articleContributors.role,
+        displayOrder: articleContributors.displayOrder,
+      })
+      .from(articleContributors)
+      .innerJoin(contributors, eq(articleContributors.contributorId, contributors.id))
+      .where(eq(articleContributors.articleId, articleId))
+      .orderBy(asc(articleContributors.role), asc(articleContributors.displayOrder));
+    return rows.map((r) => ({ ...r.c, role: r.role, displayOrder: r.displayOrder ?? 0 }));
+  }
+
+  /** Replace the entire set of contributors on an article. */
+  async setArticleContributors(
+    articleId: string,
+    credits: Array<{ contributorId: string; role: string; displayOrder?: number }>,
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(articleContributors).where(eq(articleContributors.articleId, articleId));
+      if (credits.length > 0) {
+        await tx.insert(articleContributors).values(
+          credits.map((c, i) => ({
+            articleId,
+            contributorId: c.contributorId,
+            role: c.role,
+            displayOrder: c.displayOrder ?? i,
+          })),
+        );
+      }
+    });
   }
 
   async getSplashSlides(): Promise<(ArticleWithDetails & { position: number })[]> {
