@@ -2715,7 +2715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const ext = req.file.mimetype === "image/png" ? "png" : "jpg";
       const key = `covers/gallery-${num}.${ext}`;
-      await uploadToR2(key, req.file.buffer, req.file.mimetype);
+      await uploadToR2(req.file.buffer, key, req.file.mimetype);
       const coverImage = getR2PublicUrl(key);
 
       await db.execute(sql`
@@ -2781,7 +2781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const key = `pdfs/gallery-${num}.pdf`;
-      await uploadToR2(key, req.file.buffer, "application/pdf");
+      await uploadToR2(req.file.buffer, key, "application/pdf");
       const pdfUrl = getR2PublicUrl(key);
 
       await db.update(issues)
