@@ -103,7 +103,7 @@ function InlineGalleryNodeView({ node, updateAttributes, deleteNode }: NodeViewP
       try {
         const fd = new FormData();
         fd.append("image", file);
-        const res = await fetch("/api/media/upload", { method: "POST", body: fd });
+        const res = await fetch("/api/media/upload", { method: "POST", body: fd, credentials: "include" });
         if (!res.ok) continue;
         const data = await res.json();
         const url =

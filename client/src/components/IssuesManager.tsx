@@ -136,11 +136,14 @@ export default function IssuesManager() {
 
   const deletePdf = useMutation({
     mutationFn: async (num: number) => {
-      const res = await fetch(`/api/issues/${num}/pdf`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      const res = await fetch(`/api/issues/${num}/pdf`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`${res.status} ${text || res.statusText}`);
+      }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/issues"] }); toast({ title: "PDF removed" }); },
-    onError: () => toast({ title: "Failed to remove PDF", variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed to remove PDF", description: err.message, variant: "destructive" }),
   });
 
   async function uploadFile(issueNumber: number, file: File, type: "pdf" | "cover") {
@@ -149,12 +152,23 @@ export default function IssuesManager() {
     try {
       const fd = new FormData();
       fd.append(type === "pdf" ? "pdf" : "cover", file);
-      const res = await fetch(`/api/issues/${issueNumber}/${type}`, { method: "POST", body: fd });
-      if (!res.ok) throw new Error();
+      const res = await fetch(`/api/issues/${issueNumber}/${type}`, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`${res.status} ${text || res.statusText}`);
+      }
       await queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
       toast({ title: `Issue #${issueNumber} ${type === "pdf" ? "PDF" : "cover"} uploaded` });
-    } catch {
-      toast({ title: "Upload failed", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
     } finally {
       setSingleUploading(null);
     }
@@ -163,12 +177,23 @@ export default function IssuesManager() {
   async function syncFromR2(type: "pdfs" | "covers") {
     setIsSyncing(true);
     try {
-      const res = await fetch(`/api/issues/sync-${type === "pdfs" ? "r2" : "covers"}`, { method: "POST" });
+      const res = await fetch(`/api/issues/sync-${type === "pdfs" ? "r2" : "covers"}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`${res.status} ${text || res.statusText}`);
+      }
       const data = await res.json();
       await queryClient.invalidateQueries({ queryKey: ["/api/issues"] });
       toast({ title: `Synced ${data.synced ?? 0} ${type} from R2` });
-    } catch {
-      toast({ title: "Sync failed", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: "Sync failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
     } finally {
       setIsSyncing(false);
     }

@@ -99,7 +99,7 @@ export function CartoonsManager() {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      const res = await fetch("/api/media/upload", { method: "POST", body: formData });
+      const res = await fetch("/api/media/upload", { method: "POST", body: formData, credentials: "include" });
       if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
       const url = data.media?.url || data.url;

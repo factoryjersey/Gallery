@@ -259,6 +259,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       const response = await fetch("/api/media/upload", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -314,7 +315,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       try {
         const formData = new FormData();
         formData.append("image", file);
-        const response = await fetch("/api/media/upload", { method: "POST", body: formData });
+        const response = await fetch("/api/media/upload", { method: "POST", body: formData, credentials: "include" });
         if (!response.ok) throw new Error("Upload failed");
         const data = await response.json();
         const url =
@@ -686,8 +687,8 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   const formData = new FormData();
                   formData.append("image", file);
                   try {
-                    const res = await fetch("/api/media/upload", { method: "POST", body: formData });
-                    if (!res.ok) throw new Error("Upload failed");
+                    const res = await fetch("/api/media/upload", { method: "POST", body: formData, credentials: "include" });
+                    if (!res.ok) throw new Error(`Upload failed: ${res.status} ${res.statusText}`);
                     const data = await res.json();
                     return (
                       data.media?.urls?.original ||
