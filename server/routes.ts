@@ -451,7 +451,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/categories", async (req, res) => {
     try {
       const categories = await storage.getAllCategories();
-      res.json({ categories });
+      // Attach per-category published-article counts so the subcategory
+      // tabs on the public category page can hide thin categories.
+      const counts = await db.execute(sql`
+        SELECT category_id, count(*)::int AS n
+          FROM articles
+         WHERE status = 'published'
+         GROUP BY category_id
+      `);
+      const countMap = new Map<string, number>();
+      for (const row of counts.rows as Array<{ category_id: string; n: number }>) {
+        countMap.set(row.category_id, row.n);
+      }
+      const enriched = categories.map((c) => ({
+        ...c,
+        articleCount: countMap.get(c.id) ?? 0,
+      }));
+      res.json({ categories: enriched });
     } catch (error) {
       console.error("Error fetching categories:", error);
       res.status(500).json({ error: "Failed to fetch categories" });

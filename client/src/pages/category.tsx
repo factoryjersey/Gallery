@@ -33,7 +33,13 @@ export default function Category() {
       ? all.find((c) => c.id === current.parentId) ?? null
       : current; // if we're a parent, treat ourselves as the parent
     if (!parent) return null;
-    const children = all.filter((c) => c.parentId === parent.id);
+    // Only keep subcategories with at least 2 published articles, so the
+    // tab strip doesn't show single-article categories that read as orphans.
+    // Keep the current category even if it's thin (so the highlighted tab
+    // matches the URL the user is on).
+    const children = all
+      .filter((c) => c.parentId === parent.id)
+      .filter((c) => ((c as any).articleCount ?? 0) >= 2 || c.id === current.id);
     if (children.length === 0) return null;
     return { parent, children, currentIsParent: current.id === parent.id };
   }, [allCategoriesData, categoryData]);
@@ -110,14 +116,15 @@ export default function Category() {
         </div>
       </section>
 
-      {/* Sub-category tabs (only when hierarchy exists) */}
+      {/* Sub-category tabs (only when hierarchy exists). Padded top/bottom
+          so the strip has visual breathing room against the masthead. */}
       {nav && (
-        <section className="bg-white border-b border-border">
+        <section className="bg-white border-b border-border py-3">
           <div className="max-w-[1296px] mx-auto px-6">
             <div className="flex items-center gap-0 overflow-x-auto" style={{ fontFamily: "Arial, sans-serif", fontSize: 13 }}>
               <Link href={`/category/${nav.parent.slug}`}>
                 <span
-                  className={`shrink-0 py-4 px-4 border-b-[3px] transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`shrink-0 py-5 px-4 border-b-[3px] transition-colors whitespace-nowrap cursor-pointer ${
                     nav.currentIsParent
                       ? "border-secondary text-foreground font-semibold"
                       : "border-transparent text-muted-foreground hover:text-foreground"
@@ -130,7 +137,7 @@ export default function Category() {
               {nav.children.map((c) => (
                 <Link key={c.id} href={`/category/${c.slug}`}>
                   <span
-                    className={`shrink-0 py-4 px-4 border-b-[3px] transition-colors whitespace-nowrap cursor-pointer ${
+                    className={`shrink-0 py-5 px-4 border-b-[3px] transition-colors whitespace-nowrap cursor-pointer ${
                       category.id === c.id
                         ? "border-secondary text-foreground font-semibold"
                         : "border-transparent text-muted-foreground hover:text-foreground"
