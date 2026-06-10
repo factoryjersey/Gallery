@@ -26,6 +26,23 @@ import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjec
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+/**
+ * Latest issue whose published_at has actually passed. Used by the public
+ * "current issue" and homepage highlights surfaces so a future-dated issue
+ * row (or a stray article tagged with a future issue number) doesn't
+ * accidentally surface as "current".
+ */
+async function latestPublishedIssueNumber(): Promise<number | null> {
+  const { rows } = await db.execute(sql`
+    SELECT number FROM issues
+     WHERE published_at IS NOT NULL AND published_at <= NOW()
+     ORDER BY number DESC
+     LIMIT 1
+  `);
+  const n = (rows[0] as any)?.number;
+  return typeof n === "number" ? n : null;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Admin auth — gate mutations BEFORE any routes are registered so every
   // POST/PUT/PATCH/DELETE under /api/ is checked (except the public whitelist
@@ -107,11 +124,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const issueParam = req.query.issue ? Number(req.query.issue) : null;
       const limit = req.query.limit ? Number(req.query.limit) : 200;
 
-      // Find the target issue number (param or max)
-      const [{ maxIssue }] = await db
-        .select({ maxIssue: sql<number>`MAX(issue_number)` })
-        .from(articles);
-      const targetIssue = issueParam || maxIssue;
+      // Find the target issue number (param or "latest published"). Picks
+      // the highest issue whose published_at has actually passed — keeps
+      // future issues (and stray article-only issue numbers like a
+      // mistakenly-tagged 209) out of the public "current issue" surface.
+      const targetIssue = issueParam ?? await latestPublishedIssueNumber();
 
       let result;
       if (targetIssue) {
@@ -265,9 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // featured articles when nothing is flagged yet.
   app.get("/api/articles/highlights", async (_req, res) => {
     try {
-      const [{ maxIssue }] = await db
-        .select({ maxIssue: sql<number>`MAX(issue_number)` })
-        .from(articles);
+      const maxIssue = await latestPublishedIssueNumber();
       if (!maxIssue) {
         return res.json({ articles: [], issueNumber: null });
       }
