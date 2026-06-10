@@ -612,7 +612,16 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Category</Label>
-                <Select onValueChange={(value) => form.setValue("categoryId", value)} data-testid="article-category-select">
+                {/* Controlled — without `value` the Select stays empty after
+                    form.reset() because it has no idea the form state
+                    changed. Binding to form.watch makes it follow the form. */}
+                <Select
+                  value={form.watch("categoryId") || ""}
+                  onValueChange={(value) =>
+                    form.setValue("categoryId", value, { shouldValidate: true, shouldDirty: true })
+                  }
+                  data-testid="article-category-select"
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
@@ -645,30 +654,48 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                 online-only articles don't have one. */}
             <div className="space-y-2">
               <Label htmlFor="issue-number">Issue (print edition, optional)</Label>
-              <Select
-                value={form.watch("issueNumber") == null ? "none" : String(form.watch("issueNumber"))}
-                onValueChange={(v) =>
-                  form.setValue("issueNumber", v === "none" ? null : Number(v), {
-                    shouldDirty: true,
-                  })
-                }
-              >
-                <SelectTrigger id="issue-number" className="w-full max-w-sm" data-testid="article-issue-select">
-                  <SelectValue placeholder="None" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None — online only</SelectItem>
-                  {(issuesData?.issues ?? [])
-                    .slice()
-                    .sort((a, b) => b.number - a.number)
-                    .map((iss) => (
-                      <SelectItem key={iss.id} value={String(iss.number)}>
-                        Gallery #{iss.number}
-                        {iss.displayLabel ? ` — ${iss.displayLabel}` : iss.title ? ` — ${iss.title}` : ""}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              {(() => {
+                // Read once per render — calling form.watch twice creates two
+                // separate subscriptions and reads twice for no benefit.
+                const currentIssue = form.watch("issueNumber");
+                const currentStr = currentIssue == null ? "none" : String(currentIssue);
+                const issues = (issuesData?.issues ?? []).slice().sort((a, b) => b.number - a.number);
+                // If the article's issueNumber isn't in the loaded list (because
+                // /api/issues hasn't resolved yet on first paint after editing),
+                // render a fallback SelectItem so Radix Select can still find a
+                // matching label. Without this the trigger shows the placeholder
+                // even though the form state holds the right value.
+                const knownNumbers = new Set(issues.map((i) => String(i.number)));
+                const needsFallback = currentIssue != null && !knownNumbers.has(String(currentIssue));
+                return (
+                  <Select
+                    value={currentStr}
+                    onValueChange={(v) =>
+                      form.setValue("issueNumber", v === "none" ? null : Number(v), {
+                        shouldDirty: true,
+                      })
+                    }
+                  >
+                    <SelectTrigger id="issue-number" className="w-full max-w-sm" data-testid="article-issue-select">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None — online only</SelectItem>
+                      {needsFallback && (
+                        <SelectItem value={String(currentIssue)}>
+                          Gallery #{currentIssue}
+                        </SelectItem>
+                      )}
+                      {issues.map((iss) => (
+                        <SelectItem key={iss.id} value={String(iss.number)}>
+                          Gallery #{iss.number}
+                          {iss.displayLabel ? ` — ${iss.displayLabel}` : iss.title ? ` — ${iss.title}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
 
               {/* Promote to the homepage Latest Highlights hero band (only
                   effective for the latest issue; older issues' flagged
