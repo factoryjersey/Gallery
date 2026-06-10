@@ -49,6 +49,10 @@ const articleSchema = z.object({
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
   readTime: z.number().min(1).default(5),
+  // Print edition this article appeared in. References issues.number — kept
+  // as a nullable integer rather than an FK so the import can attach the
+  // number even when the issue row doesn't exist yet.
+  issueNumber: z.number().int().nullable().optional(),
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -97,6 +101,12 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     queryKey: ["/api/articles/credit-suggestions"],
   });
 
+  const { data: issuesData } = useQuery<{
+    issues: Array<{ id: string; number: number; title: string | null; displayLabel: string | null }>;
+  }>({
+    queryKey: ["/api/issues"],
+  });
+
   // Populate form when editing
   useEffect(() => {
     if (articleData?.article) {
@@ -118,6 +128,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         metaTitle: article.metaTitle || "",
         metaDescription: article.metaDescription || "",
         readTime: article.readTime,
+        issueNumber: typeof article.issueNumber === "number" ? article.issueNumber : null,
       });
       setSelectedTags(article.tags?.map((t: any) => t.id) || []);
     }
@@ -436,7 +447,19 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
           <CardTitle>Create New Article</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            // Stop Enter from auto-submitting the whole article from any
+            // text input — only Save Draft / Publish should trigger a save.
+            // Textareas keep their normal Enter-for-newline behaviour.
+            onKeyDown={(e) => {
+              const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+              if (e.key === "Enter" && tag === "input") {
+                e.preventDefault();
+              }
+            }}
+            className="space-y-6"
+          >
             {/* Basic Info */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -519,6 +542,36 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               </div>
             </div>
 
+            {/* Print edition this article appeared in. Optional — many
+                online-only articles don't have one. */}
+            <div className="space-y-2">
+              <Label htmlFor="issue-number">Issue (print edition, optional)</Label>
+              <Select
+                value={form.watch("issueNumber") == null ? "none" : String(form.watch("issueNumber"))}
+                onValueChange={(v) =>
+                  form.setValue("issueNumber", v === "none" ? null : Number(v), {
+                    shouldDirty: true,
+                  })
+                }
+              >
+                <SelectTrigger id="issue-number" className="w-full max-w-sm" data-testid="article-issue-select">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None — online only</SelectItem>
+                  {(issuesData?.issues ?? [])
+                    .slice()
+                    .sort((a, b) => b.number - a.number)
+                    .map((iss) => (
+                      <SelectItem key={iss.id} value={String(iss.number)}>
+                        Gallery #{iss.number}
+                        {iss.displayLabel ? ` — ${iss.displayLabel}` : iss.title ? ` — ${iss.title}` : ""}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Credits — managed via the contributors table so each
                 photographer / illustrator is a proper person with a
                 profile page. */}
@@ -538,7 +591,17 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   placeholder="Add tag"
                   value={newTag}
                   onChange={(e) => setNewTag(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      // Prevent the form's default Enter-to-submit from firing
+                      // — previously this would trigger the article mutation
+                      // with whatever status was set, sometimes auto-publishing
+                      // a draft.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addTag();
+                    }
+                  }}
                   data-testid="tag-input"
                 />
                 <Button type="button" onClick={addTag} size="sm" data-testid="add-tag-button">
