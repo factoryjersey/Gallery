@@ -23,7 +23,7 @@ function BigHero({ article }: { article: ArticleWithDetails }) {
             <LazyImage
               src={img}
               alt={article.title}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-[2500ms] ease-out group-hover:scale-[1.04]"
+              className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-[2500ms] ease-out group-hover:scale-[1.04]"
             />
           )}
         </div>
@@ -82,7 +82,7 @@ function SideTile({ article }: { article: ArticleWithDetails }) {
             <LazyImage
               src={img}
               alt={article.title}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-[2500ms] ease-out group-hover:scale-[1.04]"
+              className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-[2500ms] ease-out group-hover:scale-[1.04]"
             />
           )}
         </div>
