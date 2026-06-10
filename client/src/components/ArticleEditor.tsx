@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import AuthorPicker from "@/components/AuthorPicker";
 import ContributorsPicker, { type CreditEntry } from "@/components/ContributorsPicker";
 import TipTapEditor from "@/components/TipTapEditor";
+import ImageCropDialog from "@/components/ImageCropDialog";
 import { apiRequest } from "@/lib/queryClient";
 
 const articleSchema = z.object({
@@ -80,6 +81,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   // Tracks the in-flight AI excerpt request so the button can show a
   // spinner and double-click is debounced.
   const [generatingExcerpt, setGeneratingExcerpt] = useState(false);
+  // Crop-dialog state. We stash the picked File + which form field to
+  // write the resulting URL into; the dialog handles the rest.
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropTarget, setCropTarget] = useState<"featuredImage" | "splashImage">("featuredImage");
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -354,6 +359,27 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     setSelectedTags(selectedTags.filter(tag => tag !== tagToRemove));
   };
 
+  /** Open the crop dialog for the picked file and remember which form
+   *  field its eventual cropped Blob will populate. The dialog itself
+   *  calls back to handleCropApplied → handleImageUpload to finish the
+   *  upload. */
+  const openCropForUpload = (file: File, target: "featuredImage" | "splashImage") => {
+    setCropTarget(target);
+    setCropFile(file);
+  };
+
+  /** Called from ImageCropDialog with the cropped JPEG Blob — wraps it
+   *  back into a File so the existing /api/media/upload pipeline handles
+   *  it like any other upload, and routes the resulting URL into the
+   *  same form field the editor originally picked. */
+  const handleCropApplied = (blob: Blob, originalName: string) => {
+    const baseName = originalName.replace(/\.[^.]+$/, "");
+    const croppedFile = new File([blob], `${baseName}-cropped.jpg`, { type: "image/jpeg" });
+    const target = cropTarget;
+    setCropFile(null);
+    handleImageUpload(croppedFile, target);
+  };
+
   const handleImageUpload = async (file: File, target: "featuredImage" | "splashImage" = "featuredImage") => {
     let uploadSucceeded = false;
     try {
@@ -533,6 +559,13 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
 
   return (
     <div className="space-y-6">
+      {/* Crop dialog — opens after a featured/splash file is picked,
+          uploads the cropped Blob through the same media pipeline. */}
+      <ImageCropDialog
+        file={cropFile}
+        onCancel={() => setCropFile(null)}
+        onCropped={handleCropApplied}
+      />
       <Card>
         <CardHeader>
           <CardTitle>Create New Article</CardTitle>
@@ -774,9 +807,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) {
-                      handleImageUpload(file, "featuredImage");
-                    }
+                    if (file) openCropForUpload(file, "featuredImage");
+                    // Reset the input so picking the same file again
+                    // still re-triggers onChange.
+                    e.target.value = "";
                   }}
                   data-testid="featured-image-input"
                 />
@@ -802,9 +836,8 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) {
-                      handleImageUpload(file, "splashImage");
-                    }
+                    if (file) openCropForUpload(file, "splashImage");
+                    e.target.value = "";
                   }}
                   data-testid="splash-image-input"
                 />
