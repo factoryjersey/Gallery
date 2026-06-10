@@ -92,14 +92,27 @@ function NavDropdown({ category, onClose }: { category: any; onClose: () => void
 
 // Current Issue dropdown
 function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
-  const { data, isLoading } = useQuery<{ articles: any[]; cutoff: string }>({
+  // The endpoint returns { articles, edito, issueNumber }. The edito gets
+  // pulled out into a dedicated field so we can render it as the
+  // editor's-letter feature at the top of the dropdown — without it, the
+  // dropdown looked empty for issues where the edito was the only thing
+  // added so far.
+  const { data, isLoading } = useQuery<{
+    articles: any[];
+    edito: any | null;
+    issueNumber: number | null;
+    cutoff?: string;
+  }>({
     queryKey: ["/api/articles/current-issue", { limit: 6 }],
     queryFn: () => fetch("/api/articles/current-issue?limit=6").then(r => r.json()),
     staleTime: 5 * 60 * 1000,
   });
   const articles = data?.articles || [];
+  const edito = data?.edito || null;
+  const issueNumber = data?.issueNumber;
   const cutoff = data?.cutoff ? format(new Date(data.cutoff), "d MMM") : "";
   const today = format(new Date(), "d MMM yyyy");
+  const hasContent = !!edito || articles.length > 0;
 
   return (
     <div
@@ -109,7 +122,7 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
         <div>
           <span style={{ fontFamily: "Arial, sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "hsl(0 0% 55%)" }}>
-            Current Issue
+            {issueNumber ? `Gallery #${issueNumber}` : "Current Issue"}
           </span>
           {cutoff && (
             <span className="ml-2" style={{ fontFamily: "Arial, sans-serif", fontSize: 11, color: "hsl(0 0% 65%)" }}>
@@ -138,13 +151,29 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
-      ) : articles.length === 0 ? (
+      ) : !hasContent ? (
         <p style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 60%)" }}>
           No articles available yet.
         </p>
       ) : (
-        <div className="space-y-1 divide-y divide-border" onClick={onClose}>
-          {articles.map((a: any) => <PreviewCard key={a.id} article={a} />)}
+        <div className="space-y-1" onClick={onClose}>
+          {/* Editor's letter at the top, flagged so it doesn't read as a
+              regular article preview. */}
+          {edito && (
+            <div className="pb-3 mb-3 border-b border-border">
+              <div className="mb-1.5">
+                <span style={{ fontFamily: "Arial, sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "hsl(182 55% 36%)" }}>
+                  Editor's letter
+                </span>
+              </div>
+              <PreviewCard article={edito} />
+            </div>
+          )}
+          {articles.length > 0 && (
+            <div className="divide-y divide-border">
+              {articles.map((a: any) => <PreviewCard key={a.id} article={a} />)}
+            </div>
+          )}
         </div>
       )}
     </div>
