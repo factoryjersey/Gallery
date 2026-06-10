@@ -44,6 +44,43 @@ async function latestPublishedIssueNumber(): Promise<number | null> {
   return typeof n === "number" ? n : null;
 }
 
+/** Maximum number of articles that can sit in the homepage Latest
+ *  Highlights band at any one time. Stored centrally so the cap-enforcer
+ *  on save and the public endpoint can never drift out of sync. */
+const HIGHLIGHTS_MAX = 5;
+
+/**
+ * Enforce the homepage-highlights cap for one issue. Called after any
+ * article save where homepage_highlight was set to true.
+ *
+ * Strategy: list all currently-flagged articles in the issue ordered by
+ * published_at DESC (newest first), keep the top HIGHLIGHTS_MAX, and
+ * un-flag the rest. This means promoting a sixth article naturally
+ * evicts the oldest one — and if the new article is itself the oldest,
+ * it falls off immediately rather than displacing a fresher pick. The
+ * operation is idempotent: running it on an already-conforming issue is
+ * a no-op.
+ */
+async function enforceHighlightCap(issueNumber: number | null) {
+  if (!issueNumber) return;
+  const { rows } = await db.execute(sql`
+    SELECT id
+      FROM articles
+     WHERE homepage_highlight = true
+       AND issue_number = ${issueNumber}
+     ORDER BY COALESCE(published_at, created_at) DESC, id DESC
+     OFFSET ${HIGHLIGHTS_MAX}
+  `);
+  const excess = (rows as Array<{ id: string }>).map((r) => r.id);
+  if (excess.length === 0) return;
+  await db.execute(sql`
+    UPDATE articles
+       SET homepage_highlight = false,
+           updated_at = NOW()
+     WHERE id = ANY(${excess}::varchar[])
+  `);
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Admin auth — gate mutations BEFORE any routes are registered so every
   // POST/PUT/PATCH/DELETE under /api/ is checked (except the public whitelist
@@ -327,9 +364,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fallback so the hero is never empty when the flag is unset on a
       // brand-new issue: take the first few featured-or-most-recent.
       if (chosen.length === 0) {
-        chosen = eligible.filter((a: any) => a.isFeatured).slice(0, 6);
-        if (chosen.length === 0) chosen = eligible.slice(0, 6);
+        chosen = eligible.filter((a: any) => a.isFeatured).slice(0, HIGHLIGHTS_MAX);
+        if (chosen.length === 0) chosen = eligible.slice(0, HIGHLIGHTS_MAX);
       }
+      // Hard cap — newest first; the save-time enforcer should keep the
+      // flagged set at or under HIGHLIGHTS_MAX, but slicing here means
+      // legacy data or an admin DB tweak can't blow the strip open.
+      chosen = chosen.slice(0, HIGHLIGHTS_MAX);
       res.json({ articles: chosen, issueNumber: maxIssue });
     } catch (error) {
       console.error("Error fetching highlights:", error);
@@ -471,6 +512,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { tags: tagIds, ...articleData } = req.body;
 
       const article = await storage.createArticle(validatedData, tagIds);
+      // If the new article was flagged for the homepage hero, evict the
+      // oldest sibling once we cross the cap.
+      if ((article as any)?.homepageHighlight) {
+        await enforceHighlightCap((article as any)?.issueNumber ?? null);
+      }
       res.json({ article });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -489,6 +535,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const article = await storage.updateArticle(req.params.id, validatedData, tagIds);
       if (!article) {
         return res.status(404).json({ error: "Article not found" });
+      }
+      // If this save left the article in the highlight pool, prune any
+      // overflow. Idempotent on already-conforming issues.
+      if ((article as any)?.homepageHighlight) {
+        await enforceHighlightCap((article as any)?.issueNumber ?? null);
       }
 
       res.json({ article });

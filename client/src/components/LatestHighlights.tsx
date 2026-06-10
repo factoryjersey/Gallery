@@ -25,11 +25,14 @@ export default function LatestHighlights() {
     queryKey: ["/api/articles/highlights"],
   });
 
-  // Cap the strip at 12 so a maximally-flagged issue doesn't produce an
-  // infinite-scrolling band. Filter out anything missing imagery —
-  // text-only tiles look broken next to photographs.
+  // Hard cap at 5: the server-side highlight enforcer keeps the flagged
+  // set at or under this, but slicing client-side too means even if a
+  // stale cache hands us more, we never render more than five. Newest
+  // first (server orders by published_at DESC) → newest tile sits on
+  // the left of the strip. Filter out images-less rows so the strip
+  // never includes a placeholder-looking tile next to photographs.
   const articles = useMemo(() => {
-    return (data?.articles ?? []).filter(hasImage).slice(0, 12);
+    return (data?.articles ?? []).filter(hasImage).slice(0, 5);
   }, [data]);
 
   if (articles.length === 0) return null;
