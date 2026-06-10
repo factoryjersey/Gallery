@@ -892,7 +892,21 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
             {/* Action Buttons */}
             <div className="flex items-center justify-between pt-4 border-t border-border">
               <div className="flex items-center space-x-3">
-                <Button type="button" variant="outline" data-testid="preview-button">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!form.watch("slug")}
+                  title={
+                    form.watch("slug")
+                      ? "Open this article in a new tab"
+                      : "Save the article first so it has a URL to preview"
+                  }
+                  onClick={() => {
+                    const slug = form.getValues("slug");
+                    if (slug) window.open(`/article/${slug}`, "_blank", "noopener,noreferrer");
+                  }}
+                  data-testid="preview-button"
+                >
                   <Eye className="h-4 w-4 mr-2" />
                   Preview
                 </Button>
