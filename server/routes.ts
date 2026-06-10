@@ -53,13 +53,18 @@ const HIGHLIGHTS_MAX = 5;
  * Enforce the homepage-highlights cap for one issue. Called after any
  * article save where homepage_highlight was set to true.
  *
- * Strategy: list all currently-flagged articles in the issue ordered by
- * published_at DESC (newest first), keep the top HIGHLIGHTS_MAX, and
- * un-flag the rest. This means promoting a sixth article naturally
- * evicts the oldest one — and if the new article is itself the oldest,
- * it falls off immediately rather than displacing a fresher pick. The
- * operation is idempotent: running it on an already-conforming issue is
- * a no-op.
+ * Sort order is the same as the public endpoint:
+ *   homepage_highlighted_at DESC NULLS LAST,
+ *   COALESCE(published_at, created_at) DESC,
+ *   id DESC.
+ *
+ * "Newest promotion wins": an article freshly flagged for the strip
+ * lands at the top and pushes the oldest promotion off the bottom,
+ * regardless of when the underlying article was published. The fallback
+ * to publish/created time only matters for legacy rows that pre-date
+ * the homepage_highlighted_at column.
+ *
+ * Idempotent — re-running on an already-conforming issue is a no-op.
  */
 async function enforceHighlightCap(issueNumber: number | null) {
   if (!issueNumber) return;
@@ -68,7 +73,9 @@ async function enforceHighlightCap(issueNumber: number | null) {
       FROM articles
      WHERE homepage_highlight = true
        AND issue_number = ${issueNumber}
-     ORDER BY COALESCE(published_at, created_at) DESC, id DESC
+     ORDER BY homepage_highlighted_at DESC NULLS LAST,
+              COALESCE(published_at, created_at) DESC,
+              id DESC
      OFFSET ${HIGHLIGHTS_MAX}
   `);
   const excess = (rows as Array<{ id: string }>).map((r) => r.id);
@@ -78,6 +85,34 @@ async function enforceHighlightCap(issueNumber: number | null) {
        SET homepage_highlight = false,
            updated_at = NOW()
      WHERE id = ANY(${excess}::varchar[])
+  `);
+}
+
+/**
+ * Sync homepage_highlighted_at with the homepage_highlight flag using a
+ * single conditional UPDATE so the rest of the save path doesn't have to
+ * know the previous state:
+ *
+ *   - flag is false → clear the stamp. Means a later re-promotion gets a
+ *     fresh NOW() and bubbles to the top of the strip, rather than
+ *     reappearing at its old position.
+ *   - flag is true and stamp is null → stamp NOW. This catches both a
+ *     brand-new promotion and a re-promotion after the clear above.
+ *   - flag is true and stamp is set → leave the stamp alone. Editing a
+ *     highlighted article's body copy doesn't bump its position; only an
+ *     explicit re-toggle does.
+ *
+ * Called from the POST/PUT article handlers after the save completes.
+ */
+async function syncHighlightStamp(articleId: string) {
+  await db.execute(sql`
+    UPDATE articles
+       SET homepage_highlighted_at = CASE
+         WHEN homepage_highlight = false THEN NULL
+         WHEN homepage_highlight = true AND homepage_highlighted_at IS NULL THEN NOW()
+         ELSE homepage_highlighted_at
+       END
+     WHERE id = ${articleId}
   `);
 }
 
@@ -361,15 +396,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // selection logic runs.
       const eligible = flagged.articles.filter((a: any) => a.category?.slug !== "edito");
       let chosen = eligible.filter((a: any) => a.homepageHighlight);
+      // Sort flagged articles by promotion time DESC so the most recently
+      // promoted (or re-promoted) sits leftmost. Falls back to
+      // publish/created time for legacy rows that pre-date
+      // homepage_highlighted_at. storage.getArticles ordered by
+      // publishedAt DESC already; re-sort here so the promotion stamp
+      // takes precedence.
+      const promotedAt = (a: any) =>
+        a.homepageHighlightedAt
+          ? new Date(a.homepageHighlightedAt).getTime()
+          : 0;
+      const fallback = (a: any) =>
+        new Date(a.publishedAt || a.createdAt || 0).getTime();
+      chosen.sort((a: any, b: any) => {
+        const pa = promotedAt(a);
+        const pb = promotedAt(b);
+        if (pa !== pb) return pb - pa;
+        return fallback(b) - fallback(a);
+      });
       // Fallback so the hero is never empty when the flag is unset on a
       // brand-new issue: take the first few featured-or-most-recent.
       if (chosen.length === 0) {
         chosen = eligible.filter((a: any) => a.isFeatured).slice(0, HIGHLIGHTS_MAX);
         if (chosen.length === 0) chosen = eligible.slice(0, HIGHLIGHTS_MAX);
       }
-      // Hard cap — newest first; the save-time enforcer should keep the
-      // flagged set at or under HIGHLIGHTS_MAX, but slicing here means
-      // legacy data or an admin DB tweak can't blow the strip open.
+      // Hard cap — newest promotion first; the save-time enforcer should
+      // keep the flagged set at or under HIGHLIGHTS_MAX, but slicing
+      // here means legacy data or an admin DB tweak can't blow the
+      // strip open.
       chosen = chosen.slice(0, HIGHLIGHTS_MAX);
       res.json({ articles: chosen, issueNumber: maxIssue });
     } catch (error) {
@@ -512,8 +566,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { tags: tagIds, ...articleData } = req.body;
 
       const article = await storage.createArticle(validatedData, tagIds);
-      // If the new article was flagged for the homepage hero, evict the
-      // oldest sibling once we cross the cap.
+      // Sync the promotion stamp (clears when flag=false, stamps NOW
+      // when flag=true & previously null). If we ended highlighted, run
+      // the cap-enforcer too so promoting a 6th evicts the oldest.
+      if (article?.id) await syncHighlightStamp(article.id);
       if ((article as any)?.homepageHighlight) {
         await enforceHighlightCap((article as any)?.issueNumber ?? null);
       }
@@ -536,8 +592,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!article) {
         return res.status(404).json({ error: "Article not found" });
       }
-      // If this save left the article in the highlight pool, prune any
-      // overflow. Idempotent on already-conforming issues.
+      // Sync promotion stamp first (handles both promote + demote cases),
+      // then prune any overflow if we ended up highlighted.
+      if (article?.id) await syncHighlightStamp(article.id);
       if ((article as any)?.homepageHighlight) {
         await enforceHighlightCap((article as any)?.issueNumber ?? null);
       }

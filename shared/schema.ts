@@ -77,6 +77,12 @@ export const articles = pgTable("articles", {
   // Per-article toggle: when true, eligible for the home page's "Latest
   // Highlights" hero band (scoped to the current/latest issue).
   homepageHighlight: boolean("homepage_highlight").default(false).notNull(),
+  // Stamp recorded the moment homepage_highlight flips from false → true
+  // (or on creation if the article is born highlighted). The Latest
+  // Highlights strip orders by this DESC so newly-promoted articles land
+  // on the left regardless of their underlying publish date — important
+  // for back-catalogue pieces an editor pulls into the current issue.
+  homepageHighlightedAt: timestamp("homepage_highlighted_at"),
   // Content type: 'article' | 'cartoon'
   contentType: text("content_type").notNull().default("article"),
   // Issue number (bimonthly edition)
