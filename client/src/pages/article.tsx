@@ -12,6 +12,7 @@ import PaparazziGallery from "@/components/PaparazziGallery";
 import PhotoshootSlider from "@/components/PhotoshootSlider";
 import GalleryCarousel from "@/components/GalleryCarousel";
 import GalleryGrid from "@/components/GalleryGrid";
+import PhotoshootGrid from "@/components/PhotoshootGrid";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -24,14 +25,24 @@ export default function Article() {
   });
 
   const article = data?.article;
-  // Fashion-shoots historically used PhotoshootSlider, which extracted
-  // images from the body HTML. Now that we recover their images into the
-  // proper galleryImages column, we only fall back to PhotoshootSlider
-  // when galleryImages is empty (i.e. older articles that haven't been
-  // migrated yet).
-  const isPhotoshoot =
+  // Two paths to "this is a photoshoot, render it differently":
+  //
+  //  1. Explicit contentType = "photoshoot" — the new article type. The
+  //     gallery images render as a full-bleed 3-across PhotoshootGrid on
+  //     a black background. Standard lead image + flow body are skipped.
+  //  2. Legacy fashion-shoots that haven't been migrated to galleryImages
+  //     yet — fall back to PhotoshootSlider, which extracts images from
+  //     the body HTML.
+  //
+  // `isPhotoshoot` covers both so the standard non-photoshoot body block
+  // gets skipped in either case; the renderer below then picks the right
+  // sub-path.
+  const isExplicitPhotoshoot = article?.contentType === "photoshoot";
+  const isLegacyPhotoshoot =
+    !isExplicitPhotoshoot &&
     article?.category?.slug === "fashion-shoots" &&
     !(Array.isArray(article?.galleryImages) && article!.galleryImages!.length > 0);
+  const isPhotoshoot = isExplicitPhotoshoot || isLegacyPhotoshoot;
 
   // Desktop layout preference: 1-col reads like classic editorial, 2-col
   // puts the featured image on the left with body copy on the right
@@ -98,10 +109,17 @@ export default function Article() {
       <Header />
 
       {/* Article — container width adapts to layout choice. 2-col gives the
-          image room to sit alongside the body without cramping either. */}
+          image room to sit alongside the body without cramping either.
+          Photoshoots force the narrow read width because the body block
+          is skipped entirely; the gallery escapes the container width via
+          negative margins to run full-bleed on black. */}
       <article
         className={`mx-auto px-6 py-10 ${
-          layout === "two-col" ? "max-w-[1200px]" : "max-w-[760px]"
+          isExplicitPhotoshoot
+            ? "max-w-[760px]"
+            : layout === "two-col"
+              ? "max-w-[1200px]"
+              : "max-w-[760px]"
         }`}
       >
 
@@ -126,7 +144,10 @@ export default function Article() {
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Articles
           </button>
-          <LayoutToggle layout={layout} setLayout={setLayout} />
+          {/* Hide the 1-col / 2-col toggle for photoshoots — the gallery
+              renders full-bleed regardless, and the body is skipped, so
+              the toggle has nothing meaningful to switch. */}
+          {!isExplicitPhotoshoot && <LayoutToggle layout={layout} setLayout={setLayout} />}
           {isAdmin && article && (
             <button
               onClick={() => {
@@ -302,7 +323,7 @@ export default function Article() {
             <span data-testid="article-date">
               {format(new Date(article.publishedAt || article.createdAt), "d MMMM yyyy")}
             </span>
-            {article.contentType !== "gallery" && !isPhotoshoot && (
+            {article.contentType !== "gallery" && article.contentType !== "photoshoot" && !isPhotoshoot && (
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 <span data-testid="article-read-time">{article.readTime} min read</span>
@@ -416,9 +437,29 @@ export default function Article() {
           </nav>
         )}
 
-        {/* Photoshoot slider rendered full-bleed by breaking out of the
-            760px article container with negative-margin trick. */}
-        {isPhotoshoot && (
+        {/* Photoshoot rendering, full-bleed via the negative-margin trick
+            (escape the article container's max-width + padding so the
+            black band runs to the viewport edge).
+
+            Two flavours:
+             - Explicit contentType=photoshoot → curated galleryImages
+               rendered as a 3-across PhotoshootGrid on black.
+             - Legacy fashion-shoots fallback → PhotoshootSlider extracts
+               images from the body HTML. Kept for un-migrated rows. */}
+        {isExplicitPhotoshoot &&
+          Array.isArray(article.galleryImages) &&
+          article.galleryImages.length > 0 && (
+            <div
+              className="my-8"
+              style={{ marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}
+            >
+              <PhotoshootGrid
+                images={article.galleryImages}
+                altPrefix={article.title}
+              />
+            </div>
+          )}
+        {isLegacyPhotoshoot && (
           <div
             className="my-8"
             style={{ marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}
@@ -427,6 +468,19 @@ export default function Article() {
               hero={article.featuredImage}
               content={article.content}
               altPrefix={article.title}
+            />
+          </div>
+        )}
+
+        {/* Optional body copy for explicit photoshoots — renders below the
+            grid in the standard narrow reading column so the editor can
+            credit the team, set the scene, or include a short standfirst
+            of prose. Skipped if the body is empty/whitespace. */}
+        {isExplicitPhotoshoot && article.content && article.content.replace(/<[^>]+>/g, "").trim().length > 0 && (
+          <div className="max-w-[760px] mx-auto mt-10">
+            <RichContent
+              content={article.content}
+              className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
             />
           </div>
         )}

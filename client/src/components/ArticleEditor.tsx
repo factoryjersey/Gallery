@@ -45,7 +45,7 @@ const articleSchema = z.object({
   photographer: z.string().optional(),
   illustrator: z.string().optional(),
   status: z.enum(["draft", "published"]),
-  contentType: z.enum(["article", "cartoon", "gallery"]).default("article"),
+  contentType: z.enum(["article", "cartoon", "gallery", "photoshoot"]).default("article"),
   featuredImage: z.string().optional(),
   splashImage: z.string().optional(),
   galleryImages: z.array(z.object({ url: z.string(), caption: z.string().optional() })).optional(),
@@ -314,8 +314,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     const content = e.target.value;
     form.setValue("content", content);
     
-    // For gallery type, don't compute read time from image-heavy HTML
-    if (form.getValues("contentType") === "gallery") {
+    // For gallery / photoshoot types, don't compute read time from
+    // image-heavy HTML — those types lead with pictures, not prose.
+    const ct = form.getValues("contentType");
+    if (ct === "gallery" || ct === "photoshoot") {
       form.setValue("readTime", 1);
       return;
     }
@@ -586,7 +588,12 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               <Label>Content Type</Label>
               <Select
                 value={form.watch("contentType")}
-                onValueChange={(value) => form.setValue("contentType", value as "article" | "cartoon" | "gallery")}
+                onValueChange={(value) =>
+                  form.setValue(
+                    "contentType",
+                    value as "article" | "cartoon" | "gallery" | "photoshoot",
+                  )
+                }
                 data-testid="content-type-select"
               >
                 <SelectTrigger>
@@ -595,6 +602,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                 <SelectContent>
                   <SelectItem value="article">Article</SelectItem>
                   <SelectItem value="gallery">Gallery (Paparazzi / Photo grid)</SelectItem>
+                  <SelectItem value="photoshoot">Photo Shoot (3-across on black)</SelectItem>
                   <SelectItem value="cartoon">Cartoon</SelectItem>
                 </SelectContent>
               </Select>
