@@ -279,12 +279,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         orderDir: "desc",
         limit: 50,
       });
-      let chosen = flagged.articles.filter((a: any) => a.homepageHighlight);
+      // Edito sits in the Current Issue dropdown as the editor's letter,
+      // never in the hero band — drop it from the pool before any
+      // selection logic runs.
+      const eligible = flagged.articles.filter((a: any) => a.category?.slug !== "edito");
+      let chosen = eligible.filter((a: any) => a.homepageHighlight);
       // Fallback so the hero is never empty when the flag is unset on a
       // brand-new issue: take the first few featured-or-most-recent.
       if (chosen.length === 0) {
-        chosen = flagged.articles.filter((a: any) => a.isFeatured).slice(0, 6);
-        if (chosen.length === 0) chosen = flagged.articles.slice(0, 6);
+        chosen = eligible.filter((a: any) => a.isFeatured).slice(0, 6);
+        if (chosen.length === 0) chosen = eligible.slice(0, 6);
       }
       res.json({ articles: chosen, issueNumber: maxIssue });
     } catch (error) {
