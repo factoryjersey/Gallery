@@ -18,7 +18,7 @@ function BigHero({ article }: { article: ArticleWithDetails }) {
   return (
     <Link href={`/article/${article.slug}`}>
       <article className="group cursor-pointer flex flex-col gap-3" data-testid={`highlight-big-${article.slug}`}>
-        <div className="relative overflow-hidden" style={{ aspectRatio: "4 / 3" }}>
+        <div className="relative overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
           {img && (
             <LazyImage
               src={img}
@@ -76,8 +76,8 @@ function SideTile({ article }: { article: ArticleWithDetails }) {
   const img = tileImage(article);
   return (
     <Link href={`/article/${article.slug}`}>
-      <article className="group cursor-pointer flex flex-col gap-2 h-full" data-testid={`highlight-side-${article.slug}`}>
-        <div className="relative overflow-hidden flex-1 min-h-0">
+      <article className="group cursor-pointer flex flex-col gap-2" data-testid={`highlight-side-${article.slug}`}>
+        <div className="relative overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
           {img && (
             <LazyImage
               src={img}

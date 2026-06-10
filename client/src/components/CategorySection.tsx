@@ -47,7 +47,7 @@ function BigTile({ article, preferGallery }: { article: ArticleWithDetails; pref
   return (
     <Link href={`/article/${article.slug}`}>
       <article className="group cursor-pointer flex flex-col gap-3" data-testid={`section-bigtile-${article.slug}`}>
-        <div className="relative overflow-hidden" style={{ aspectRatio: "4 / 3" }}>
+        <div className="relative overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
           {img ? (
             <LazyImage
               src={img}
@@ -106,25 +106,23 @@ function BigTile({ article, preferGallery }: { article: ArticleWithDetails; pref
 function SmallTile({
   article,
   preferGallery,
-  fillHeight = false,
 }: {
   article: ArticleWithDetails;
   preferGallery: boolean;
-  /** When true, image stretches to fill the grid cell (used in the
-   *  feature layout so two small tiles together match the big tile's
-   *  height). When false, image keeps a square aspect ratio. */
+  /** Kept in the type for source compatibility — every small tile is now
+   *  square so this flag has no effect. */
   fillHeight?: boolean;
 }) {
   const img = tileImage(article, preferGallery);
   return (
     <Link href={`/article/${article.slug}`}>
       <article
-        className={`group cursor-pointer flex flex-col gap-2 ${fillHeight ? "h-full" : ""}`}
+        className="group cursor-pointer flex flex-col gap-2"
         data-testid={`section-smalltile-${article.slug}`}
       >
         <div
-          className={`relative overflow-hidden ${fillHeight ? "flex-1 min-h-0" : ""}`}
-          style={fillHeight ? undefined : { aspectRatio: "1 / 1" }}
+          className="relative overflow-hidden"
+          style={{ aspectRatio: "1 / 1" }}
         >
           {img ? (
             <LazyImage
