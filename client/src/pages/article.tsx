@@ -487,36 +487,37 @@ function LayoutToggle({
   layout: "one-col" | "two-col";
   setLayout: (l: "one-col" | "two-col") => void;
 }) {
+  // Compact icon-only switch — keeps the article header uncluttered.
+  // Tooltips carry the labels for accessibility.
   const baseBtn =
-    "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs uppercase tracking-wider transition-colors";
+    "inline-flex items-center justify-center w-7 h-7 transition-colors";
   return (
     <div
-      className="hidden lg:inline-flex items-center border border-border"
+      className="hidden lg:inline-flex items-center border border-border ml-auto"
       role="radiogroup"
       aria-label="Article layout"
-      style={{ fontFamily: "Arial, sans-serif" }}
     >
       <button
         type="button"
         className={`${baseBtn} ${layout === "one-col" ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground"}`}
         onClick={() => setLayout("one-col")}
         aria-pressed={layout === "one-col"}
+        aria-label="Single column"
         title="Single column"
         data-testid="layout-one-col"
       >
         <AlignLeft className="h-3.5 w-3.5" />
-        One column
       </button>
       <button
         type="button"
         className={`${baseBtn} ${layout === "two-col" ? "bg-foreground text-white" : "text-muted-foreground hover:text-foreground"}`}
         onClick={() => setLayout("two-col")}
         aria-pressed={layout === "two-col"}
+        aria-label="Two columns — image left, copy right"
         title="Image left, copy right"
         data-testid="layout-two-col"
       >
         <Columns className="h-3.5 w-3.5" />
-        Two columns
       </button>
     </div>
   );

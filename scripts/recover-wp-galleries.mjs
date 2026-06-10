@@ -176,6 +176,17 @@ function extractGalleryImagesFromLiveHtml(html, title) {
     if (!out.has(url)) out.set(url, "");
   }
 
+  // Pattern (c): td-gallery slider — newspaper-theme renders gallery
+  // images as CSS `background: url(...)` on .td-itemN selectors in an
+  // inline <style> block, with no <img> tag. Scan the whole HTML for
+  // these (not just the body window) since the <style> often sits
+  // OUTSIDE the article body. Filter to uploads under YYYY/MM only.
+  const tdItemRe = /\.td-item\d+\s*\{\s*background:\s*url\(([^)]+\/wp-content\/uploads\/\d{4}\/\d{2}\/[^)]+)\)/gi;
+  for (const m of html.matchAll(tdItemRe)) {
+    const url = m[1].replace(/^['"]/, "").replace(/['"]$/, "").trim();
+    if (!out.has(url)) out.set(url, "");
+  }
+
   return Array.from(out.entries()).map(([url, caption]) => ({ url, caption: caption || undefined }));
 }
 
