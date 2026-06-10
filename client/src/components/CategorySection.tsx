@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
 import LazyImage from "@/components/LazyImage";
+import HighlightTile from "@/components/HighlightTile";
+import TileSlider from "@/components/TileSlider";
 import type { ArticleWithDetails, Category } from "@shared/schema";
 
 interface Props {
@@ -39,67 +41,6 @@ function tilePlaceholder(article: ArticleWithDetails) {
         {article.category.name}
       </span>
     </div>
-  );
-}
-
-function BigTile({ article, preferGallery }: { article: ArticleWithDetails; preferGallery: boolean }) {
-  const img = tileImage(article, preferGallery);
-  return (
-    <Link href={`/article/${article.slug}`}>
-      <article className="group cursor-pointer flex flex-col gap-3" data-testid={`section-bigtile-${article.slug}`}>
-        <div className="relative overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
-          {img ? (
-            <LazyImage
-              src={img}
-              alt={article.title}
-              className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-[2500ms] ease-out group-hover:scale-[1.04]"
-            />
-          ) : (
-            tilePlaceholder(article)
-          )}
-        </div>
-        <div
-          style={{
-            fontFamily: "Arial, sans-serif",
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            color: "hsl(182 55% 56%)",
-          }}
-        >
-          {article.category.name}
-        </div>
-        <h3
-          className="group-hover:text-secondary transition-colors line-clamp-2"
-          style={{
-            fontFamily: "Georgia, serif",
-            fontSize: "clamp(22px, 2vw, 32px)",
-            fontWeight: 400,
-            lineHeight: 1.15,
-            letterSpacing: "-0.3px",
-            color: "hsl(0 0% 4%)",
-            margin: 0,
-          }}
-        >
-          {article.title}
-        </h3>
-        {article.excerpt && (
-          <p
-            className="line-clamp-2"
-            style={{
-              fontFamily: "Georgia, serif",
-              fontSize: 15,
-              lineHeight: 1.55,
-              color: "hsl(0 0% 35%)",
-              margin: 0,
-            }}
-          >
-            {article.excerpt}
-          </p>
-        )}
-      </article>
-    </Link>
   );
 }
 
@@ -158,7 +99,10 @@ export default function CategorySection({
   variant,
   preferGallery = false,
 }: Props) {
-  const limit = variant === "feature" ? 4 : 3;
+  // Feature variant: pull a deeper pool so the slider has something to
+  // scroll to when a category has more than three recent articles.
+  // Compact variant stays at 3 — it lives in a narrow column.
+  const limit = variant === "feature" ? 12 : 3;
   // Look up the category id from its slug (shared cache hit since the rest
   // of the app already fetches /api/categories), then pull the latest few
   // articles. /api/articles takes categoryId; we don't have a slug filter.
@@ -222,19 +166,15 @@ export default function CategorySection({
   );
 
   const body = variant === "feature" ? (
-    // CSS grid trick: big tile spans 2 cols × 2 rows; each small tile
-    // takes 1 col × 1 row in the right column. Row heights auto-size to
-    // the big tile, so the two small tiles together exactly match the
-    // big tile's height (minus the inter-row gap). Small tiles stretch
-    // their image area to fill their cell via fillHeight.
-    <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-2 gap-4 lg:gap-6">
-      <div className="lg:col-span-2 lg:row-span-2">
-        {articles[0] && <BigTile article={articles[0]} preferGallery={preferGallery} />}
-      </div>
-      {articles.slice(1, 3).map((a) => (
-        <SmallTile key={a.id} article={a} preferGallery={preferGallery} fillHeight />
-      ))}
-    </div>
+    // 3-across HighlightTile row. Auto-promotes to a horizontal slider
+    // (Embla) when the category has more than three recent articles.
+    // Off-screen slides keep their LazyImage so they don't fetch until
+    // the visitor scrolls them in.
+    <TileSlider
+      items={articles}
+      keyFor={(a) => a.id}
+      renderTile={(a) => <HighlightTile article={a} preferGallery={preferGallery} />}
+    />
   ) : (
     <div className="grid grid-cols-1 gap-4">
       {articles.slice(0, 3).map((a) => (
