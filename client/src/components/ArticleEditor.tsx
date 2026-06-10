@@ -25,6 +25,7 @@ import {
   ArrowUp,
   ArrowDown,
   Upload as UploadIcon,
+  Trash2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AuthorPicker from "@/components/AuthorPicker";
@@ -239,6 +240,28 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       toast({
         title: "Error",
         description: error.message || "Failed to update article",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteArticleMutation = useMutation({
+    mutationFn: async () => {
+      if (!articleId) throw new Error("No article id");
+      const res = await apiRequest("DELETE", `/api/articles/${articleId}`);
+      return res;
+    },
+    onSuccess: () => {
+      toast({ title: "Article deleted" });
+      queryClient.invalidateQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/articles"),
+      });
+      onClose?.();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Delete failed",
+        description: err?.message || "Could not delete article.",
         variant: "destructive",
       });
     },
@@ -910,14 +933,35 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   <Eye className="h-4 w-4 mr-2" />
                   Preview
                 </Button>
+                {articleId && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    disabled={deleteArticleMutation.isPending}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Delete this article permanently? This cannot be undone.",
+                        )
+                      ) {
+                        deleteArticleMutation.mutate();
+                      }
+                    }}
+                    data-testid="delete-article-button"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {deleteArticleMutation.isPending ? "Deleting…" : "Delete"}
+                  </Button>
+                )}
                 <span className="text-sm text-muted-foreground">
                   Read time: {form.watch("readTime")} min
                 </span>
               </div>
               <div className="flex items-center space-x-3">
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={handleSaveAsDraft}
                   disabled={createArticleMutation.isPending}
                   data-testid="save-draft-button"

@@ -79,10 +79,12 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
 
   // Delete mutation
   const deleteMutation = useMutation({
+    // apiRequest signature is (method, url, data?) — was being called as
+    // (url, options) so the underlying fetch saw a literal "/api/..." as the
+    // HTTP method and an options object as the URL. Hence every delete
+    // returned a generic "Failed to delete article" toast.
     mutationFn: async (articleId: string) => {
-      return await apiRequest(`/api/articles/${articleId}`, {
-        method: 'DELETE'
-      });
+      return await apiRequest("DELETE", `/api/articles/${articleId}`);
     },
     onSuccess: () => {
       // Invalidate all article queries by matching keys that start with /api/articles
@@ -110,7 +112,7 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
   const bulkDeleteMutation = useMutation({
     mutationFn: async (articleIds: string[]) => {
       await Promise.all(
-        articleIds.map(id => apiRequest(`/api/articles/${id}`, { method: 'DELETE' }))
+        articleIds.map((id) => apiRequest("DELETE", `/api/articles/${id}`)),
       );
     },
     onSuccess: () => {
