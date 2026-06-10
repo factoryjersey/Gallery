@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import LazyImage from "@/components/LazyImage";
@@ -124,7 +125,19 @@ export default function LatestHighlights() {
   const { data } = useQuery<{ articles: ArticleWithDetails[] }>({
     queryKey: ["/api/articles/featured"],
   });
-  const articles = (data?.articles ?? []).filter((a) => !!tileImage(a)).slice(0, 3);
+  // Take up to the first 6 with usable imagery, then shuffle and pick 3.
+  // Memoised so a re-render (e.g. router change) doesn't reshuffle mid-view,
+  // but a fresh visit yields a different big tile + side tiles.
+  const articles = useMemo(() => {
+    const pool = (data?.articles ?? []).filter((a) => !!tileImage(a)).slice(0, 6);
+    if (pool.length <= 3) return pool.slice(0, 3);
+    const shuffled = [...pool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, 3);
+  }, [data]);
   if (articles.length === 0) return null;
 
   return (

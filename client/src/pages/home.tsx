@@ -9,20 +9,19 @@ import Sidebar from "@/components/Sidebar";
 import { useState, useMemo, useEffect } from "react";
 import { useSearch } from "wouter";
 
-// Large hero sections at the top of the home — each gets its own band with
-// one big tile + 3 smaller ones. Order is editorial: events feel timely
-// first, then editorial spreads, then culture, then paparazzi (the most
-// image-driven of the four).
+// Large feature sections — each gets its own band with one big tile + 2
+// side tiles. Order is editorial: timely events first, then ideas, then
+// editorial spreads, then the most image-driven (paparazzi), then business.
 const FEATURE_SECTIONS: { slug: string; label: string; preferGallery?: boolean }[] = [
   { slug: "events", label: "Events" },
-  { slug: "fashion-shoots", label: "Fashion Shoots" },
   { slug: "culture", label: "Culture" },
+  { slug: "fashion-shoots", label: "Fashion Shoots" },
   { slug: "paparazzi", label: "Paparazzi", preferGallery: true },
+  { slug: "business", label: "Business" },
 ];
 
-// Smaller categories combined into a final "More to read" block.
+// Smaller categories combined into a final "More to read" strip.
 const COMPACT_SECTIONS: { slug: string; label: string }[] = [
-  { slug: "business", label: "Business" },
   { slug: "appetite-1", label: "Appetite" },
   { slug: "interiors", label: "Interiors" },
 ];
@@ -199,7 +198,7 @@ export default function Home() {
                 >
                   More to read
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {COMPACT_SECTIONS.map((s) => (
                     <div key={s.slug}>
                       <CategorySection slug={s.slug} label={s.label} variant="compact" />
