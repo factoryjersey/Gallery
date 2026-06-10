@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Menu, X, UserCircle, ChevronDown, BookOpen } from "lucide-react";
+import { Search, Menu, X, UserCircle, ChevronDown, BookOpen, Download } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import GalleryWordmark from "@/components/GalleryWordmark";
@@ -101,6 +101,7 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
     articles: any[];
     edito: any | null;
     issueNumber: number | null;
+    issue?: { number: number; pdfUrl: string | null; displayLabel: string | null; title: string | null } | null;
     cutoff?: string;
   }>({
     queryKey: ["/api/articles/current-issue", { limit: 6 }],
@@ -175,6 +176,30 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
             </div>
           )}
         </div>
+      )}
+
+      {/* Download PDF shortcut — only renders when the current issue has a
+          PDF on R2. Issue number lookup happens server-side via
+          /api/articles/current-issue's new `issue` payload. */}
+      {data?.issue?.pdfUrl && (
+        <a
+          href={data.issue.pdfUrl}
+          download
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onClose}
+          className="mt-4 -mb-1 flex items-center justify-between gap-2 px-3 py-2.5 border border-foreground hover:bg-foreground hover:text-white transition-colors"
+          style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}
+          data-testid="current-issue-pdf"
+        >
+          <span className="flex items-center gap-2">
+            <Download className="w-3.5 h-3.5" />
+            Download issue PDF
+          </span>
+          <span style={{ fontSize: 11, letterSpacing: "0.06em" }}>
+            Gallery #{data.issue.number}
+          </span>
+        </a>
       )}
     </div>
   );

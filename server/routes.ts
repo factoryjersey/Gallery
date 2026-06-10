@@ -139,7 +139,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const edito = result.articles.find(a => a.category?.slug === "edito") || null;
       const issueArticles = result.articles.filter(a => a.category?.slug !== "edito" && a.contentType === "article");
 
-      res.json({ articles: issueArticles, edito, issueNumber: targetIssue || null });
+      // Look up the issue row for cover/pdf so the dropdown can offer a
+      // direct download.
+      let issue: { number: number; pdfUrl: string | null; coverImage: string | null; displayLabel: string | null; title: string | null } | null = null;
+      if (targetIssue) {
+        const { rows } = await db.execute(sql`
+          SELECT number, pdf_url AS "pdfUrl", cover_image AS "coverImage",
+                 display_label AS "displayLabel", title
+            FROM issues WHERE number = ${targetIssue} LIMIT 1
+        `);
+        issue = (rows[0] as any) || null;
+      }
+
+      res.json({
+        articles: issueArticles,
+        edito,
+        issueNumber: targetIssue || null,
+        issue,
+      });
     } catch (error) {
       console.error("Error fetching current issue:", error);
       res.status(500).json({ error: "Failed to fetch current issue" });
