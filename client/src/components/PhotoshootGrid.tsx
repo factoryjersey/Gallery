@@ -1,6 +1,8 @@
 import { useState } from "react";
 import Lightbox from "yet-another-react-lightbox";
+import Captions from "yet-another-react-lightbox/plugins/captions";
 import "yet-another-react-lightbox/styles.css";
+import "yet-another-react-lightbox/plugins/captions.css";
 import LazyImage from "@/components/LazyImage";
 
 export interface PhotoshootGridImage {
@@ -67,11 +69,17 @@ export default function PhotoshootGrid({ images, altPrefix = "Photo" }: Props) {
         open={open}
         close={() => setOpen(false)}
         index={index}
+        // For photoshoots the caption IS the value — it lists what's in
+        // the picture (clothing credits, brands, prices). Show it as the
+        // slide title so it sits prominently at the bottom of the lightbox
+        // rather than vanishing as a debug-only description.
         slides={images.map((img, i) => ({
           src: img.url,
           alt: img.caption || `${altPrefix} ${i + 1}`,
-          description: img.caption,
+          title: img.caption,
         }))}
+        plugins={[Captions]}
+        captions={{ descriptionTextAlign: "center" }}
         carousel={{ finite: false }}
       />
     </div>
