@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -16,10 +16,12 @@ import {
   Link as LinkIcon,
   Image as ImageIcon,
   Images as ImagesIcon,
+  FolderOpen,
   Undo,
   Redo,
 } from "lucide-react";
 import { InlineGalleryNode } from "@/components/InlineGalleryNode";
+import MediaLibraryPicker from "@/components/MediaLibraryPicker";
 
 interface Props {
   value: string;
@@ -42,6 +44,7 @@ interface Props {
 export default function TipTapEditor({ value, onChange, placeholder, onUpload }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -111,6 +114,17 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
     editor.chain().focus().insertInlineGallery(uploaded).run();
   }, [editor, onUpload]);
 
+  // Insert images selected from the media library — single image goes in as
+  // <img>, multiple become an inline gallery block.
+  const insertFromLibrary = useCallback((urls: string[]) => {
+    if (!editor || urls.length === 0) return;
+    if (urls.length === 1) {
+      editor.chain().focus().setImage({ src: urls[0], alt: "" }).run();
+    } else {
+      editor.chain().focus().insertInlineGallery(urls.map((url) => ({ url }))).run();
+    }
+  }, [editor]);
+
   const promptForLink = useCallback(() => {
     if (!editor) return;
     const previous = editor.getAttributes("link").href || "";
@@ -176,6 +190,9 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
         <button type="button" className={btnBase} onClick={() => galleryInputRef.current?.click()} title="Insert gallery at cursor" data-testid="tiptap-gallery">
           <ImagesIcon className="h-4 w-4" />
         </button>
+        <button type="button" className={btnBase} onClick={() => setLibraryOpen(true)} title="Insert from media library" data-testid="tiptap-library">
+          <FolderOpen className="h-4 w-4" />
+        </button>
 
         <span className="flex-1" />
 
@@ -220,6 +237,13 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
       <div className="px-4 py-3 min-h-[400px] max-h-[70vh] overflow-y-auto">
         <EditorContent editor={editor} />
       </div>
+
+      {/* Media library picker — opens via the library button in the toolbar */}
+      <MediaLibraryPicker
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onInsert={insertFromLibrary}
+      />
     </div>
   );
 }
