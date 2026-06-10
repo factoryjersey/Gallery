@@ -322,14 +322,17 @@ export default function Article() {
               <figure
                 className={
                   layout === "two-col"
-                    ? "mb-8 -mx-6 sm:mx-0 lg:m-0 lg:sticky lg:top-24"
+                    ? // Sticky offset = full header height (masthead + category
+                      // nav ≈ 144px) + a small breathing gap, so the image
+                      // parks just below the nav rather than tucking under it.
+                      "mb-8 -mx-6 sm:mx-0 lg:m-0 lg:sticky lg:top-40"
                     : "mb-8 -mx-6 sm:mx-0"
                 }
               >
                 <img
                   src={article.featuredImage}
                   alt={article.title}
-                  className="w-full h-auto block lg:max-h-[calc(100vh-140px)] lg:object-contain"
+                  className="w-full h-auto block lg:max-h-[calc(100vh-200px)] lg:object-contain"
                   loading="eager"
                   data-testid="article-featured-image"
                 />
