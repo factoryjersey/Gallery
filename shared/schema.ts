@@ -74,6 +74,9 @@ export const articles = pgTable("articles", {
   // Hero rotation
   isFeatured: boolean("is_featured").default(false).notNull(),
   featuredOrder: integer("featured_order").default(0).notNull(),
+  // Per-article toggle: when true, eligible for the home page's "Latest
+  // Highlights" hero band (scoped to the current/latest issue).
+  homepageHighlight: boolean("homepage_highlight").default(false).notNull(),
   // Content type: 'article' | 'cartoon'
   contentType: text("content_type").notNull().default("article"),
   // Issue number (bimonthly edition)

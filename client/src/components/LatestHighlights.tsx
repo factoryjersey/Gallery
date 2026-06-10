@@ -122,8 +122,12 @@ function SideTile({ article }: { article: ArticleWithDetails }) {
  * big tile's. Pulls from /api/articles/featured (admin-curated).
  */
 export default function LatestHighlights() {
-  const { data } = useQuery<{ articles: ArticleWithDetails[] }>({
-    queryKey: ["/api/articles/featured"],
+  // Pulls from the latest-issue highlights (articles in the current
+  // issue with homepage_highlight=true). Falls back to featured /
+  // most-recent on a brand-new issue with nothing flagged yet —
+  // handled server-side, so the component just consumes the result.
+  const { data } = useQuery<{ articles: ArticleWithDetails[]; issueNumber: number | null }>({
+    queryKey: ["/api/articles/highlights"],
   });
   // Take up to the first 6 with usable imagery, then shuffle and pick 3.
   // Memoised so a re-render (e.g. router change) doesn't reshuffle mid-view,

@@ -260,6 +260,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Home page hero band — articles in the LATEST issue with the
+  // homepage_highlight flag set. Falls back to the latest issue's
+  // featured articles when nothing is flagged yet.
+  app.get("/api/articles/highlights", async (_req, res) => {
+    try {
+      const [{ maxIssue }] = await db
+        .select({ maxIssue: sql<number>`MAX(issue_number)` })
+        .from(articles);
+      if (!maxIssue) {
+        return res.json({ articles: [], issueNumber: null });
+      }
+      const flagged = await storage.getArticles({
+        status: "published",
+        contentType: "article",
+        issueNumber: maxIssue,
+        orderBy: "publishedAt",
+        orderDir: "desc",
+        limit: 50,
+      });
+      let chosen = flagged.articles.filter((a: any) => a.homepageHighlight);
+      // Fallback so the hero is never empty when the flag is unset on a
+      // brand-new issue: take the first few featured-or-most-recent.
+      if (chosen.length === 0) {
+        chosen = flagged.articles.filter((a: any) => a.isFeatured).slice(0, 6);
+        if (chosen.length === 0) chosen = flagged.articles.slice(0, 6);
+      }
+      res.json({ articles: chosen, issueNumber: maxIssue });
+    } catch (error) {
+      console.error("Error fetching highlights:", error);
+      res.status(500).json({ error: "Failed to fetch highlights" });
+    }
+  });
+
   app.get("/api/articles/featured", async (req, res) => {
     try {
       const limit = Number(req.query.limit) || 4;

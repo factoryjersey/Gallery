@@ -53,6 +53,7 @@ const articleSchema = z.object({
   // as a nullable integer rather than an FK so the import can attach the
   // number even when the issue row doesn't exist yet.
   issueNumber: z.number().int().nullable().optional(),
+  homepageHighlight: z.boolean().optional(),
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -66,6 +67,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
   const [credits, setCredits] = useState<CreditEntry[]>([]);
+  // True once the user types something into the slug field themselves —
+  // we stop auto-generating from the title at that point so we don't
+  // overwrite a deliberate slug choice.
+  const [slugTouched, setSlugTouched] = useState(false);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -129,8 +134,12 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         metaDescription: article.metaDescription || "",
         readTime: article.readTime,
         issueNumber: typeof article.issueNumber === "number" ? article.issueNumber : null,
+        homepageHighlight: !!article.homepageHighlight,
       });
       setSelectedTags(article.tags?.map((t: any) => t.id) || []);
+      // The article already has a slug, so treat the field as touched —
+      // editing the title shouldn't overwrite the existing URL.
+      setSlugTouched(true);
     }
   }, [articleData, form]);
 
@@ -256,11 +265,16 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const title = e.target.value;
     form.setValue("title", title);
-    
-    if (!form.getValues("slug")) {
+
+    // Auto-populate the slug from the title as long as the user hasn't
+    // manually edited it yet. Previously this only fired when the slug
+    // was empty, which meant the slug stopped tracking after the first
+    // keystroke; now it follows the full title until the user takes
+    // control of the slug field.
+    if (!slugTouched) {
       form.setValue("slug", generateSlug(title));
     }
-    
+
     // Calculate read time based on content
     const content = form.getValues("content") || "";
     const wordCount = content.split(/\s+/).length;
@@ -481,7 +495,9 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                 <Input
                   id="slug"
                   placeholder="article-url-slug"
-                  {...form.register("slug")}
+                  {...form.register("slug", {
+                    onChange: () => setSlugTouched(true),
+                  })}
                   data-testid="article-slug-input"
                 />
                 {form.formState.errors.slug && (
@@ -570,6 +586,27 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                     ))}
                 </SelectContent>
               </Select>
+
+              {/* Promote to the homepage Latest Highlights hero band (only
+                  effective for the latest issue; older issues' flagged
+                  articles fall back to category sections). */}
+              <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!form.watch("homepageHighlight")}
+                  onChange={(e) =>
+                    form.setValue("homepageHighlight", e.target.checked, { shouldDirty: true })
+                  }
+                  className="h-4 w-4"
+                  data-testid="article-homepage-highlight"
+                />
+                <span className="text-sm">
+                  Show in homepage <strong>Latest Highlights</strong> hero
+                  <span className="text-muted-foreground ml-1">
+                    (only used when this article is in the current issue)
+                  </span>
+                </span>
+              </label>
             </div>
 
             {/* Credits — managed via the contributors table so each
