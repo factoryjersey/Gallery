@@ -255,12 +255,14 @@ export default function CategorySection({
     );
   }
 
+  // The feature variant lives inside the home page's column-with-sidebar
+  // layout, so no inner max-width / horizontal padding — those are owned
+  // by the parent container. We just stack section bands with hairline
+  // dividers and consistent vertical breathing room.
   return (
-    <section className="py-10 first:pt-4 border-b border-border last:border-b-0" data-testid={`section-${slug}`}>
-      <div className="max-w-[1600px] mx-auto px-6">
-        {heading}
-        {body}
-      </div>
+    <section className="py-8 first:pt-0 border-b border-border last:border-b-0" data-testid={`section-${slug}`}>
+      {heading}
+      {body}
     </section>
   );
 }

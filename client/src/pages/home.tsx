@@ -4,6 +4,8 @@ import Footer from "@/components/Footer";
 import CategoryFilter from "@/components/CategoryFilter";
 import HungerGrid from "@/components/HungerGrid";
 import CategorySection from "@/components/CategorySection";
+import LatestHighlights from "@/components/LatestHighlights";
+import Sidebar from "@/components/Sidebar";
 import { useState, useMemo, useEffect } from "react";
 import { useSearch } from "wouter";
 
@@ -165,43 +167,51 @@ export default function Home() {
         </>
       ) : (
         <main>
-          {FEATURE_SECTIONS.map((s) => (
-            <CategorySection
-              key={s.slug}
-              slug={s.slug}
-              label={s.label}
-              variant="feature"
-              preferGallery={s.preferGallery}
-            />
-          ))}
+          {/* Curated hero — admin-picked latest highlights */}
+          <LatestHighlights />
 
-          {/* Combined "more to read" strip — three small categories rendered
-              as one section so they don't dominate the page. */}
-          <section className="py-10 border-t border-border" data-testid="more-to-read">
-            <div className="max-w-[1600px] mx-auto px-6">
-              <h2
-                className="mb-6"
-                style={{
-                  fontFamily: "Georgia, serif",
-                  fontSize: "clamp(24px, 2.4vw, 38px)",
-                  fontWeight: 400,
-                  lineHeight: 1.1,
-                  letterSpacing: "-0.4px",
-                  color: "hsl(0 0% 4%)",
-                  margin: 0,
-                }}
-              >
-                More to read
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                {COMPACT_SECTIONS.map((s) => (
-                  <div key={s.slug}>
-                    <CategorySection slug={s.slug} label={s.label} variant="compact" />
-                  </div>
-                ))}
-              </div>
+          {/* Editorial grid with sticky sidebar on the right */}
+          <div className="max-w-[1500px] mx-auto px-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-10 py-8">
+            <div className="min-w-0">
+              {FEATURE_SECTIONS.map((s) => (
+                <CategorySection
+                  key={s.slug}
+                  slug={s.slug}
+                  label={s.label}
+                  variant="feature"
+                  preferGallery={s.preferGallery}
+                />
+              ))}
+
+              {/* Combined "more to read" — three small categories side by side. */}
+              <section className="py-10 border-t border-border" data-testid="more-to-read">
+                <h2
+                  className="mb-6"
+                  style={{
+                    fontFamily: "Georgia, serif",
+                    fontSize: "clamp(22px, 2vw, 32px)",
+                    fontWeight: 400,
+                    lineHeight: 1.1,
+                    letterSpacing: "-0.4px",
+                    color: "hsl(0 0% 4%)",
+                    margin: 0,
+                  }}
+                >
+                  More to read
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {COMPACT_SECTIONS.map((s) => (
+                    <div key={s.slug}>
+                      <CategorySection slug={s.slug} label={s.label} variant="compact" />
+                    </div>
+                  ))}
+                </div>
+              </section>
             </div>
-          </section>
+            <aside className="lg:sticky lg:top-24 lg:self-start">
+              <Sidebar />
+            </aside>
+          </div>
         </main>
       )}
 
