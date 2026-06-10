@@ -13,6 +13,7 @@ import PhotoshootSlider from "@/components/PhotoshootSlider";
 import GalleryCarousel from "@/components/GalleryCarousel";
 import GalleryGrid from "@/components/GalleryGrid";
 import PhotoshootGrid from "@/components/PhotoshootGrid";
+import EventsGrid from "@/components/EventsGrid";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -362,22 +363,29 @@ export default function Article() {
 
             <div className={layout === "two-col" ? "lg:min-w-0" : ""}>
               {/* Curated image gallery (admin-curated, in article.galleryImages).
-                  Photo-heavy categories (paparazzi, events) and gallery-typed
-                  articles get a 3-column masonry grid with click-to-lightbox.
-                  Smaller editorial galleries (under 12 images, non photo
-                  category) get the inline-flow carousel treatment. */}
+                  Layout picker, top-to-bottom precedence:
+                   - events category → EventsGrid (3-up squares + caption
+                     under each photo; the caption *is* the content).
+                   - paparazzi / fashion / fashion-shoots / gallery-typed
+                     / 12+ images → GalleryGrid (masonry, captions in
+                     lightbox only).
+                   - everything else → GalleryCarousel (inline flow). */}
               {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (() => {
                 const imgs = article.galleryImages;
+                const isEvents = article.category?.slug === "events";
                 const useGrid =
-                  article.contentType === "gallery" ||
-                  article.category?.slug === "paparazzi" ||
-                  article.category?.slug === "events" ||
-                  article.category?.slug === "fashion-shoots" ||
-                  article.category?.slug === "fashion" ||
-                  imgs.length >= 12;
+                  !isEvents && (
+                    article.contentType === "gallery" ||
+                    article.category?.slug === "paparazzi" ||
+                    article.category?.slug === "fashion-shoots" ||
+                    article.category?.slug === "fashion" ||
+                    imgs.length >= 12
+                  );
                 return (
                   <div className="mb-10 -mx-6 sm:mx-0">
-                    {useGrid ? (
+                    {isEvents ? (
+                      <EventsGrid images={imgs} altPrefix={article.title} />
+                    ) : useGrid ? (
                       <GalleryGrid images={imgs} altPrefix={article.title} />
                     ) : (
                       <GalleryCarousel images={imgs} altPrefix={article.title} />
