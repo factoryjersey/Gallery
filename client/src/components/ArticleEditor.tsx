@@ -11,11 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { 
-  Save, 
-  Eye, 
-  Send, 
-  Image as ImageIcon, 
+import {
+  Save,
+  Eye,
+  Send,
+  Image as ImageIcon,
   X,
   Bold,
   Italic,
@@ -26,6 +26,8 @@ import {
   ArrowDown,
   Upload as UploadIcon,
   Trash2,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AuthorPicker from "@/components/AuthorPicker";
@@ -75,6 +77,9 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // Tracks the in-flight AI excerpt request so the button can show a
+  // spinner and double-click is debounced.
+  const [generatingExcerpt, setGeneratingExcerpt] = useState(false);
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -477,6 +482,53 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     form.handleSubmit(onSubmit)();
   };
 
+  // AI excerpt drafting — calls the server's Claude Haiku endpoint with
+  // the current title + content and drops the result into the Excerpt
+  // textarea. Editor still tweaks before save, so this is best-effort
+  // rather than authoritative.
+  const handleGenerateExcerpt = async () => {
+    const title = form.getValues("title")?.trim();
+    const content = form.getValues("content")?.trim();
+    if (!title) {
+      toast({
+        title: "Add a title first",
+        description: "The model needs a headline to write around.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!content || content.replace(/<[^>]+>/g, "").trim().length < 80) {
+      toast({
+        title: "Not enough body copy yet",
+        description: "Write a paragraph or two and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setGeneratingExcerpt(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/generate-excerpt", {
+        title,
+        content,
+      });
+      const data = await res.json();
+      if (!data?.excerpt) throw new Error(data?.error || "No excerpt returned");
+      form.setValue("excerpt", data.excerpt, { shouldDirty: true });
+      toast({
+        title: "Excerpt drafted",
+        description: "Edit as needed before saving.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Couldn't draft an excerpt",
+        description: error?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingExcerpt(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -872,12 +924,33 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               )}
             </div>
 
-            {/* Excerpt */}
+            {/* Excerpt — has a "Draft with AI" button that calls Claude
+                Haiku via /api/admin/generate-excerpt. Output drops into
+                this field; the editor still edits before save. */}
             <div className="space-y-2">
-              <Label htmlFor="excerpt">Excerpt (Optional)</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="excerpt">Excerpt (Optional)</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleGenerateExcerpt}
+                  disabled={generatingExcerpt}
+                  className="h-7 gap-1.5 text-xs"
+                  data-testid="article-excerpt-generate"
+                  title="Draft an excerpt from the title + body using Claude Haiku"
+                >
+                  {generatingExcerpt ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  {generatingExcerpt ? "Drafting…" : "Draft with AI"}
+                </Button>
+              </div>
               <Textarea
                 id="excerpt"
-                placeholder="Brief summary of the article..."
+                placeholder="Brief summary of the article — or click 'Draft with AI' to generate one from the body."
                 rows={3}
                 {...form.register("excerpt")}
                 data-testid="article-excerpt-textarea"

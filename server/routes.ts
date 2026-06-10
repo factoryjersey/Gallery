@@ -22,6 +22,7 @@ import {
   publicUrlForIssueImage,
 } from "./featureImport";
 import { getSitemapData, renderSitemapXml, renderRobotsTxt } from "./sitemap";
+import { generateExcerpt } from "./aiExcerpt";
 import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -51,6 +52,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/login", adminLoginHandler);
   app.post("/api/admin/logout", adminLogoutHandler);
   app.get("/api/admin/me", adminMeHandler);
+
+  // Excerpt drafting via Claude Haiku — keyed by ANTHROPIC_API_KEY. The
+  // editor calls this with the article's current title + body and slots
+  // the response into the Excerpt textarea (still editable before save).
+  app.post("/api/admin/generate-excerpt", async (req, res) => {
+    try {
+      const { title, content } = req.body ?? {};
+      if (!title || typeof title !== "string" || !title.trim()) {
+        return res.status(400).json({ error: "title is required" });
+      }
+      if (!content || typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ error: "content is required" });
+      }
+      const excerpt = await generateExcerpt({ title, content });
+      res.json({ excerpt });
+    } catch (error: any) {
+      console.error("generate-excerpt failed:", error?.message || error);
+      const message =
+        error?.message?.includes("ANTHROPIC_API_KEY")
+          ? "AI excerpt drafting isn't configured — ANTHROPIC_API_KEY is missing on the server"
+          : "Failed to generate excerpt — try again";
+      res.status(500).json({ error: message });
+    }
+  });
 
   // API Routes
 
