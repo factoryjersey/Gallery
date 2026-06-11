@@ -27,7 +27,7 @@ export const r2Client = new S3Client({
 export const uploadToR2 = async (
   buffer: Buffer,
   key: string,
-  contentType: string
+  contentType: string,
 ): Promise<string> => {
   const upload = new Upload({
     client: r2Client,
@@ -36,11 +36,20 @@ export const uploadToR2 = async (
       Key: key,
       Body: buffer,
       ContentType: contentType,
+      // Cache-Control: 1 year, immutable. The R2 URL paths we generate
+      // are effectively content-addressed (the article slug + a size
+      // suffix for variants, or a timestamp-derived key for new
+      // uploads) — overwriting is rare and explicit. Without this
+      // header R2 serves objects with no Cache-Control at all, so the
+      // browser revalidates every time and every Lighthouse run flags
+      // "Use efficient cache lifetimes". Backfilling the existing
+      // objects needs a separate one-off pass.
+      CacheControl: "public, max-age=31536000, immutable",
     },
   });
 
   await upload.done();
-  
+
   return getR2PublicUrl(key);
 };
 
