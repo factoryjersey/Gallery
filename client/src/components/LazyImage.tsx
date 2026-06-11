@@ -9,6 +9,14 @@ interface LazyImageProps {
   srcSet?: string;
   sizes?: string;
   placeholderSrc?: string;
+  /** Skip the IntersectionObserver gate, mark fetchpriority="high",
+   *  and disable native lazy-loading. Use for LCP candidates that
+   *  must paint as fast as possible (homepage hero, splash slide). */
+  priority?: boolean;
+  /** Optional onLoad escape hatch — wraps over the internal loaded
+   *  handler so callers can layer their own behaviour (e.g. swap a
+   *  blur-up placeholder) without losing the .loaded class. */
+  onLoad?: (e: React.SyntheticEvent<HTMLImageElement>) => void;
 }
 
 export default function LazyImage({
@@ -20,13 +28,18 @@ export default function LazyImage({
   srcSet,
   sizes,
   placeholderSrc,
+  priority = false,
+  onLoad,
 }: LazyImageProps) {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
+  // Priority images skip the IntersectionObserver gate entirely — start
+  // downloading on first paint.
+  const [isInView, setIsInView] = useState(priority);
   const [hasErrored, setHasErrored] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
+    if (priority) return;
     if (!imgRef.current) return;
 
     // Fallback for browsers without IntersectionObserver
@@ -54,17 +67,18 @@ export default function LazyImage({
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [priority]);
 
   const handleLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     // Check if we're loading the real image (not the placeholder)
     // Use currentSrc to handle srcSet properly, or check if src doesn't match placeholder
     const currentSrc = e.currentTarget.currentSrc || e.currentTarget.src;
     const defaultPlaceholder = 'data:image/svg+xml';
-    
+
     if (isInView && !currentSrc.startsWith(defaultPlaceholder)) {
       setIsLoaded(true);
     }
+    onLoad?.(e);
   };
 
   // Generate a tiny blur placeholder (base64 encoded 1x1 transparent pixel)
@@ -93,7 +107,13 @@ export default function LazyImage({
       className={`lazy-image ${isLoaded ? 'loaded' : ''} ${className}`}
       onLoad={handleLoad}
       onError={() => setHasErrored(true)}
-      loading="lazy" // Native lazy loading as fallback
+      // Priority images opt out of native lazy-loading and ask the
+      // browser to bump their fetch priority.
+      loading={priority ? 'eager' : 'lazy'}
+      // The fetchPriority React prop landed in 18.3; fall back to the
+      // lowercase HTML attribute on older typings via JSX spread.
+      {...({ fetchpriority: priority ? 'high' : 'auto' } as any)}
+      decoding={priority ? 'sync' : 'async'}
       data-testid="lazy-image"
     />
   );

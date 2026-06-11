@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Clock, ArrowLeft, ArrowRight, Edit, Columns, AlignLeft } from "lucide-react";
@@ -56,6 +57,19 @@ export default function Article() {
   useEffect(() => {
     try { window.localStorage.setItem("gallery-article-layout", layout); } catch {}
   }, [layout]);
+
+  // Per-article title, description, and Open Graph image so link
+  // previews on Slack / WhatsApp / LinkedIn / Twitter render properly,
+  // and so the browser tab + search engines see the article's own
+  // headline rather than the site default.
+  useDocumentMeta({
+    title: article?.title,
+    description: article?.excerpt || undefined,
+    image: article?.splashImage || article?.featuredImage || article?.galleryImages?.[0]?.url || undefined,
+    publishedAt: article?.publishedAt || undefined,
+    author: article?.author?.name,
+    type: "article",
+  });
 
   const { data: adjacentData } = useQuery({
     queryKey: [`/api/articles/by-slug/${slug}/adjacent`],
@@ -356,6 +370,12 @@ export default function Article() {
                   alt={article.title}
                   className="w-full h-auto block lg:max-h-[calc(100vh-200px)] lg:object-contain"
                   loading="eager"
+                  // LCP signal: this image is the dominant above-the-fold
+                  // element on an article view. Marking it high-priority
+                  // and decoding sync tells the browser to start the
+                  // network fetch and image decode immediately.
+                  {...({ fetchpriority: "high" } as any)}
+                  decoding="sync"
                   data-testid="article-featured-image"
                 />
               </figure>

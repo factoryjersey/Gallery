@@ -27,6 +27,12 @@
     />
     <meta name="twitter:card" content="summary_large_image" />
 
+    <!-- Preconnect to the R2 CDN so the TLS handshake is warm before the
+         first hero image fetch fires. Lighthouse otherwise flags the
+         cold-connection cost on every image-heavy page. -->
+    <link rel="preconnect" href="https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev" crossorigin />
+    <link rel="dns-prefetch" href="https://pub-3b96f5fc8ba0456f9ffd861fc06e5e97.r2.dev" />
+
     <!-- Brand fonts are Georgia (serif) and Arial (sans) — both system
          fonts, no webfont request needed. The previous 40-family Google
          Fonts bundle was render-blocking dead weight (~14KB of CSS plus

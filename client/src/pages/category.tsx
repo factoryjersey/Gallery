@@ -7,6 +7,7 @@ import ArticleGrid from "@/components/ArticleGrid";
 import Sidebar from "@/components/Sidebar";
 import { ArrowLeft, Image, ImageOff } from "lucide-react";
 import { Link } from "wouter";
+import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 
 type Category = { id: string; name: string; slug: string; parentId: string | null; description?: string };
 
@@ -17,6 +18,17 @@ export default function Category() {
 
   const { data: categoryData } = useQuery({
     queryKey: [`/api/categories/by-slug/${slug}`],
+  });
+  const _category = (categoryData as any)?.category as Category | undefined;
+  // Per-category title/meta. Falls back to a sensible auto-description
+  // when the category row doesn't carry its own description copy.
+  useDocumentMeta({
+    title: _category?.name,
+    description: _category?.description
+      ? _category.description
+      : _category?.name
+        ? `${_category.name} stories from Gallery — Jersey's life and style magazine.`
+        : undefined,
   });
 
   // Subcategory navigation: figure out parent + siblings if this category

@@ -18,6 +18,33 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+/**
+ * Baseline security + privacy response headers. Cheap to add, helps
+ * Lighthouse "Best Practices" + the OWASP basics. We deliberately skip
+ * Content-Security-Policy here — getting it tight without breaking
+ * Tailwind inline styles, R2 image hosts, and Google Analytics is its
+ * own piece of work, so leave it for a focused pass.
+ */
+app.use((_req, res, next) => {
+  // HSTS — force HTTPS for a year, include subdomains. Safe behind
+  // Railway's HTTPS termination; only a downgrade attack on the very
+  // first visit is unprotected (preload would close that gap).
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  // Stop the browser sniffing MIME types on text/* responses.
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  // Block this site from being embedded in iframes — defeats clickjacking.
+  res.setHeader("X-Frame-Options", "DENY");
+  // Leak less in the Referer header on cross-origin navigations.
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  // Lock down powerful APIs we don't use. Pre-empts surprise feature
+  // requests if a third-party script ever slips in.
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  );
+  next();
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;

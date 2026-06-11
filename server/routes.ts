@@ -3032,9 +3032,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "File must be an image" });
       }
 
-      const ext = req.file.mimetype === "image/png" ? "png" : "jpg";
-      const key = `covers/gallery-${num}.${ext}`;
-      await uploadToR2(req.file.buffer, key, req.file.mimetype);
+      // Re-encode the cover before upload: resize to 1200px max (no
+      // enlarge) and JPEG-quality 80 with mozjpeg-style trellis to drop
+      // the typical 600KB scan to roughly 80–120KB. Same .jpg URL key,
+      // so existing references keep working. The cover is shown at most
+      // ~600px wide on the /current-issue page and ~320px in the
+      // sidebar — 1200px is plenty.
+      const sharp = (await import("sharp")).default;
+      const optimised = await sharp(req.file.buffer)
+        .rotate() // honour EXIF orientation before stripping it
+        .resize({ width: 1200, height: 1800, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 80, mozjpeg: true })
+        .toBuffer();
+
+      const key = `covers/gallery-${num}.jpg`;
+      await uploadToR2(optimised, key, "image/jpeg");
       const coverImage = getR2PublicUrl(key);
 
       await db.execute(sql`

@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Props<T> {
   items: T[];
-  renderTile: (item: T) => ReactNode;
+  renderTile: (item: T, index: number) => ReactNode;
   keyFor: (item: T) => string;
 }
 
@@ -52,9 +52,9 @@ export default function TileSlider<T>({ items, renderTile, keyFor }: Props<T>) {
   if (!overflow) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <div key={keyFor(item)} className="min-w-0">
-            {renderTile(item)}
+            {renderTile(item, index)}
           </div>
         ))}
       </div>
@@ -69,12 +69,12 @@ export default function TileSlider<T>({ items, renderTile, keyFor }: Props<T>) {
             gap (2 per view), lg = third minus two-thirds of 2rem gap
             (3 per view). */}
         <div className="flex gap-6 lg:gap-8">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <div
               key={keyFor(item)}
               className="min-w-0 flex-[0_0_100%] md:flex-[0_0_calc(50%-12px)] lg:flex-[0_0_calc((100%-4rem)/3)]"
             >
-              {renderTile(item)}
+              {renderTile(item, index)}
             </div>
           ))}
         </div>

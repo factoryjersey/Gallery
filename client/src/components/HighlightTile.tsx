@@ -10,6 +10,9 @@ interface Props {
   /** Show the standfirst/excerpt under the title. Default true. Set false
    *  for tight grids where titles alone are enough. */
   showExcerpt?: boolean;
+  /** Mark as the LCP candidate — skips the IntersectionObserver gate and
+   *  bumps fetchpriority. Use on the first tile in the homepage strip. */
+  priority?: boolean;
 }
 
 function tileImage(article: ArticleWithDetails, preferGallery: boolean): string | null {
@@ -33,7 +36,7 @@ function tileImage(article: ArticleWithDetails, preferGallery: boolean): string 
  * Image uses LazyImage so off-screen slides in a TileSlider don't
  * download until they scroll into view.
  */
-export default function HighlightTile({ article, preferGallery = false, showExcerpt = true }: Props) {
+export default function HighlightTile({ article, preferGallery = false, showExcerpt = true, priority = false }: Props) {
   const img = tileImage(article, preferGallery);
   return (
     <Link href={`/article/${article.slug}`}>
@@ -46,6 +49,7 @@ export default function HighlightTile({ article, preferGallery = false, showExce
             <LazyImage
               src={img}
               alt={article.title}
+              priority={priority}
               className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-[2500ms] ease-out group-hover:scale-[1.04]"
             />
           ) : (

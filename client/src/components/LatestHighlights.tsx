@@ -59,7 +59,10 @@ export default function LatestHighlights() {
         <TileSlider
           items={articles}
           keyFor={(a) => a.id}
-          renderTile={(a) => <HighlightTile article={a} />}
+          // First tile gets priority — it's the likely LCP candidate
+          // when the visitor lands on the homepage with the splash
+          // already dismissed (or skipped).
+          renderTile={(a, i) => <HighlightTile article={a} priority={i === 0} />}
         />
       </div>
     </section>

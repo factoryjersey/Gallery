@@ -115,15 +115,21 @@ export default function Sidebar() {
                   currentIssue.displayLabel ? ` — ${currentIssue.displayLabel}` : ""
                 }`}
               >
-                <div className="relative overflow-hidden border border-border bg-[hsl(0,0%,94%)]">
+                <div
+                  className="relative overflow-hidden border border-border bg-[hsl(0,0%,94%)]"
+                  style={{ aspectRatio: "2 / 3" }}
+                >
                   <img
                     src={currentIssue.coverImage!}
                     alt={
                       currentIssue.coverImageAlt ||
                       `Gallery #${currentIssue.number} cover`
                     }
-                    className="w-full h-auto block transition-transform duration-[700ms] ease-out group-hover:scale-[1.02]"
+                    width="320"
+                    height="480"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-[700ms] ease-out group-hover:scale-[1.02]"
                     loading="lazy"
+                    decoding="async"
                     data-testid="sidebar-current-cover"
                   />
                 </div>
