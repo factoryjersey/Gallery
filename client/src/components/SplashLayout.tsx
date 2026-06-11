@@ -187,7 +187,12 @@ export default function SplashLayout({ children }: SplashLayoutProps) {
               inset: 0,
               backgroundImage: `url('${splashUrl(s)}')`,
               backgroundSize: "cover",
-              backgroundPosition: "center",
+              // Top-aligned crop so portraits and any subject sitting in
+              // the upper third of the frame don't get sliced through the
+              // forehead on wide desktops. `center top` keeps it
+              // horizontally centred but anchors the vertical crop to
+              // the top edge.
+              backgroundPosition: "center top",
               opacity: i === index && phase === "playing" ? 1 : i === index ? 1 : 0,
               transform: i === index ? "scale(1.04)" : "scale(1)",
               transition: `opacity ${FADE_MS}ms ease, transform ${SLIDE_MS + FADE_MS}ms ease-out`,
