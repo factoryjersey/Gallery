@@ -1,9 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
-import { TrendingUp, Pencil, X } from "lucide-react";
-import { useState } from "react";
+import { TrendingUp, Pencil, X, Download } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+
+interface IssueSummary {
+  id: string;
+  number: number;
+  title: string | null;
+  pdfUrl: string | null;
+  coverImage: string | null;
+  coverImageAlt: string | null;
+  publishedAt: string | null;
+  displayLabel: string | null;
+}
 
 function SidebarSection({ title, teal = false, children }: { title: string; teal?: boolean; children: React.ReactNode }) {
   return (
@@ -23,6 +34,27 @@ export default function Sidebar() {
 
   const { data: trendingData } = useQuery({ queryKey: ["/api/articles/trending"] });
   const { data: categoriesData } = useQuery({ queryKey: ["/api/categories"] });
+  const { data: issuesData } = useQuery<{ issues: IssueSummary[] }>({
+    queryKey: ["/api/issues"],
+  });
+  // Pick the highest-numbered issue whose published_at has actually
+  // passed. Mirrors the server's latestPublishedIssueNumber() helper —
+  // a future-dated issue row (or one without cover artwork yet) shouldn't
+  // surface in the sidebar.
+  const currentIssue = useMemo<IssueSummary | null>(() => {
+    const list = issuesData?.issues ?? [];
+    const now = Date.now();
+    return (
+      list
+        .filter(
+          (i) =>
+            i.publishedAt &&
+            new Date(i.publishedAt).getTime() <= now &&
+            i.coverImage,
+        )
+        .sort((a, b) => b.number - a.number)[0] ?? null
+    );
+  }, [issuesData]);
 
   const cartoonParams = new URLSearchParams({
     contentType: "cartoon",
@@ -66,6 +98,80 @@ export default function Sidebar() {
 
   return (
     <aside className="space-y-10">
+
+      {/* Current Edition — cover artwork at the top so the sidebar leads
+          with the physical magazine. Cover links through to the
+          current-issue archive page; PDF (when present) downloads
+          straight from R2. The whole block is suppressed if the latest
+          published issue has no cover yet, so we never render a sad
+          empty card. */}
+      {currentIssue && (
+        <SidebarSection title="Current Edition" teal>
+          <div className="flex flex-col gap-3" data-testid="sidebar-current-edition">
+            <Link href={`/current-issue?issue=${currentIssue.number}`}>
+              <div
+                className="block group cursor-pointer focus:outline-none focus:ring-2 focus:ring-secondary"
+                title={`Gallery #${currentIssue.number}${
+                  currentIssue.displayLabel ? ` — ${currentIssue.displayLabel}` : ""
+                }`}
+              >
+                <div className="relative overflow-hidden border border-border bg-[hsl(0,0%,94%)]">
+                  <img
+                    src={currentIssue.coverImage!}
+                    alt={
+                      currentIssue.coverImageAlt ||
+                      `Gallery #${currentIssue.number} cover`
+                    }
+                    className="w-full h-auto block transition-transform duration-[700ms] ease-out group-hover:scale-[1.02]"
+                    loading="lazy"
+                    data-testid="sidebar-current-cover"
+                  />
+                </div>
+                <div
+                  className="mt-2"
+                  style={{
+                    fontFamily: "Arial, sans-serif",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "hsl(0 0% 35%)",
+                  }}
+                >
+                  Gallery #{currentIssue.number}
+                  {currentIssue.displayLabel && (
+                    <span
+                      className="ml-2"
+                      style={{ fontWeight: 400, letterSpacing: "0.08em", color: "hsl(0 0% 50%)" }}
+                    >
+                      — {currentIssue.displayLabel}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </Link>
+            {currentIssue.pdfUrl && (
+              <a
+                href={currentIssue.pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={`gallery-${currentIssue.number}.pdf`}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-foreground text-white hover:bg-secondary hover:text-foreground transition-colors"
+                style={{
+                  fontFamily: "Arial, sans-serif",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                }}
+                data-testid="sidebar-current-pdf"
+              >
+                <Download className="h-3.5 w-3.5" /> Download PDF
+              </a>
+            )}
+          </div>
+        </SidebarSection>
+      )}
 
       {/* Trending Now */}
       <SidebarSection title="Trending Now" teal>
