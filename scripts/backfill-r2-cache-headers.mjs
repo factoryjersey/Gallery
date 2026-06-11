@@ -38,17 +38,28 @@ const CONCURRENCY = parseInt(flag("concurrency", "12"), 10);
 const PREFIX = flag("prefix", "");
 const TARGET_HEADER = "public, max-age=31536000, immutable";
 
-const requiredEnv = ["R2_ENDPOINT", "R2_BUCKET_NAME", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"];
+// Match the env vars the running app already uses (server/r2Client.ts):
+// the endpoint is derived from R2_ACCOUNT_ID, not a standalone
+// R2_ENDPOINT. Falling back to R2_ENDPOINT if someone wants to override
+// it directly (e.g. running against a custom S3-compatible endpoint).
+const requiredEnv = ["R2_BUCKET_NAME", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"];
 for (const k of requiredEnv) {
   if (!process.env[k]) {
     console.error(`Missing env: ${k}. Run with \`railway run\` so prod env vars are injected.`);
     process.exit(1);
   }
 }
+if (!process.env.R2_ENDPOINT && !process.env.R2_ACCOUNT_ID) {
+  console.error("Missing env: need either R2_ENDPOINT or R2_ACCOUNT_ID. Run with `railway run`.");
+  process.exit(1);
+}
+
+const endpoint =
+  process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
 
 const s3 = new S3Client({
   region: "auto",
-  endpoint: process.env.R2_ENDPOINT,
+  endpoint,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
