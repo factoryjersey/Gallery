@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import GalleryWordmark from "@/components/GalleryWordmark";
 import { useSplashPhase } from "@/components/SplashLayout";
+import PdfDownloadGate from "@/components/PdfDownloadGate";
 
 const PRIMARY_SLUGS = ["people", "fashion", "appetite-1", "culture", "travel-1", "interiors", "business", "events"];
 
@@ -91,7 +92,16 @@ function NavDropdown({ category, onClose }: { category: any; onClose: () => void
 }
 
 // Current Issue dropdown
-function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
+function CurrentIssueDropdown({
+  onClose,
+  onRequestPdf,
+}: {
+  onClose: () => void;
+  /** Hand the chosen PDF URL up to the Header so the gate modal mounts
+   *  outside this dropdown — that way closing the dropdown doesn't tear
+   *  down the modal too. */
+  onRequestPdf: (url: string, number: number) => void;
+}) {
   // The endpoint returns { articles, edito, issueNumber }. The edito gets
   // pulled out into a dedicated field so we can render it as the
   // editor's-letter feature at the top of the dropdown — without it, the
@@ -182,13 +192,13 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
           PDF on R2. Issue number lookup happens server-side via
           /api/articles/current-issue's new `issue` payload. */}
       {data?.issue?.pdfUrl && (
-        <a
-          href={data.issue.pdfUrl}
-          download
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onClose}
-          className="mt-4 -mb-1 flex items-center justify-between gap-2 px-3 py-2.5 border border-foreground hover:bg-foreground hover:text-white transition-colors"
+        <button
+          type="button"
+          onClick={() => {
+            onRequestPdf(data.issue!.pdfUrl!, data.issue!.number);
+            onClose();
+          }}
+          className="mt-4 -mb-1 w-full flex items-center justify-between gap-2 px-3 py-2.5 border border-foreground hover:bg-foreground hover:text-white transition-colors"
           style={{ fontFamily: "Arial, sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}
           data-testid="current-issue-pdf"
         >
@@ -199,7 +209,7 @@ function CurrentIssueDropdown({ onClose }: { onClose: () => void }) {
           <span style={{ fontSize: 11, letterSpacing: "0.06em" }}>
             Gallery #{data.issue.number}
           </span>
-        </a>
+        </button>
       )}
     </div>
   );
@@ -233,6 +243,9 @@ export default function Header({ onSearch }: HeaderProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [hoveredSlug, setHoveredSlug] = useState<string | null>(null);
   const [isCurrentIssueOpen, setIsCurrentIssueOpen] = useState(false);
+  // PDF gate state lives here so the modal survives the dropdown
+  // closing when the visitor clicks "Download issue PDF".
+  const [pdfGate, setPdfGate] = useState<{ url: string; filename: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchCategory, setSearchCategory] = useState<string>("all");
   const [searchYear, setSearchYear] = useState<string>("all");
@@ -372,7 +385,12 @@ export default function Header({ onSearch }: HeaderProps) {
               </button>
               {isCurrentIssueOpen && (
                 <div onMouseEnter={() => setIsCurrentIssueOpen(true)}>
-                  <CurrentIssueDropdown onClose={() => setIsCurrentIssueOpen(false)} />
+                  <CurrentIssueDropdown
+                    onClose={() => setIsCurrentIssueOpen(false)}
+                    onRequestPdf={(url, number) =>
+                      setPdfGate({ url, filename: `gallery-${number}.pdf` })
+                    }
+                  />
                 </div>
               )}
             </div>
@@ -550,6 +568,15 @@ export default function Header({ onSearch }: HeaderProps) {
           </nav>
         </div>
       )}
+
+      {/* PDF gate for the Current Issue dropdown — hosted up here so
+          closing the dropdown doesn't unmount the modal mid-flow. */}
+      <PdfDownloadGate
+        pdfUrl={pdfGate?.url ?? null}
+        filename={pdfGate?.filename}
+        source="header"
+        onClose={() => setPdfGate(null)}
+      />
     </header>
   );
 }

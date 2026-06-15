@@ -4,6 +4,7 @@ import { TrendingUp, Pencil, X, Download } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import PdfDownloadGate from "@/components/PdfDownloadGate";
 
 interface IssueSummary {
   id: string;
@@ -30,6 +31,7 @@ function SidebarSection({ title, teal = false, children }: { title: string; teal
 export default function Sidebar() {
   const [email, setEmail] = useState("");
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [pdfGateUrl, setPdfGateUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: trendingData } = useQuery({ queryKey: ["/api/articles/trending"] });
@@ -157,11 +159,9 @@ export default function Sidebar() {
               </div>
             </Link>
             {currentIssue.pdfUrl && (
-              <a
-                href={currentIssue.pdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download={`gallery-${currentIssue.number}.pdf`}
+              <button
+                type="button"
+                onClick={() => setPdfGateUrl(currentIssue.pdfUrl)}
                 className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-foreground text-white hover:bg-secondary hover:text-foreground transition-colors"
                 style={{
                   fontFamily: "Arial, sans-serif",
@@ -173,7 +173,7 @@ export default function Sidebar() {
                 data-testid="sidebar-current-pdf"
               >
                 <Download className="h-3.5 w-3.5" /> Download PDF
-              </a>
+              </button>
             )}
           </div>
         </SidebarSection>
@@ -397,6 +397,18 @@ export default function Sidebar() {
           />
         </div>
       )}
+
+      {/* Newsletter gate for the Current Edition PDF download. Renders
+          nothing until pdfGateUrl is set; closes itself after the user
+          either subscribes, skips, or dismisses. */}
+      <PdfDownloadGate
+        pdfUrl={pdfGateUrl}
+        filename={
+          currentIssue ? `gallery-${currentIssue.number}.pdf` : undefined
+        }
+        source="sidebar"
+        onClose={() => setPdfGateUrl(null)}
+      />
     </aside>
   );
 }
