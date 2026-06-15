@@ -27,6 +27,14 @@ RUN npm ci --include=dev
 # Copy application code
 COPY . .
 
+# Client-side env vars (Vite inlines anything prefixed VITE_* at build
+# time). Railway passes service variables as Docker build args
+# automatically, but they only become readable to the `npm run build`
+# step if we promote them to ENV here. Add a new ARG/ENV pair for any
+# future VITE_* var you want baked into the bundle.
+ARG VITE_GA4_MEASUREMENT_ID
+ENV VITE_GA4_MEASUREMENT_ID=$VITE_GA4_MEASUREMENT_ID
+
 # Build application
 RUN npm run build
 
