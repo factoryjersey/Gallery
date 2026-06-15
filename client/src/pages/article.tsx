@@ -46,13 +46,15 @@ export default function Article() {
     !(Array.isArray(article?.galleryImages) && article!.galleryImages!.length > 0);
   const isPhotoshoot = isExplicitPhotoshoot || isLegacyPhotoshoot;
 
-  // Desktop layout preference: 1-col reads like classic editorial, 2-col
-  // puts the featured image on the left with body copy on the right
-  // (image is sticky so it stays in view while you read). Persisted to
-  // localStorage so it sticks across visits.
+  // Desktop layout preference: 2-col is the default — featured image
+  // sticky on the left, body copy on the right, magazine-spread feel.
+  // 1-col is the classic centred-narrow read. We persist whatever the
+  // visitor last chose to localStorage so an explicit pick sticks
+  // across visits; new visitors land on 2-col.
   const [layout, setLayout] = useState<"one-col" | "two-col">(() => {
-    if (typeof window === "undefined") return "one-col";
-    return (window.localStorage.getItem("gallery-article-layout") as "one-col" | "two-col") || "one-col";
+    if (typeof window === "undefined") return "two-col";
+    const stored = window.localStorage.getItem("gallery-article-layout");
+    return stored === "one-col" || stored === "two-col" ? stored : "two-col";
   });
   useEffect(() => {
     try { window.localStorage.setItem("gallery-article-layout", layout); } catch {}
