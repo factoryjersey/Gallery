@@ -1,5 +1,6 @@
-import { Switch, Route } from "wouter";
-import { lazy, Suspense } from "react";
+import { Switch, Route, useLocation } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { initAnalytics, trackPageview, ANALYTICS_ENABLED } from "@/lib/analytics";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -37,6 +38,27 @@ function HomeRouteWithSplash() {
   );
 }
 
+/**
+ * Boots gtag.js once (no-op if VITE_GA4_MEASUREMENT_ID isn't set) and
+ * emits a GA4 page_view on every wouter location change. Lives inside
+ * the QueryClient/Router providers so it can use the location hook;
+ * has to mount once at the app root so we never miss the initial view.
+ */
+function AnalyticsBridge() {
+  const [location] = useLocation();
+  useEffect(() => {
+    if (!ANALYTICS_ENABLED) return;
+    initAnalytics();
+  }, []);
+  useEffect(() => {
+    if (!ANALYTICS_ENABLED) return;
+    // Defer one microtask so document.title (set by useDocumentMeta on
+    // route change) lands before we read it.
+    queueMicrotask(() => trackPageview(location));
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
@@ -72,6 +94,7 @@ function App() {
       <AdminProvider>
         <TooltipProvider>
           <Toaster />
+          <AnalyticsBridge />
           <Router />
         </TooltipProvider>
       </AdminProvider>
