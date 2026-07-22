@@ -15,6 +15,7 @@ import GalleryCarousel from "@/components/GalleryCarousel";
 import GalleryGrid from "@/components/GalleryGrid";
 import PhotoshootGrid from "@/components/PhotoshootGrid";
 import EventsGrid from "@/components/EventsGrid";
+import VideoPlayer from "@/components/VideoPlayer";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -355,8 +356,26 @@ export default function Article() {
             sits left (sticky on desktop) while the copy reads right. */}
         {!isPhotoshoot && (
           <div className={layout === "two-col" ? "lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10 lg:items-start" : ""}>
-            {/* Lead image */}
-            {article.featuredImage && article.contentType !== "gallery" && (
+            {/* Lead media — video wins if the editor set one, otherwise
+                the featured image acts as usual. Video containers keep
+                the same sticky-left behaviour on 2-col layouts. */}
+            {article.featuredVideo && article.contentType !== "gallery" && (
+              <figure
+                className={
+                  layout === "two-col"
+                    ? "mb-8 -mx-6 sm:mx-0 lg:m-0 lg:sticky lg:top-40"
+                    : "mb-8 -mx-6 sm:mx-0"
+                }
+                data-testid="article-featured-video"
+              >
+                <VideoPlayer
+                  url={article.featuredVideo}
+                  title={article.title}
+                  poster={article.featuredImage || undefined}
+                />
+              </figure>
+            )}
+            {!article.featuredVideo && article.featuredImage && article.contentType !== "gallery" && (
               <figure
                 className={
                   layout === "two-col"

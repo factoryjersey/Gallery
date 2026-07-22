@@ -26,6 +26,15 @@ import { generateExcerpt } from "./aiExcerpt";
 import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
+// Separate multer instance for video uploads with a 200MB cap so the
+// process doesn't run out of memory on very large scan files. R2 will
+// happily accept larger, but pushing >200MB through a Node HTTP body
+// buffer is asking for trouble — for anything larger, editors should
+// use YouTube/Vimeo and paste the URL instead.
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 },
+});
 
 /**
  * Latest issue whose published_at has actually passed. Used by the public
@@ -1022,6 +1031,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error uploading and processing image:", error);
       res.status(500).json({ error: "Failed to upload and process image" });
+    }
+  });
+
+  // Video upload — accepts MP4/webm/mov, streams straight to R2, no
+  // sharp variants (video doesn't want a thumbnail pipeline). Returns
+  // the public R2 URL; the editor pastes it into featuredVideo or the
+  // inline TipTap video block.
+  app.post("/api/media/upload-video", videoUpload.single("video"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No video file provided" });
+      }
+      if (!req.file.mimetype.startsWith("video/")) {
+        return res.status(400).json({ error: "File must be a video" });
+      }
+      const useR2 =
+        process.env.R2_BUCKET_NAME &&
+        process.env.R2_ACCESS_KEY_ID &&
+        process.env.R2_SECRET_ACCESS_KEY &&
+        process.env.R2_ACCOUNT_ID;
+      if (!useR2) {
+        return res.status(500).json({ error: "R2 storage isn't configured for video uploads" });
+      }
+      // Sanitise the filename: strip path segments, collapse whitespace,
+      // keep the original extension. Timestamp prefix prevents collisions.
+      const ext = req.file.originalname.match(/\.(mp4|webm|mov|m4v)$/i)?.[0] || ".mp4";
+      const baseName = req.file.originalname
+        .replace(/^.*[\\/]/, "")
+        .replace(/\.[^.]+$/, "")
+        .replace(/[^A-Za-z0-9._-]+/g, "-")
+        .slice(0, 60);
+      const key = `videos/${Date.now()}-${baseName}${ext}`;
+      const url = await uploadToR2(req.file.buffer, key, req.file.mimetype);
+      res.json({ url, key, mimeType: req.file.mimetype, size: req.file.size });
+    } catch (error: any) {
+      console.error("Error uploading video:", error?.message || error);
+      // multer surfaces the 200MB cap as a MulterError with LIMIT_FILE_SIZE
+      if (error?.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          error: "Video exceeds the 200MB upload cap — use YouTube/Vimeo for larger files.",
+        });
+      }
+      res.status(500).json({ error: "Failed to upload video" });
     }
   });
 

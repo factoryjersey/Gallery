@@ -44,6 +44,11 @@ export const articles = pgTable("articles", {
   excerpt: text("excerpt"),
   content: text("content").notNull(),
   featuredImage: text("featured_image"),
+  // Optional lead video — YouTube/Vimeo watch URL or a direct MP4 URL
+  // (typically uploaded to R2). Renders in the featured-image slot when
+  // set; the featured image acts as a poster / fallback for the video.
+  // Type is derived from the URL pattern at render time.
+  featuredVideo: text("featured_video"),
   // Higher-resolution image used in the splash intro slideshow. Optional;
   // falls back to featuredImage when null.
   splashImage: text("splash_image"),

@@ -48,6 +48,10 @@ const articleSchema = z.object({
   status: z.enum(["draft", "published"]),
   contentType: z.enum(["article", "cartoon", "gallery", "photoshoot"]).default("article"),
   featuredImage: z.string().optional(),
+  // YouTube/Vimeo watch URL, or a direct MP4/webm URL. Displayed in the
+  // featured-image slot when set. Loose validation — the parser tolerates
+  // any input and renders a friendly error for unrecognised URLs.
+  featuredVideo: z.string().optional(),
   splashImage: z.string().optional(),
   galleryImages: z.array(z.object({ url: z.string(), caption: z.string().optional() })).optional(),
   metaTitle: z.string().optional(),
@@ -139,6 +143,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         status: article.status,
         contentType: article.contentType || "article",
         featuredImage: article.featuredImage || "",
+        featuredVideo: article.featuredVideo || "",
         splashImage: article.splashImage || "",
         galleryImages: Array.isArray(article.galleryImages) ? article.galleryImages : [],
         metaTitle: article.metaTitle || "",
@@ -818,6 +823,84 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   <div className="text-sm text-muted-foreground">
                     ✓ Featured image uploaded
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* Featured Video — replaces the featured image at the top
+                of the article when set. Accepts either a YouTube/Vimeo
+                watch URL (paste into the text field) or an MP4/webm
+                upload (which goes through the video-upload endpoint
+                and lands as an R2 URL you can leave alone). */}
+            <div className="space-y-2">
+              <Label htmlFor="featuredVideo">Featured Video (optional)</Label>
+              <p className="text-xs text-muted-foreground -mt-1">
+                Paste a YouTube or Vimeo URL — or upload an MP4/webm file below.
+                When set, the video replaces the featured image at the top of
+                the article.
+              </p>
+              <Input
+                id="featuredVideo"
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=… or https://vimeo.com/…"
+                {...form.register("featuredVideo")}
+                data-testid="featured-video-url"
+              />
+              <div className="flex gap-4 items-start pt-1">
+                <Input
+                  type="file"
+                  accept="video/mp4,video/webm,video/quicktime"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    // Cap at 200MB client-side — R2 will accept larger
+                    // but the browser upload gets painful past this.
+                    if (file.size > 200 * 1024 * 1024) {
+                      toast({
+                        title: "Video too large",
+                        description: "Files over 200MB — upload to YouTube/Vimeo instead and paste the URL.",
+                        variant: "destructive",
+                      });
+                      e.target.value = "";
+                      return;
+                    }
+                    const fd = new FormData();
+                    fd.append("video", file);
+                    try {
+                      const r = await fetch("/api/media/upload-video", {
+                        method: "POST",
+                        body: fd,
+                        credentials: "include",
+                      });
+                      if (!r.ok) throw new Error(await r.text() || "Upload failed");
+                      const data = await r.json();
+                      const url = data.url;
+                      if (!url) throw new Error("No URL returned");
+                      form.setValue("featuredVideo", url, { shouldDirty: true });
+                      toast({ title: "Video uploaded", description: file.name });
+                    } catch (err: any) {
+                      toast({
+                        title: "Video upload failed",
+                        description: err?.message || "Try again in a moment.",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      e.target.value = "";
+                    }
+                  }}
+                  data-testid="featured-video-file"
+                />
+                {form.watch("featuredVideo") && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      form.setValue("featuredVideo", "", { shouldDirty: true })
+                    }
+                    className="text-xs underline text-muted-foreground hover:text-foreground whitespace-nowrap self-center"
+                    data-testid="featured-video-clear"
+                  >
+                    Clear video
+                  </button>
                 )}
               </div>
             </div>

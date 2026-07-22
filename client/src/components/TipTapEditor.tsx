@@ -17,10 +17,12 @@ import {
   Image as ImageIcon,
   Images as ImagesIcon,
   FolderOpen,
+  Video as VideoIcon,
   Undo,
   Redo,
 } from "lucide-react";
 import { InlineGalleryNode } from "@/components/InlineGalleryNode";
+import { InlineVideoNode } from "@/components/InlineVideoNode";
 import MediaLibraryPicker from "@/components/MediaLibraryPicker";
 
 interface Props {
@@ -64,6 +66,7 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
         placeholder: placeholder || "Start writing — use the toolbar to add headings, images, links…",
       }),
       InlineGalleryNode,
+      InlineVideoNode,
     ],
     content: value || "",
     editorProps: {
@@ -192,6 +195,19 @@ export default function TipTapEditor({ value, onChange, placeholder, onUpload }:
         </button>
         <button type="button" className={btnBase} onClick={() => setLibraryOpen(true)} title="Insert from media library" data-testid="tiptap-library">
           <FolderOpen className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className={btnBase}
+          onClick={() =>
+            // Insert an empty video block at the cursor — editor fills
+            // in the URL or uploads a file inside the block's own card.
+            editor.chain().focus().insertInlineVideo({ url: "" }).run()
+          }
+          title="Insert video at cursor"
+          data-testid="tiptap-video"
+        >
+          <VideoIcon className="h-4 w-4" />
         </button>
 
         <span className="flex-1" />
