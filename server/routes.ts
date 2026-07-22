@@ -574,7 +574,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertArticleSchema.parse(req.body);
       const { tags: tagIds, ...articleData } = req.body;
 
-      const article = await storage.createArticle(validatedData, tagIds);
+      // Auto-suffix the slug on collision. Two articles with the same
+      // headline (a rewrite of an existing feature, "part 2" of an
+      // interview, or coincidence) shouldn't force the editor to
+      // hand-craft a unique URL — mirror the WordPress convention of
+      // appending -2, -3, … until it takes. Try up to 20 suffixes to
+      // avoid a runaway loop if something else is wrong with the DB.
+      const baseSlug = validatedData.slug;
+      let article: any = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+        try {
+          article = await storage.createArticle(
+            { ...validatedData, slug: candidateSlug },
+            tagIds,
+          );
+          break;
+        } catch (err: any) {
+          // Postgres 23505 = unique_violation. Only re-loop on the
+          // slug constraint specifically; anything else bubbles.
+          const isSlugCollision =
+            err?.code === "23505" && String(err?.constraint || err?.detail || "").includes("slug");
+          if (!isSlugCollision) throw err;
+          lastError = err;
+        }
+      }
+      if (!article) {
+        console.error("Slug collision after 20 attempts:", lastError);
+        return res.status(409).json({
+          error: "Couldn't find a unique slug — try a different title.",
+        });
+      }
+      if (article.slug !== baseSlug) {
+        console.log(`Slug auto-suffixed: ${baseSlug} → ${article.slug}`);
+      }
+
       // Sync the promotion stamp (clears when flag=false, stamps NOW
       // when flag=true & previously null). If we ended highlighted, run
       // the cap-enforcer too so promoting a 6th evicts the oldest.
@@ -609,9 +644,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ article });
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid article data", details: error.errors });
+      }
+      // On PUT the editor explicitly typed / kept the slug — don't
+      // silently rewrite it. Send back a specific 409 so the toast
+      // tells them what to change instead of just "update failed".
+      const isSlugCollision =
+        error?.code === "23505" &&
+        String(error?.constraint || error?.detail || "").includes("slug");
+      if (isSlugCollision) {
+        return res.status(409).json({
+          error: "Another article already uses this slug — change the slug field and try again.",
+        });
+      }
       }
       console.error("Error updating article:", error);
       res.status(500).json({ error: "Failed to update article" });

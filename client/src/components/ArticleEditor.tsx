@@ -200,6 +200,26 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     }
   }
 
+  /**
+   * apiRequest throws with a message like `"409: {\"error\":\"Another
+   * article already uses this slug…\"}"`. Peel off the status prefix
+   * and the JSON wrapper so the toast shows the friendly server-side
+   * message rather than raw HTTP debris.
+   */
+  const extractApiErrorMessage = (err: any, fallback: string): string => {
+    const raw = err?.message || "";
+    // Match "<digits>: <rest>"
+    const m = raw.match(/^\d+:\s*(.*)$/);
+    const body = m ? m[1] : raw;
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed?.error) return parsed.error;
+    } catch {
+      // fall through
+    }
+    return body || fallback;
+  };
+
   const createArticleMutation = useMutation({
     mutationFn: async (data: ArticleFormData & { tags?: string[] }) => {
       const response = await apiRequest("POST", "/api/articles", data);
@@ -212,7 +232,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         description: "Article created successfully.",
       });
       // Invalidate all article queries by matching keys that start with /api/articles
-      queryClient.invalidateQueries({ 
+      queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey[0];
           return typeof key === 'string' && key.startsWith('/api/articles');
@@ -224,8 +244,8 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to create article",
+        title: "Couldn't create article",
+        description: extractApiErrorMessage(error, "Something went wrong — try again."),
         variant: "destructive",
       });
     },
@@ -253,8 +273,8 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update article",
+        title: "Couldn't update article",
+        description: extractApiErrorMessage(error, "Failed to update article — try again."),
         variant: "destructive",
       });
     },
