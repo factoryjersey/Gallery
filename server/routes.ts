@@ -659,7 +659,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error: "Another article already uses this slug — change the slug field and try again.",
         });
       }
-      }
       console.error("Error updating article:", error);
       res.status(500).json({ error: "Failed to update article" });
     }
