@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,36 +52,80 @@ import { LogOut, LogIn } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [showArticleEditor, setShowArticleEditor] = useState(false);
-  const [editingArticleId, setEditingArticleId] = useState<string | undefined>(undefined);
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
+  const searchParams = new URLSearchParams(searchString);
+  // Tab + editing state derived from the URL query string so the page
+  // can be refreshed, shared, or opened in a new tab. Reader lives in a
+  // useEffect below that syncs URL → local state; writers all go
+  // through pushLocation() to keep the URL authoritative.
+  const [activeTab, setActiveTab] = useState<string>(searchParams.get("tab") || "dashboard");
+  const [showArticleEditor, setShowArticleEditor] = useState<boolean>(!!searchParams.get("edit"));
+  const [editingArticleId, setEditingArticleId] = useState<string | undefined>(
+    searchParams.get("edit") || undefined,
+  );
   const { isAdmin, configured, isLoading, login, logout } = useAdmin();
   const { toast } = useToast();
 
-  const handleEditArticle = useCallback((articleId: string) => {
-    setEditingArticleId(articleId);
-    setShowArticleEditor(true);
-    setActiveTab("articles");
-  }, []);
+  /** Update /admin's query string in one go. Uses replaceState-flavour
+   *  navigation via wouter's setLocation so back-button semantics still
+   *  work — leaving the editor pops back to the article list. */
+  const pushLocation = useCallback(
+    (next: { tab?: string; edit?: string | null }) => {
+      const params = new URLSearchParams(window.location.search);
+      if (next.tab) params.set("tab", next.tab);
+      if (next.edit === null) params.delete("edit");
+      else if (next.edit) params.set("edit", next.edit);
+      const qs = params.toString();
+      setLocation(`/admin${qs ? `?${qs}` : ""}`);
+    },
+    [setLocation],
+  );
+
+  const handleEditArticle = useCallback(
+    (articleId: string) => {
+      setEditingArticleId(articleId);
+      setShowArticleEditor(true);
+      setActiveTab("articles");
+      pushLocation({ tab: "articles", edit: articleId });
+    },
+    [pushLocation],
+  );
 
   const handleCloseEditor = useCallback(() => {
     setShowArticleEditor(false);
     setEditingArticleId(undefined);
-  }, []);
+    pushLocation({ tab: "articles", edit: null });
+  }, [pushLocation]);
 
-  // Check for article edit request from URL
+  // URL → state: whenever the query string changes (browser back/forward,
+  // direct paste of /admin?tab=articles&edit=<id>, refresh, etc.), pull
+  // the tab + edit id out of it. Guarded to avoid clobbering local state
+  // when the URL is already in sync.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('edit') === 'true' && params.get('tab') === 'articles') {
-      const articleId = localStorage.getItem('editArticleId');
-      if (articleId) {
-        handleEditArticle(articleId);
-        localStorage.removeItem('editArticleId');
-        // Clean up URL
-        window.history.replaceState({}, '', '/admin');
+    const params = new URLSearchParams(searchString);
+    const tabParam = params.get("tab");
+    const editParam = params.get("edit");
+    if (tabParam && tabParam !== activeTab) setActiveTab(tabParam);
+    if (editParam && editParam !== editingArticleId) {
+      setEditingArticleId(editParam);
+      setShowArticleEditor(true);
+      setActiveTab("articles");
+    } else if (!editParam && showArticleEditor) {
+      setShowArticleEditor(false);
+      setEditingArticleId(undefined);
+    }
+    // Legacy: earlier the editor was addressed via localStorage +
+    // edit=true. If we see that shape, migrate it into a real id so
+    // bookmarks minted before this change still work.
+    if (editParam === "true") {
+      const stashed = localStorage.getItem("editArticleId");
+      if (stashed) {
+        localStorage.removeItem("editArticleId");
+        pushLocation({ tab: "articles", edit: stashed });
       }
     }
-  }, [handleEditArticle]);
+  }, [searchString]);
 
   const { data: statsData } = useQuery({
     queryKey: ["/api/stats"],

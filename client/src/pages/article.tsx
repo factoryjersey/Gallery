@@ -169,8 +169,10 @@ export default function Article() {
           {isAdmin && article && (
             <button
               onClick={() => {
-                localStorage.setItem("editArticleId", article.id);
-                navigate("/admin?tab=articles&edit=true");
+                // Pass the article id directly through the URL so the
+                // admin editor is deep-linkable — refresh, share, or
+                // paste the URL and it loads the right article.
+                navigate(`/admin?tab=articles&edit=${encodeURIComponent(article.id)}`);
               }}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-foreground text-white hover:bg-secondary hover:text-foreground transition-colors"
               style={{ fontFamily: "Arial, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}
