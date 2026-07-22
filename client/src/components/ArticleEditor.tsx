@@ -1065,7 +1065,29 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               <Label>Content</Label>
               <TipTapEditor
                 value={form.watch("content") || ""}
-                onChange={(html) => form.setValue("content", html, { shouldDirty: true })}
+                onChange={(html) => {
+                  form.setValue("content", html, { shouldDirty: true });
+                  // Recompute read time on every content edit so the
+                  // "X min read" chip stays honest. Gallery / photoshoot
+                  // articles lead with imagery, not prose — pin them
+                  // to 1 rather than counting pixels in HTML.
+                  const ct = form.getValues("contentType");
+                  if (ct === "gallery" || ct === "photoshoot") {
+                    form.setValue("readTime", 1, { shouldDirty: true });
+                    return;
+                  }
+                  const words = html
+                    .replace(/<[^>]*>/g, " ")
+                    .replace(/&nbsp;/g, " ")
+                    .split(/\s+/)
+                    .filter(Boolean).length;
+                  // 200wpm is the industry-standard reading rate for
+                  // long-form editorial (Nielsen 2016; Time magazine
+                  // uses the same). Floor at 1 minute so we never show
+                  // "0 min read" on very short articles.
+                  const readTime = Math.max(1, Math.ceil(words / 200));
+                  form.setValue("readTime", readTime, { shouldDirty: true });
+                }}
                 placeholder="Start writing your article — use the toolbar to add headings, lists, links, or insert an image at the cursor."
                 onUpload={async (file) => {
                   const formData = new FormData();
