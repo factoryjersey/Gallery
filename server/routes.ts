@@ -89,12 +89,16 @@ async function enforceHighlightCap(issueNumber: number | null) {
   `);
   const excess = (rows as Array<{ id: string }>).map((r) => r.id);
   if (excess.length === 0) return;
-  await db.execute(sql`
-    UPDATE articles
-       SET homepage_highlight = false,
-           updated_at = NOW()
-     WHERE id = ANY(${excess}::varchar[])
-  `);
+  // Use Drizzle's inArray so the id list is bound as separate params
+  // rather than interpolated into a Postgres array-literal string.
+  // The old sql`id = ANY(${excess}::varchar[])` interpolation broke
+  // with "malformed array literal" when excess was a JS string[] —
+  // Postgres received the plain string and tried to cast it to
+  // varchar[], which fails on any value without curly-braces.
+  await db
+    .update(articles)
+    .set({ homepageHighlight: false, updatedAt: new Date() })
+    .where(inArray(articles.id, excess));
 }
 
 /**
