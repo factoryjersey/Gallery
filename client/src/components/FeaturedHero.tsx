@@ -88,7 +88,11 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
                       src={article.featuredImage}
                       alt={article.title}
                       priority={i === 0}
-                      className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-[6000ms] ease-out group-hover:scale-[1.04]"
+                      // object-top so the crop is anchored to the top
+                      // edge of the source image — portraits (people +
+                      // fashion) don't lose their subjects to a centred
+                      // vertical crop on wide desktops.
+                      className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-[6000ms] ease-out group-hover:scale-[1.04]"
                     />
                   ) : (
                     <div className="absolute inset-0 w-full h-full bg-[hsl(0,0%,12%)]" />
