@@ -58,6 +58,12 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
     ...(selectedYear !== "all" && { year: selectedYear }),
     page: currentPage.toString(),
     limit: itemsPerPage.toString(),
+    // Newest-published at the top of the admin list. The server default
+    // is already publishedAt DESC, but stating it explicitly means
+    // future changes to the default don't silently reshuffle the admin
+    // list.
+    orderBy: 'publishedAt',
+    orderDir: 'desc',
   });
 
   const { data: articlesData, isLoading } = useQuery({
@@ -302,9 +308,15 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
                     </TableCell>
                     <TableCell>{article.views || 0}</TableCell>
                     <TableCell>
-                      {article.publishedAt 
+                      {article.publishedAt
                         ? format(new Date(article.publishedAt), "MMM d, yyyy")
-                        : "Draft"}
+                        : /* Fallback used to be "Draft" — but the status
+                             is already shown in its own column via the
+                             Badge next door, and articles with
+                             status=published + publishedAt=null were
+                             being misread as drafts. Show a neutral em
+                             dash instead. */
+                          "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-2">
