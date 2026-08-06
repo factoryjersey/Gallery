@@ -570,14 +570,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFeaturedArticles(limit = 8): Promise<ArticleWithDetails[]> {
-    // First: try explicitly pinned articles (isFeatured=true), ordered by featuredOrder
+    // Explicitly pinned articles (isFeatured=true), newest published
+    // first so the hero opens on the freshest story rather than
+    // whichever was pinned first. featuredOrder is kept as a
+    // tiebreaker so a run of same-day publishes still respects the
+    // editor's stated priority.
     const pinned = await db
       .select({ article: articles, author: authors, category: categories })
       .from(articles)
       .leftJoin(authors, eq(articles.authorId, authors.id))
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .where(and(eq(articles.isFeatured, true), eq(articles.status, 'published'), ne(articles.contentType, 'gallery')))
-      .orderBy(asc(articles.featuredOrder), desc(articles.publishedAt))
+      .orderBy(desc(articles.publishedAt), asc(articles.featuredOrder))
       .limit(limit);
 
     const pinnedWithTags: ArticleWithDetails[] = [];
