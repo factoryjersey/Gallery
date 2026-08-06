@@ -43,10 +43,26 @@ const videoUpload = multer({
  * accidentally surface as "current".
  */
 async function latestPublishedIssueNumber(): Promise<number | null> {
+  // "Latest published" means "the highest issue number whose
+  // published_at has actually passed AND that actually has some
+  // published articles to show". Without the EXISTS guard, an issue
+  // row whose calendar date has ticked over (e.g. the Aug/Sep edition
+  // at 12:01 on Aug 1st) becomes "current" the moment the clock
+  // passes it — even if the editor hasn't shipped anything for that
+  // issue yet — and the public highlights / current-issue surfaces
+  // go blank. Requiring at least one published article means the
+  // rollover happens when content ships, not when the calendar page
+  // turns.
   const { rows } = await db.execute(sql`
-    SELECT number FROM issues
-     WHERE published_at IS NOT NULL AND published_at <= NOW()
-     ORDER BY number DESC
+    SELECT i.number FROM issues i
+     WHERE i.published_at IS NOT NULL
+       AND i.published_at <= NOW()
+       AND EXISTS (
+         SELECT 1 FROM articles a
+          WHERE a.issue_number = i.number
+            AND a.status = 'published'
+       )
+     ORDER BY i.number DESC
      LIMIT 1
   `);
   const n = (rows[0] as any)?.number;
