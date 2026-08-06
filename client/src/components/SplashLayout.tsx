@@ -3,9 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import type { ArticleWithDetails } from "@shared/schema";
 import GalleryWordmark from "@/components/GalleryWordmark";
 
-// localStorage key + how long the splash stays "seen" before showing again
+// localStorage key + how long the splash stays "seen" before showing again.
+// 30 days catches returning visitors around the bimonthly issue cadence
+// without wearing thin — new content shipped in the interim gets a
+// fresh reintroduction, but daily readers aren't hit with the splash
+// every visit.
 const STORAGE_KEY = "gallery-splash-seen";
-const SEEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SEEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // Logo colour cycles per slide; falls back when there are more slides than colours
 const LOGO_COLOURS = ["#ffffff", "hsl(182 55% 56%)", "#ffffff"];
