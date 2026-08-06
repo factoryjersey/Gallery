@@ -75,8 +75,9 @@ async function latestPublishedIssueNumber(): Promise<number | null> {
 const HIGHLIGHTS_MAX = 5;
 
 /**
- * Enforce the homepage-highlights cap for one issue. Called after any
- * article save where homepage_highlight was set to true.
+ * Enforce the homepage-highlights cap across the whole site (not
+ * per-issue). Called after any article save where homepage_highlight
+ * ends up true.
  *
  * Sort order is the same as the public endpoint:
  *   homepage_highlighted_at DESC NULLS LAST,
@@ -85,19 +86,17 @@ const HIGHLIGHTS_MAX = 5;
  *
  * "Newest promotion wins": an article freshly flagged for the strip
  * lands at the top and pushes the oldest promotion off the bottom,
- * regardless of when the underlying article was published. The fallback
- * to publish/created time only matters for legacy rows that pre-date
- * the homepage_highlighted_at column.
+ * regardless of what issue it belongs to. Editors curate the strip by
+ * ticking articles individually — same pattern as splash slides —
+ * rather than by rolling issue boundaries.
  *
- * Idempotent — re-running on an already-conforming issue is a no-op.
+ * Idempotent — re-running on an already-conforming set is a no-op.
  */
-async function enforceHighlightCap(issueNumber: number | null) {
-  if (!issueNumber) return;
+async function enforceHighlightCap() {
   const { rows } = await db.execute(sql`
     SELECT id
       FROM articles
      WHERE homepage_highlight = true
-       AND issue_number = ${issueNumber}
      ORDER BY homepage_highlighted_at DESC NULLS LAST,
               COALESCE(published_at, created_at) DESC,
               id DESC
@@ -403,58 +402,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Home page hero band — articles in the LATEST issue with the
-  // homepage_highlight flag set. Falls back to the latest issue's
-  // featured articles when nothing is flagged yet.
+  // Home page hero band — every published article the editor has ticked
+  // "Homepage highlight" on, regardless of what issue it belongs to.
+  // Same curation model as splash slides: per-article opt-in, no issue
+  // rollover. Ordered newest-promotion-first (freshly ticked article
+  // lands on the left), capped at HIGHLIGHTS_MAX, edito category
+  // excluded (it lives in the Current Issue dropdown instead).
+  //
+  // Fallback: if nothing is flagged anywhere, surface the most-recent
+  // published articles so the hero isn't ever visually empty.
   app.get("/api/articles/highlights", async (_req, res) => {
     try {
-      const maxIssue = await latestPublishedIssueNumber();
-      if (!maxIssue) {
-        return res.json({ articles: [], issueNumber: null });
-      }
-      const flagged = await storage.getArticles({
-        status: "published",
-        contentType: "article",
-        issueNumber: maxIssue,
-        orderBy: "publishedAt",
-        orderDir: "desc",
-        limit: 50,
-      });
-      // Edito sits in the Current Issue dropdown as the editor's letter,
-      // never in the hero band — drop it from the pool before any
-      // selection logic runs.
-      const eligible = flagged.articles.filter((a: any) => a.category?.slug !== "edito");
-      let chosen = eligible.filter((a: any) => a.homepageHighlight);
-      // Sort flagged articles by promotion time DESC so the most recently
-      // promoted (or re-promoted) sits leftmost. Falls back to
-      // publish/created time for legacy rows that pre-date
-      // homepage_highlighted_at. storage.getArticles ordered by
-      // publishedAt DESC already; re-sort here so the promotion stamp
-      // takes precedence.
-      const promotedAt = (a: any) =>
-        a.homepageHighlightedAt
-          ? new Date(a.homepageHighlightedAt).getTime()
-          : 0;
-      const fallback = (a: any) =>
-        new Date(a.publishedAt || a.createdAt || 0).getTime();
-      chosen.sort((a: any, b: any) => {
-        const pa = promotedAt(a);
-        const pb = promotedAt(b);
-        if (pa !== pb) return pb - pa;
-        return fallback(b) - fallback(a);
-      });
-      // Fallback so the hero is never empty when the flag is unset on a
-      // brand-new issue: take the first few featured-or-most-recent.
+      const { rows } = await db.execute(sql`
+        SELECT a.*
+          FROM articles a
+          LEFT JOIN categories c ON c.id = a.category_id
+         WHERE a.homepage_highlight = true
+           AND a.status = 'published'
+           AND a.content_type = 'article'
+           AND COALESCE(c.slug, '') <> 'edito'
+         ORDER BY a.homepage_highlighted_at DESC NULLS LAST,
+                  COALESCE(a.published_at, a.created_at) DESC,
+                  a.id DESC
+         LIMIT ${HIGHLIGHTS_MAX}
+      `);
+      // Re-hydrate through storage so callers get the same shape as
+      // /api/articles (author, category, tags all populated). Cheap —
+      // we're only fetching HIGHLIGHTS_MAX (5) rows.
+      let chosen = (
+        await Promise.all(
+          (rows as Array<{ id: string }>).map((r) => storage.getArticle(r.id)),
+        )
+      ).filter(Boolean) as any[];
+
+      // Fallback so the hero is never empty when the flag is unset
+      // anywhere: take the first few most-recent published articles.
       if (chosen.length === 0) {
-        chosen = eligible.filter((a: any) => a.isFeatured).slice(0, HIGHLIGHTS_MAX);
-        if (chosen.length === 0) chosen = eligible.slice(0, HIGHLIGHTS_MAX);
+        const recent = await storage.getArticles({
+          status: "published",
+          contentType: "article",
+          orderBy: "publishedAt",
+          orderDir: "desc",
+          limit: HIGHLIGHTS_MAX * 3,
+        });
+        chosen = recent.articles
+          .filter((a: any) => a.category?.slug !== "edito")
+          .slice(0, HIGHLIGHTS_MAX);
       }
-      // Hard cap — newest promotion first; the save-time enforcer should
-      // keep the flagged set at or under HIGHLIGHTS_MAX, but slicing
-      // here means legacy data or an admin DB tweak can't blow the
-      // strip open.
-      chosen = chosen.slice(0, HIGHLIGHTS_MAX);
-      res.json({ articles: chosen, issueNumber: maxIssue });
+      res.json({ articles: chosen });
     } catch (error) {
       console.error("Error fetching highlights:", error);
       res.status(500).json({ error: "Failed to fetch highlights" });
@@ -635,7 +630,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // the cap-enforcer too so promoting a 6th evicts the oldest.
       if (article?.id) await syncHighlightStamp(article.id);
       if ((article as any)?.homepageHighlight) {
-        await enforceHighlightCap((article as any)?.issueNumber ?? null);
+        await enforceHighlightCap();
       }
       res.json({ article });
     } catch (error) {
@@ -660,7 +655,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // then prune any overflow if we ended up highlighted.
       if (article?.id) await syncHighlightStamp(article.id);
       if ((article as any)?.homepageHighlight) {
-        await enforceHighlightCap((article as any)?.issueNumber ?? null);
+        await enforceHighlightCap();
       }
 
       res.json({ article });
