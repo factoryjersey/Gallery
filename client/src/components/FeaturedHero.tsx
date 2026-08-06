@@ -7,11 +7,15 @@ import LazyImage from "@/components/LazyImage";
 
 interface FeaturedHeroProps {
   articles: ArticleWithDetails[];
+  /** Show the three-column strip of "other featured" cards under the
+   *  main hero. Turn off when the hero is above another curated section
+   *  (like LatestHighlights) that would duplicate the content. */
+  showSecondary?: boolean;
 }
 
 const ROTATION_MS = 7000;
 
-export default function FeaturedHero({ articles }: FeaturedHeroProps) {
+export default function FeaturedHero({ articles, showSecondary = true }: FeaturedHeroProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -126,6 +130,10 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
                 <LazyImage
                   src={mainArticle.featuredImage}
                   alt={mainArticle.title}
+                  // First-tile priority — the hero is the LCP candidate
+                  // on the homepage; skip the IntersectionObserver gate
+                  // and let the browser fetch it immediately.
+                  priority={activeIndex === 0}
                   className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-500"
                 />
               ) : (
@@ -183,8 +191,10 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
           )}
         </div>
 
-        {/* Secondary articles strip */}
-        {secondaryArticles.length > 0 && (
+        {/* Secondary articles strip — off by default when the hero sits
+            above a full-width tile section (like LatestHighlights) that
+            would otherwise duplicate the same articles below. */}
+        {showSecondary && secondaryArticles.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 border-t border-border divide-x divide-border">
             {secondaryArticles.map((article) => (
               <Link key={article.id} href={`/article/${article.slug}`}>

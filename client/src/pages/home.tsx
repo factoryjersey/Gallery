@@ -5,6 +5,7 @@ import CategoryFilter from "@/components/CategoryFilter";
 import HungerGrid from "@/components/HungerGrid";
 import CategorySection from "@/components/CategorySection";
 import LatestHighlights from "@/components/LatestHighlights";
+import HomeHero from "@/components/HomeHero";
 import Sidebar from "@/components/Sidebar";
 import { useState, useMemo, useEffect } from "react";
 import { useSearch } from "wouter";
@@ -166,7 +167,13 @@ export default function Home() {
         </>
       ) : (
         <main>
-          {/* Curated hero — admin-picked latest highlights */}
+          {/* Rotating cover story — auto-cycles through admin-picked
+              highlights every 7s. Sourced from the same
+              /api/articles/highlights payload as LatestHighlights, so
+              editors curate once and get two visual treatments. */}
+          <HomeHero />
+
+          {/* Curated hero strip — admin-picked latest highlights */}
           <LatestHighlights />
 
           {/* Editorial grid with sticky sidebar on the right */}
