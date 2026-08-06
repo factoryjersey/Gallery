@@ -469,34 +469,63 @@ export default function Admin() {
                     </Card>
                   </div>
 
-                  {/* Recent Articles */}
+                  {/* Recent Articles — clickable rows open the editor for
+                      that article; thumbnail comes from featuredImage
+                      (falls back to a category-name placeholder so a
+                      missing image doesn't leave a hollow tile). */}
                   <Card>
                     <CardHeader>
                       <CardTitle>Recent Articles</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4" data-testid="recent-articles">
+                      <div className="space-y-2" data-testid="recent-articles">
                         {articlesData?.articles?.slice(0, 5).map((article) => (
-                          <div key={article.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                            <div>
-                              <h4 className="font-medium">{article.title}</h4>
-                              <p className="text-sm text-muted-foreground">
-                                {article.category.name} • {article.author.name}
+                          <button
+                            key={article.id}
+                            type="button"
+                            onClick={() => handleEditArticle(article.id)}
+                            className="w-full flex items-center gap-4 py-2 px-2 -mx-2 border-b border-border last:border-0 text-left hover:bg-accent/40 transition-colors rounded-sm focus:outline-none focus:ring-2 focus:ring-secondary"
+                            data-testid={`recent-article-${article.id}`}
+                          >
+                            <div
+                              className="shrink-0 w-16 h-16 overflow-hidden bg-[hsl(0,0%,94%)] border border-border"
+                              aria-hidden="true"
+                            >
+                              {article.featuredImage ? (
+                                <img
+                                  src={article.featuredImage}
+                                  alt=""
+                                  loading="lazy"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[9px] uppercase tracking-widest text-muted-foreground px-1 text-center leading-tight">
+                                  {article.category?.name || "No image"}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium line-clamp-2">{article.title}</h4>
+                              <p className="text-sm text-muted-foreground line-clamp-1">
+                                {article.category?.name || "Uncategorised"}
+                                {article.author?.name ? ` • ${article.author.name}` : ""}
                               </p>
                             </div>
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                article.status === 'published' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-yellow-100 text-yellow-800'
-                              }`}>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span
+                                className={`px-2 py-1 text-xs rounded-full ${
+                                  article.status === "published"
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
                                 {article.status}
                               </span>
-                              <span className="text-sm text-muted-foreground">
+                              <span className="text-sm text-muted-foreground whitespace-nowrap">
                                 {article.views} views
                               </span>
                             </div>
-                          </div>
+                          </button>
                         )) || (
                           <div className="text-center py-8 text-muted-foreground">
                             No articles found. Create your first article!
