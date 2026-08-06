@@ -13,24 +13,24 @@ function hasImage(article: ArticleWithDetails): boolean {
 }
 
 /**
- * Latest-highlights strip at the top of the home page.
+ * Latest-highlights strip below the home-page hero.
  *
- * Pulls from /api/articles/highlights — admin-flagged articles in the
- * current published issue (with sensible fallbacks server-side). Renders
- * as a 3-up tile grid; if more than three are flagged, TileSlider
- * upgrades it to a horizontal carousel with lazy-loaded slides.
+ * Sources from /api/articles/featured — the same payload the hero
+ * uses — so the Admin → Featured Stories manager is the single
+ * curation surface for both. Renders as a 3-up tile grid; if more
+ * than three articles are pinned, TileSlider upgrades it to a
+ * horizontal carousel with lazy-loaded slides.
  */
 export default function LatestHighlights() {
-  const { data } = useQuery<{ articles: ArticleWithDetails[]; issueNumber: number | null }>({
-    queryKey: ["/api/articles/highlights"],
+  const { data } = useQuery<{ articles: ArticleWithDetails[] }>({
+    queryKey: ["/api/articles/featured?limit=5"],
   });
 
-  // Hard cap at 5: the server-side highlight enforcer keeps the flagged
-  // set at or under this, but slicing client-side too means even if a
-  // stale cache hands us more, we never render more than five. Newest
-  // first (server orders by published_at DESC) → newest tile sits on
-  // the left of the strip. Filter out images-less rows so the strip
-  // never includes a placeholder-looking tile next to photographs.
+  // Hard cap at 5 (matches what /api/articles/featured returns via the
+  // ?limit=5 param). Filter out any missing-image rows so the strip
+  // never mixes placeholder tiles next to photographs. First tile
+  // (leftmost) is the freshest pinned article by featuredOrder, then
+  // publishedAt DESC as a tiebreaker.
   const articles = useMemo(() => {
     return (data?.articles ?? []).filter(hasImage).slice(0, 5);
   }, [data]);

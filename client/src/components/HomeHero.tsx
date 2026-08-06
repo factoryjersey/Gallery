@@ -7,22 +7,20 @@ function hasImage(a: ArticleWithDetails): boolean {
 }
 
 /**
- * Homepage rotating hero — restores the auto-rotating "cover story"
- * band that used to live at the top of the home page before the
- * Hunger-style tile fork. Sources from the same
- * /api/articles/highlights payload as LatestHighlights so editors curate
- * one set and get two visual treatments:
+ * Homepage rotating hero — auto-rotating "cover story" band at the top
+ * of the home page. Sources from /api/articles/featured which is
+ * driven by the Admin → Featured Stories manager: whatever the editor
+ * pins there ends up here, ordered by featuredOrder. If nothing is
+ * pinned, the endpoint's fallback surfaces the latest published
+ * articles with images (respecting the manager's category-exclusion
+ * rules) so the hero is never empty.
  *
- *   - The hero (this component) shows the same 5 highlighted articles
- *     as a full-bleed rotator with dot / chevron controls.
- *   - LatestHighlights (below) shows them as a 3-across tile strip.
- *
- * Renders nothing when the highlights payload is empty — no sad empty
- * band while the queries are in flight.
+ * LatestHighlights below uses the same payload for its tile strip —
+ * one curation surface, two visual expressions.
  */
 export default function HomeHero() {
-  const { data } = useQuery<{ articles: ArticleWithDetails[]; issueNumber: number | null }>({
-    queryKey: ["/api/articles/highlights"],
+  const { data } = useQuery<{ articles: ArticleWithDetails[] }>({
+    queryKey: ["/api/articles/featured?limit=5"],
   });
   const articles = (data?.articles ?? []).filter(hasImage);
   if (articles.length === 0) return null;

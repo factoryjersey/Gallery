@@ -23,7 +23,11 @@ export function FeaturedStoriesManager() {
     queryKey: ["/api/categories"],
   });
 
-  const searchParams = new URLSearchParams({ status: "published", limit: "20", ...(search && { search }) });
+  // Show a wider initial pool (50) so the editor can find older
+  // articles without having to guess an exact search term. Search
+  // narrows to matching results either way — this only affects the
+  // no-search-yet default list.
+  const searchParams = new URLSearchParams({ status: "published", limit: "50", ...(search && { search }) });
   const { data: searchData, isLoading: searchLoading } = useQuery<{ articles: ArticleWithDetails[] }>({
     queryKey: [`/api/articles?${searchParams}`],
   });
