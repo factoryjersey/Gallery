@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -505,33 +505,37 @@ export function PdfIngestManager() {
               field so they show up on the right Current Issue surface.
             </p>
           </div>
-          <div className="flex items-center gap-2 pt-2">
-            <Button
-              type="button"
-              onClick={() => ingest.mutate(pdfUrl.trim())}
-              disabled={!pdfUrl.trim() || ingest.isPending}
-              data-testid="pdf-ingest-run"
-            >
-              {ingest.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extracting (30-60s)…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" /> Extract main features
-                </>
-              )}
-            </Button>
-            {pdfUrl && (
-              <a
-                href={pdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs underline text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+          <div className="flex flex-col gap-2 pt-2">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => ingest.mutate(pdfUrl.trim())}
+                disabled={!pdfUrl.trim() || ingest.isPending}
+                data-testid="pdf-ingest-run"
               >
-                Preview PDF <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
+                {ingest.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Extracting…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" /> Extract main features
+                  </>
+                )}
+              </Button>
+              {pdfUrl && (
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs underline text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                >
+                  Preview PDF <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+            {ingest.isPending && <ExtractionProgress />}
+          </div>
           </div>
         </CardContent>
       </Card>
@@ -798,6 +802,57 @@ export function PdfIngestManager() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Live "what's happening" feedback while the ingest is in flight.
+ *  The server phases (download PDF → pdftotext → Claude call → parse
+ *  JSON) aren't reported back to the client, so we approximate their
+ *  timing here. The elapsed counter is the real feedback ("this IS
+ *  running, and it's been running for X seconds") while the hint
+ *  message shifts to describe the likely current phase so the editor
+ *  isn't staring at a spinner wondering if it hung. */
+function ExtractionProgress() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Approximate phase timings from watching typical runs on issue 8:
+  //   0-5s  : fetching PDF from R2 + running pdftotext
+  //   5-15s : sending transcript to Claude, waiting for first token
+  //   15s+  : Claude generating the JSON payload (bulk of runtime)
+  //   90s+  : whatever we're doing is taking longer than expected —
+  //           usually still working, but worth flagging to the editor
+  //           so they don't assume it's dead
+  const hint =
+    elapsed < 5
+      ? "Downloading the PDF from R2…"
+      : elapsed < 15
+        ? "Reading the PDF's text layer…"
+        : elapsed < 90
+          ? "Sending to Claude and waiting for structured extraction…"
+          : elapsed < 180
+            ? "Still going — a full issue can take 2–3 minutes."
+            : "Taking longer than expected — Claude might be having a slow moment.";
+
+  const mm = String(Math.floor(elapsed / 60)).padStart(1, "0");
+  const ss = String(elapsed % 60).padStart(2, "0");
+
+  return (
+    <div
+      className="flex items-center gap-3 text-xs text-muted-foreground border-l-2 border-primary pl-3 py-1"
+      data-testid="pdf-ingest-progress"
+    >
+      <span
+        className="font-mono tabular-nums font-medium text-foreground"
+        aria-label={`${elapsed} seconds elapsed`}
+      >
+        {mm}:{ss}
+      </span>
+      <span>{hint}</span>
     </div>
   );
 }

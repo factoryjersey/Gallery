@@ -211,11 +211,21 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
     throw new Error("ANTHROPIC_API_KEY is not set");
   }
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const startedAt = Date.now();
+  const phase = (name: string, extra?: Record<string, unknown>) =>
+    console.log(
+      `[pdfIngest] ${((Date.now() - startedAt) / 1000).toFixed(1)}s ${name}` +
+        (extra ? " " + JSON.stringify(extra) : ""),
+    );
+
+  phase("start", { pdfUrl });
 
   // Rip the text out of the PDF. Way cheaper than sending the whole
   // document as vision — a 48-page magazine transcript is roughly
   // 15-30k tokens vs 100k+ for the same PDF rendered.
   const { text: transcript, pageCount } = await pdfToPageTranscript(pdfUrl);
+  phase("pdftotext done", { pageCount, transcriptChars: transcript.length });
+
   if (!transcript.trim()) {
     throw new Error(
       "PDF text layer was empty — the file is probably a scan without OCR. Tesseract fallback is not yet wired.",
@@ -226,6 +236,7 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
   // is now text-only and much faster than the vision-heavy whole-PDF
   // path, but 60s+ is realistic for full-issue extraction so streaming
   // is still the safe path.
+  phase("claude call opening");
   const stream = client.messages.stream({
     model: MODEL,
     max_tokens: MAX_OUTPUT_TOKENS,
@@ -238,6 +249,10 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
     ],
   });
   const response = await stream.finalMessage();
+  phase("claude call done", {
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
 
   const raw = response.content
     .filter((b) => b.type === "text")
