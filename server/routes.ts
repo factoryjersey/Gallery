@@ -584,6 +584,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Related articles for a given slug. Scoring: +3 for a shared
+  // category, +1 for each shared tag. Ordered score DESC, then
+  // published_at DESC as a recency tiebreaker so ties feel fresh
+  // rather than random. Excludes the source article, drafts, galleries
+  // and the edito category (edito is a per-issue editorial letter, not
+  // a general "related" candidate).
+  app.get("/api/articles/by-slug/:slug/related", async (req, res) => {
+    try {
+      const limit = Math.max(1, Math.min(12, Number(req.query.limit) || 4));
+      const source = await storage.getArticleBySlug(req.params.slug);
+      if (!source) return res.status(404).json({ error: "Article not found" });
+
+      const { rows } = await db.execute(sql`
+        WITH source_tags AS (
+          SELECT tag_id FROM article_tags WHERE article_id = ${source.id}
+        )
+        SELECT a.id,
+               ((CASE WHEN a.category_id = ${source.categoryId} THEN 3 ELSE 0 END)
+                + COALESCE((SELECT COUNT(*)::int FROM article_tags at
+                             WHERE at.article_id = a.id
+                               AND at.tag_id IN (SELECT tag_id FROM source_tags)), 0)
+               ) AS score
+          FROM articles a
+          LEFT JOIN categories c ON c.id = a.category_id
+         WHERE a.id <> ${source.id}
+           AND a.status = 'published'
+           AND a.content_type <> 'gallery'
+           AND COALESCE(c.slug, '') <> 'edito'
+         ORDER BY score DESC,
+                  COALESCE(a.published_at, a.created_at) DESC
+         LIMIT ${limit}
+      `);
+      const ids = (rows as Array<{ id: string; score: number }>)
+        .filter((r) => r.score > 0)
+        .map((r) => r.id);
+      // Rehydrate through storage so callers get the same author +
+      // category + tags shape as elsewhere. Small N, per-request; not
+      // worth batching.
+      const articles = (
+        await Promise.all(ids.map((id) => storage.getArticle(id)))
+      ).filter(Boolean);
+      res.json({ articles });
+    } catch (error) {
+      console.error("Error fetching related articles:", error);
+      res.status(500).json({ error: "Failed to fetch related articles" });
+    }
+  });
+
   app.post("/api/articles", async (req, res) => {
     try {
       const validatedData = insertArticleSchema.parse(req.body);

@@ -16,6 +16,7 @@ import GalleryGrid from "@/components/GalleryGrid";
 import PhotoshootGrid from "@/components/PhotoshootGrid";
 import EventsGrid from "@/components/EventsGrid";
 import VideoPlayer from "@/components/VideoPlayer";
+import RelatedArticles from "@/components/RelatedArticles";
 import { useAdmin } from "@/contexts/AdminContext";
 
 export default function Article() {
@@ -535,6 +536,12 @@ export default function Article() {
             />
           </div>
         )}
+
+        {/* Related articles — scored server-side on shared category +
+            tag overlap. Renders nothing when the endpoint finds no
+            candidates, so brand-new / untagged articles don't grow an
+            empty band. */}
+        <RelatedArticles slug={article.slug} />
 
         {/* Author bio footer */}
         <footer className="mt-12 pt-8 border-t border-border">
