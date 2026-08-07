@@ -379,7 +379,13 @@ export function PdfIngestManager() {
       [index]: { loading: true, images: [], selected: prev[index]?.selected ?? [] },
     }));
     try {
-      const images = await runImageExtraction(pageRange);
+      // loose=true here too — editor reported that some article images
+      // (small crops, sidebar portraits) were still being filtered out
+      // by the stricter main-feature defaults. Photo sections already
+      // use loose; consistent behaviour is easier to reason about and
+      // the thumbnail grid's tick-untick UI handles the extra
+      // decorative bits with one click each.
+      const images = await runImageExtraction(pageRange, { loose: true });
       // Default selection: none — editor picks. But if only one image
       // comes back, pre-select it as the obvious lead.
       const selected = images.length === 1 ? [images[0].url] : imagesByIndex[index]?.selected ?? [];

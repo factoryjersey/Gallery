@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,12 @@ interface ArticleListProps {
 export default function ArticleList({ onEditArticle }: ArticleListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
+  // "all" / specific issue number as string (Select works with strings).
+  // Backfill workflow: pick issue → see everything imported for it.
+  const [selectedIssue, setSelectedIssue] = useState<string>("all");
+  // "all" / "published" / "draft" / "archived". Server accepts any of
+  // those verbatim; "all" removes the filter server-side.
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
@@ -52,10 +58,19 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
+  // Reset to page 1 whenever a filter changes so we don't sit on an
+  // empty page 3 of a narrowed result set.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedIssue, selectedStatus, selectedYear, searchTerm]);
+
   const queryParams = new URLSearchParams({
-    status: 'all',
+    // "all" is a real server value that removes the status filter.
+    // We pass whatever's selected verbatim.
+    status: selectedStatus,
     ...(searchTerm && { search: searchTerm }),
     ...(selectedYear !== "all" && { year: selectedYear }),
+    ...(selectedIssue !== "all" && { issueNumber: selectedIssue }),
     page: currentPage.toString(),
     limit: itemsPerPage.toString(),
     // Newest-published at the top of the admin list. The server default
@@ -69,6 +84,11 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
   const { data: articlesData, isLoading } = useQuery({
     queryKey: [`/api/articles?${queryParams.toString()}`],
   });
+  // Issues list — powers the issue-number filter dropdown.
+  const { data: issuesData } = useQuery<{ issues: Array<{ id: string; number: number; displayLabel: string | null; title: string | null }> }>({
+    queryKey: ["/api/issues"],
+  });
+  const issues = (issuesData?.issues ?? []).slice().sort((a, b) => b.number - a.number);
 
   const articles = articlesData?.articles || [];
   const pagination = articlesData?.pagination;
@@ -123,7 +143,7 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
     },
     onSuccess: () => {
       // Invalidate all article queries by matching keys that start with /api/articles
-      queryClient.invalidateQueries({ 
+      queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey[0];
           return typeof key === 'string' && key.startsWith('/api/articles');
@@ -142,6 +162,40 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
         variant: "destructive",
       });
     }
+  });
+
+  // Bulk publish — mass-flip selected drafts to published in one pass.
+  // Backfill workflow: import an issue's articles as drafts via PDF
+  // ingest, filter list by that issue + status=draft, tick all, hit
+  // Publish. One PUT per article (server auto-fills published_at on
+  // status change).
+  const bulkPublishMutation = useMutation({
+    mutationFn: async (articleIds: string[]) => {
+      await Promise.all(
+        articleIds.map((id) =>
+          apiRequest("PUT", `/api/articles/${id}`, { status: "published" }),
+        ),
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          (query.queryKey[0] as string).startsWith("/api/articles"),
+      });
+      toast({
+        title: "Published",
+        description: `${selectedArticles.size} article${selectedArticles.size === 1 ? "" : "s"} set to published.`,
+      });
+      setSelectedArticles(new Set());
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Some articles failed to publish. Refresh to see which stuck.",
+        variant: "destructive",
+      });
+    },
   });
 
   // Handlers
@@ -164,9 +218,14 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
   };
 
   const handleBulkAction = () => {
-    if (bulkAction === 'delete' && selectedArticles.size > 0) {
-      bulkDeleteMutation.mutate(Array.from(selectedArticles));
-      setBulkAction('');
+    if (selectedArticles.size === 0) return;
+    const ids = Array.from(selectedArticles);
+    if (bulkAction === "delete") {
+      bulkDeleteMutation.mutate(ids);
+      setBulkAction("");
+    } else if (bulkAction === "publish") {
+      bulkPublishMutation.mutate(ids);
+      setBulkAction("");
     }
   };
 
@@ -195,11 +254,39 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-bold">Articles</h2>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Status filter — all / published / draft. Backfill-friendly:
+              filter to draft while bulk-publishing after PDF import. */}
+          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+          {/* Issue filter — every issue with a number. */}
+          <Select value={selectedIssue} onValueChange={setSelectedIssue}>
+            <SelectTrigger className="w-[200px]" data-testid="select-issue-filter">
+              <SelectValue placeholder="All issues" />
+            </SelectTrigger>
+            <SelectContent className="max-h-96">
+              <SelectItem value="all">All issues</SelectItem>
+              {issues.map((iss) => (
+                <SelectItem key={iss.id} value={String(iss.number)}>
+                  Gallery #{iss.number}
+                  {iss.displayLabel ? ` — ${iss.displayLabel}` : iss.title ? ` — ${iss.title}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[150px]" data-testid="select-year-filter">
+            <SelectTrigger className="w-[130px]" data-testid="select-year-filter">
               <Calendar className="h-4 w-4 mr-2" />
               <SelectValue placeholder="All Years" />
             </SelectTrigger>
@@ -218,7 +305,7 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
               placeholder="Search articles..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-64"
+              className="pl-10 w-56"
               data-testid="input-search-articles"
             />
           </div>
@@ -234,15 +321,16 @@ export default function ArticleList({ onEditArticle }: ArticleListProps) {
               <SelectValue placeholder="Bulk Actions" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="publish">Publish</SelectItem>
               <SelectItem value="delete">Delete</SelectItem>
             </SelectContent>
           </Select>
-          <Button 
-            onClick={handleBulkAction} 
-            disabled={!bulkAction || bulkDeleteMutation.isPending}
+          <Button
+            onClick={handleBulkAction}
+            disabled={!bulkAction || bulkDeleteMutation.isPending || bulkPublishMutation.isPending}
             data-testid="button-apply-bulk"
           >
-            Apply
+            {bulkPublishMutation.isPending || bulkDeleteMutation.isPending ? "Working…" : "Apply"}
           </Button>
         </div>
       )}

@@ -321,6 +321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authorId,
         search,
         year,
+        issueNumber,
         page = 1,
         limit = 10,
         orderBy = 'publishedAt',
@@ -353,6 +354,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authorId: authorId as string,
         search: search as string,
         year: year as string,
+        // Filter by print-edition issue number. Passed as a query
+        // param string; coerce to number here since the storage layer
+        // types it as number | undefined. Empty / non-numeric = no filter.
+        issueNumber: issueNumber ? Number(issueNumber) : undefined,
         withImage: req.query.withImage === 'true' ? true : undefined,
         limit: Number(limit),
         offset,
