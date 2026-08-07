@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql, and, eq, ne, desc, asc, inArray } from "drizzle-orm";
-import { articles, authors, categories, tags, articleTags, issues, issueContributors } from "@shared/schema";
+import { articles, authors, categories, tags, articleTags, issues, issueContributors, siteSettings } from "@shared/schema";
 import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
 import { insertArticleSchema, insertCategorySchema, insertTagSchema, insertAuthorSchema, insertMediaSchema, insertSubscriberSchema } from "@shared/schema";
 import { z } from "zod";
@@ -1862,6 +1862,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching stats:", error);
       res.status(500).json({ error: "Failed to fetch statistics" });
+    }
+  });
+
+  // Site settings — tiny key/value bag for admin-tweakable values that
+  // don't warrant their own table (Instagram reel URL, banners, etc.).
+  // GET is public; PUT is admin-gated by the existing gateMutations
+  // middleware (write mutations already require the admin cookie).
+  app.get("/api/settings/:key", async (req, res) => {
+    try {
+      const row = await db
+        .select()
+        .from(siteSettings)
+        .where(eq(siteSettings.key, req.params.key))
+        .limit(1);
+      res.json({ key: req.params.key, value: row[0]?.value ?? null });
+    } catch (error) {
+      console.error("Error fetching setting:", error);
+      res.status(500).json({ error: "Failed to fetch setting" });
+    }
+  });
+  app.put("/api/settings/:key", async (req, res) => {
+    try {
+      const value = typeof req.body?.value === "string" ? req.body.value : null;
+      // Upsert on the primary key so callers don't have to know whether
+      // the row exists yet — first save creates it, subsequent saves
+      // update in place. Null value clears the setting cleanly.
+      await db.execute(sql`
+        INSERT INTO site_settings (key, value, updated_at)
+        VALUES (${req.params.key}, ${value}, NOW())
+        ON CONFLICT (key) DO UPDATE
+          SET value = EXCLUDED.value, updated_at = NOW()
+      `);
+      res.json({ key: req.params.key, value });
+    } catch (error) {
+      console.error("Error saving setting:", error);
+      res.status(500).json({ error: "Failed to save setting" });
     }
   });
 

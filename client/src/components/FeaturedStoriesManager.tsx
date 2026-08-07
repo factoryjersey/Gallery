@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
@@ -6,10 +6,97 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Star, StarOff, Search, GripVertical, Ban } from "lucide-react";
+import { Star, StarOff, Search, GripVertical, Ban, Instagram } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { ArticleWithDetails, Category } from "@shared/schema";
 import { format } from "date-fns";
+
+const REEL_SETTING_KEY = "sidebar.instagram-reel-url";
+
+/** Small editor for the sidebar Instagram reel URL. Rendered inside
+ *  the Featured Stories manager because that's the "curate homepage
+ *  bits" surface — sidebar embed belongs alongside hero curation. */
+function SidebarReelSettingCard() {
+  const { toast } = useToast();
+  const { data } = useQuery<{ key: string; value: string | null }>({
+    queryKey: [`/api/settings/${REEL_SETTING_KEY}`],
+  });
+  const [url, setUrl] = useState("");
+  const [pristine, setPristine] = useState(true);
+
+  // Seed the input from the fetched setting the first time it lands;
+  // don't overwrite subsequent edits.
+  useEffect(() => {
+    if (pristine && data) {
+      setUrl(data.value ?? "");
+    }
+  }, [data, pristine]);
+
+  const save = useMutation({
+    mutationFn: async (value: string) => {
+      const res = await apiRequest("PUT", `/api/settings/${REEL_SETTING_KEY}`, { value });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/settings/${REEL_SETTING_KEY}`] });
+      setPristine(true);
+      toast({ title: "Sidebar reel updated", description: "It'll appear on next page load." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Couldn't save reel URL", description: err?.message || "Try again.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card>
+      <CardContent className="pt-4 space-y-3">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Instagram className="w-4 h-4 text-pink-500" />
+          Sidebar Instagram reel
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Paste any Instagram reel or post URL (e.g. <code>https://www.instagram.com/reel/…</code>).
+          It appears in the sidebar under Trending Now on the home + category pages.
+          Leave blank to hide the section.
+        </p>
+        <Input
+          type="url"
+          placeholder="https://www.instagram.com/reel/…"
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setPristine(false);
+          }}
+          data-testid="sidebar-reel-url-input"
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            onClick={() => save.mutate(url.trim())}
+            disabled={save.isPending || pristine}
+            data-testid="sidebar-reel-url-save"
+          >
+            {save.isPending ? "Saving…" : "Save reel"}
+          </Button>
+          {url && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setUrl("");
+                setPristine(false);
+              }}
+              disabled={save.isPending}
+              data-testid="sidebar-reel-url-clear"
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function FeaturedStoriesManager() {
   const [search, setSearch] = useState("");
@@ -269,6 +356,10 @@ export function FeaturedStoriesManager() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Sidebar Instagram reel — sits under the hero curation so it's
+          alongside the other "what shows on the homepage" controls. */}
+      <SidebarReelSettingCard />
     </div>
   );
 }

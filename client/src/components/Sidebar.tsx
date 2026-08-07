@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import PdfDownloadGate from "@/components/PdfDownloadGate";
+import SidebarReel from "@/components/SidebarReel";
 
 interface IssueSummary {
   id: string;
@@ -221,6 +222,12 @@ export default function Sidebar() {
           )}
         </div>
       </SidebarSection>
+
+      {/* Instagram reel — rendered from a URL editors paste in the
+          admin Featured tab. Component returns null when no URL is set
+          so the sidebar doesn't grow an empty band while the editor
+          picks a reel. */}
+      <SidebarReel />
 
       {/* Newsletter */}
       <div className="bg-foreground text-white p-6">

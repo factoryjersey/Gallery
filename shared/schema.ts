@@ -298,6 +298,17 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
 });
 
+// Tiny key/value bag for editable, admin-tweakable site settings that
+// aren't worth their own table — things like the Instagram reel URL,
+// header banner text, cookie-notice copy. Read publicly, write only via
+// gated admin endpoints. Keep keys namespaced (e.g. "sidebar.reel-url"
+// or "site.banner") so it's obvious where each value surfaces.
+export const siteSettings = pgTable("site_settings", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Newsletter subscribers
 export const subscribers = pgTable("subscribers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
