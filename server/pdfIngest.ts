@@ -50,12 +50,15 @@ For each real feature, capture:
   • suggested_category — one of: ${CATEGORY_HINTS.join(", ")}. Pick the best fit; use "culture" as a catch-all for arts / features you can't slot elsewhere.
   • lead_image_description — one sentence describing the most striking image on those pages. Helps the editor pick a featured image later.
 
+Additionally, identify the PAPARAZZI section if present — Gallery Magazine has, since day one, run a section of party / society photos usually labelled "Paparazzi" or "Snapped" or "Out and About". This is typically 4-12 contiguous pages of grouped party photos. If you find one, include a paparazzi_section object with its page range and any obvious title. Ignore it if you're not sure — false positives here mean the editor imports the wrong pages as a gallery.
+
 Return valid JSON, no code fences, no prose:
 {
-  "articles": [ { "title": "...", "standfirst": "...", "byline": "...", "body": "...", "estimated_page_range": [n, m], "suggested_category": "...", "lead_image_description": "..." } ]
+  "articles": [ { "title": "...", "standfirst": "...", "byline": "...", "body": "...", "estimated_page_range": [n, m], "suggested_category": "...", "lead_image_description": "..." } ],
+  "paparazzi_section": { "estimated_page_range": [n, m], "label": "Paparazzi" } | null
 }
 
-If the PDF contains no extractable feature articles (e.g. it's a mostly-visual issue), return { "articles": [] }.`;
+If the PDF contains no extractable feature articles (e.g. it's a mostly-visual issue), return { "articles": [], "paparazzi_section": null }.`;
 
 export interface ExtractedArticle {
   title: string;
@@ -67,8 +70,14 @@ export interface ExtractedArticle {
   lead_image_description: string;
 }
 
+export interface PaparazziSection {
+  estimated_page_range: [number, number];
+  label: string;
+}
+
 export interface IngestResult {
   articles: ExtractedArticle[];
+  paparazzi_section: PaparazziSection | null;
   /** Raw usage from the Claude call so callers can display / log costs. */
   usage: { input_tokens: number; output_tokens: number };
 }
@@ -88,7 +97,10 @@ async function fetchPdfAsBase64(url: string): Promise<string> {
  * returning bare JSON when instructed, but we defensively handle the
  * ```json``` fence case in case a future version starts wrapping.
  */
-function parseJsonPayload(text: string): { articles: ExtractedArticle[] } {
+function parseJsonPayload(text: string): {
+  articles: ExtractedArticle[];
+  paparazzi_section: PaparazziSection | null;
+} {
   const trimmed = text.trim();
   const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]+?)\s*```$/);
   const raw = fenceMatch ? fenceMatch[1] : trimmed;
@@ -97,7 +109,23 @@ function parseJsonPayload(text: string): { articles: ExtractedArticle[] } {
     if (!Array.isArray(parsed?.articles)) {
       throw new Error("Response missing `articles` array");
     }
-    return parsed;
+    // Normalise the paparazzi field: missing / null / malformed all
+    // become null so the caller can just `if (payload.paparazzi_section)`.
+    let paparazzi: PaparazziSection | null = null;
+    const p = parsed.paparazzi_section;
+    if (
+      p &&
+      Array.isArray(p.estimated_page_range) &&
+      p.estimated_page_range.length === 2 &&
+      Number.isInteger(p.estimated_page_range[0]) &&
+      Number.isInteger(p.estimated_page_range[1])
+    ) {
+      paparazzi = {
+        estimated_page_range: [p.estimated_page_range[0], p.estimated_page_range[1]],
+        label: typeof p.label === "string" && p.label.trim() ? p.label.trim() : "Paparazzi",
+      };
+    }
+    return { articles: parsed.articles, paparazzi_section: paparazzi };
   } catch (err: any) {
     throw new Error(`Couldn't parse Claude's JSON: ${err?.message || err}`);
   }
@@ -137,9 +165,10 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
     .join("")
     .trim();
 
-  const { articles } = parseJsonPayload(text);
+  const { articles, paparazzi_section } = parseJsonPayload(text);
   return {
     articles,
+    paparazzi_section,
     usage: {
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,

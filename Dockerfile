@@ -12,6 +12,14 @@ WORKDIR /app
 # Set production environment
 ENV NODE_ENV="production"
 
+# poppler-utils supplies `pdfimages` (and `pdftoppm`) — used at runtime
+# by the PDF-ingest pipeline to pull embedded photos out of archived
+# print editions. Small install (~5MB), no Node dependency required.
+# Installed in the base layer so both build and final stages have it.
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y poppler-utils && \
+    rm -rf /var/lib/apt/lists/*
+
 
 # Throw-away build stage to reduce size of final image
 FROM base AS build

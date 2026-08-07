@@ -24,6 +24,7 @@ import {
 import { getSitemapData, renderSitemapXml, renderRobotsTxt } from "./sitemap";
 import { generateExcerpt } from "./aiExcerpt";
 import { ingestPdf } from "./pdfIngest";
+import { extractImagesFromPageRange } from "./pdfImages";
 import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -217,6 +218,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const message = error?.message?.includes("ANTHROPIC_API_KEY")
         ? "PDF ingestion isn't configured — ANTHROPIC_API_KEY is missing on the server"
         : error?.message || "PDF ingestion failed — try again";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Companion to /ingest-pdf: given a page range from a PDF, extract
+  // every embedded image, upload each to R2, return the URLs so the
+  // ingest UI can render thumbnails and let the editor pick a lead +
+  // gallery. Same R2-only guard as the ingest endpoint above.
+  //
+  // Body: { pdfUrl, pageRange: [start, end], issueNumber? }
+  // Response: { images: [{ url, page, seq, width, height, bytes }] }
+  app.post("/api/admin/ingest-pdf/extract-images", async (req, res) => {
+    try {
+      const { pdfUrl, pageRange, issueNumber } = req.body ?? {};
+      if (!pdfUrl || typeof pdfUrl !== "string" || !pdfUrl.trim()) {
+        return res.status(400).json({ error: "pdfUrl is required" });
+      }
+      try {
+        const parsed = new URL(pdfUrl);
+        if (!parsed.host.endsWith(".r2.dev") && !parsed.host.endsWith(".r2.cloudflarestorage.com")) {
+          return res.status(400).json({ error: "pdfUrl must point at our own R2 bucket" });
+        }
+      } catch {
+        return res.status(400).json({ error: "pdfUrl must be a valid URL" });
+      }
+      if (
+        !Array.isArray(pageRange) ||
+        pageRange.length !== 2 ||
+        !Number.isInteger(pageRange[0]) ||
+        !Number.isInteger(pageRange[1])
+      ) {
+        return res.status(400).json({ error: "pageRange must be [start, end] integers" });
+      }
+      const images = await extractImagesFromPageRange(pdfUrl, pageRange as [number, number], {
+        issueNumber: typeof issueNumber === "number" ? issueNumber : null,
+      });
+      res.json({ images });
+    } catch (error: any) {
+      console.error("extract-images failed:", error?.message || error);
+      const isMissingPdfimages = /ENOENT.*pdfimages|not found/i.test(String(error?.message || ""));
+      const message = isMissingPdfimages
+        ? "pdfimages isn't installed in the container — check the Dockerfile poppler-utils step"
+        : error?.message || "Image extraction failed — try again";
       res.status(500).json({ error: message });
     }
   });

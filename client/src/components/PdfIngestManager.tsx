@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, Sparkles, Check, X, ExternalLink } from "lucide-react";
+import { Loader2, FileText, Sparkles, Check, X, ExternalLink, ImagePlus, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ExtractedArticle {
@@ -18,9 +18,33 @@ interface ExtractedArticle {
   lead_image_description: string;
 }
 
+interface PaparazziSection {
+  estimated_page_range: [number, number];
+  label: string;
+}
+
 interface IngestResponse {
   articles: ExtractedArticle[];
+  paparazzi_section: PaparazziSection | null;
   usage: { input_tokens: number; output_tokens: number };
+}
+
+interface ExtractedImage {
+  url: string;
+  page: number;
+  seq: number;
+  width: number;
+  height: number;
+  bytes: number;
+}
+
+interface ExtractedImagesState {
+  loading: boolean;
+  images: ExtractedImage[];
+  /** URLs the editor has ticked. First tick is the lead image; the
+   *  rest become gallery_images on save. */
+  selected: string[];
+  error?: string;
 }
 
 interface Category {
@@ -114,6 +138,18 @@ export function PdfIngestManager() {
   // tweak title / body / byline before publishing without mutating
   // the raw extraction (handy if they want to re-generate).
   const [edits, setEdits] = useState<Record<number, Partial<ExtractedArticle>>>({});
+  // Per-article image extraction state. Keyed by extraction index so
+  // each feature card owns its own loading / thumbnails / selection.
+  const [imagesByIndex, setImagesByIndex] = useState<Record<number, ExtractedImagesState>>({});
+  // Paparazzi flow — separate state so it doesn't clash with the
+  // article-index scheme above. The paparazzi_section from Claude's
+  // extract gives us the initial page range; the editor can then hit
+  // Extract to pull all images, review, and Save as a gallery.
+  const [paparazziState, setPaparazziState] = useState<ExtractedImagesState>({
+    loading: false,
+    images: [],
+    selected: [],
+  });
 
   const { data: issuesData } = useQuery<{ issues: Issue[] }>({
     queryKey: ["/api/issues"],
@@ -185,6 +221,89 @@ export function PdfIngestManager() {
     },
   });
 
+  /**
+   * Pulls every image out of the given page range, uploads each to R2,
+   * returns the list. Used by both the per-feature card and the
+   * paparazzi flow.
+   */
+  const runImageExtraction = async (
+    pageRange: [number, number],
+  ): Promise<ExtractedImage[]> => {
+    const res = await apiRequest("POST", "/api/admin/ingest-pdf/extract-images", {
+      pdfUrl: pdfUrl.trim(),
+      pageRange,
+      issueNumber: issueNumber ? Number(issueNumber) : null,
+    });
+    const data = await res.json();
+    return data.images ?? [];
+  };
+
+  /** Toggle-select an image URL for a given card. First-selected becomes
+   *  the lead image; subsequent selections queue up as gallery images. */
+  const toggleImage = (
+    state: ExtractedImagesState,
+    setState: (next: ExtractedImagesState) => void,
+    url: string,
+  ) => {
+    const already = state.selected.includes(url);
+    const nextSelected = already
+      ? state.selected.filter((u) => u !== url)
+      : [...state.selected, url];
+    setState({ ...state, selected: nextSelected });
+  };
+
+  const extractForArticle = async (index: number, pageRange: [number, number]) => {
+    setImagesByIndex((prev) => ({
+      ...prev,
+      [index]: { loading: true, images: [], selected: prev[index]?.selected ?? [] },
+    }));
+    try {
+      const images = await runImageExtraction(pageRange);
+      // Default selection: none — editor picks. But if only one image
+      // comes back, pre-select it as the obvious lead.
+      const selected = images.length === 1 ? [images[0].url] : imagesByIndex[index]?.selected ?? [];
+      setImagesByIndex((prev) => ({
+        ...prev,
+        [index]: { loading: false, images, selected },
+      }));
+    } catch (err: any) {
+      const raw = err?.message || "";
+      const m = raw.match(/^\d+:\s*(.*)$/);
+      let msg = m ? m[1] : raw;
+      try {
+        const parsed = JSON.parse(msg);
+        if (parsed?.error) msg = parsed.error;
+      } catch {}
+      setImagesByIndex((prev) => ({
+        ...prev,
+        [index]: { loading: false, images: [], selected: [], error: msg || "Extraction failed" },
+      }));
+      toast({ title: "Image extraction failed", description: msg, variant: "destructive" });
+    }
+  };
+
+  const extractPaparazzi = async () => {
+    const range = results?.paparazzi_section?.estimated_page_range;
+    if (!range) return;
+    setPaparazziState({ loading: true, images: [], selected: [] });
+    try {
+      const images = await runImageExtraction(range);
+      // Paparazzi: pre-select everything — that IS the intent. Editor
+      // ticks off decorative headers / spacers if any got through.
+      setPaparazziState({ loading: false, images, selected: images.map((im) => im.url) });
+    } catch (err: any) {
+      const raw = err?.message || "";
+      const m = raw.match(/^\d+:\s*(.*)$/);
+      let msg = m ? m[1] : raw;
+      try {
+        const parsed = JSON.parse(msg);
+        if (parsed?.error) msg = parsed.error;
+      } catch {}
+      setPaparazziState({ loading: false, images: [], selected: [], error: msg });
+      toast({ title: "Paparazzi extraction failed", description: msg, variant: "destructive" });
+    }
+  };
+
   const publishOne = useMutation({
     mutationFn: async ({ article, i }: { article: ExtractedArticle; i: number }) => {
       const merged = { ...article, ...edits[i] } as ExtractedArticle;
@@ -194,6 +313,12 @@ export function PdfIngestManager() {
       if (!categoryId) throw new Error("No categories in the DB — can't save.");
       if (!authorId) throw new Error("No authors in the DB — can't save.");
       const words = wordCount(merged.body);
+      // First selected image becomes the lead; the rest go into
+      // gallery_images. If nothing is selected we still save (editor
+      // will pick images later in the article editor).
+      const picks = imagesByIndex[i]?.selected ?? [];
+      const featuredImage = picks[0] || undefined;
+      const galleryImages = picks.slice(1).map((url) => ({ url }));
       const payload = {
         title: merged.title,
         slug: slugify(merged.title),
@@ -205,6 +330,8 @@ export function PdfIngestManager() {
         illustrator: "",
         status: "draft" as const,
         contentType: "article" as const,
+        featuredImage,
+        galleryImages,
         readTime: Math.max(1, Math.ceil(words / 200)),
         issueNumber: issueNumber ? Number(issueNumber) : undefined,
         homepageHighlight: false,
@@ -238,6 +365,68 @@ export function PdfIngestManager() {
         description: msg || "Try again.",
         variant: "destructive",
       });
+    },
+  });
+
+  const publishPaparazzi = useMutation({
+    mutationFn: async () => {
+      const label = results?.paparazzi_section?.label || "Paparazzi";
+      const range = results?.paparazzi_section?.estimated_page_range;
+      const picks = paparazziState.selected;
+      if (!range) throw new Error("No paparazzi section identified");
+      if (picks.length === 0) throw new Error("Select at least one photo");
+      const paparazziCategoryId =
+        categories.find((c) => c.slug === "paparazzi")?.id ||
+        categories.find((c) => c.slug.includes("paparazzi"))?.id ||
+        categoryIdBySlugHint("paparazzi") ||
+        categories[0]?.id;
+      const authorId = authorIdByName("Gallery") || authors[0]?.id;
+      if (!paparazziCategoryId) throw new Error("No 'paparazzi' category found — create one first.");
+      if (!authorId) throw new Error("No authors in the DB — can't save.");
+      const issueLabel = issueNumber ? ` — Gallery ${issueNumber}` : "";
+      const title = `${label}${issueLabel}`;
+      const payload = {
+        title,
+        slug: slugify(title),
+        excerpt: "",
+        content: "",
+        categoryId: paparazziCategoryId,
+        authorId,
+        photographer: "",
+        illustrator: "",
+        status: "draft" as const,
+        contentType: "article" as const,
+        featuredImage: picks[0],
+        galleryImages: picks.map((url) => ({ url })),
+        readTime: 1,
+        issueNumber: issueNumber ? Number(issueNumber) : undefined,
+        homepageHighlight: false,
+        tags: [],
+      };
+      const res = await apiRequest("POST", "/api/articles", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          typeof q.queryKey[0] === "string" &&
+          (q.queryKey[0] as string).startsWith("/api/articles"),
+      });
+      toast({
+        title: "Paparazzi gallery saved",
+        description: `${paparazziState.selected.length} photos — draft in the article list.`,
+      });
+      setPaparazziState({ loading: false, images: [], selected: [] });
+    },
+    onError: (err: any) => {
+      const raw = err?.message || "";
+      const m = raw.match(/^\d+:\s*(.*)$/);
+      let msg = m ? m[1] : raw;
+      try {
+        const parsed = JSON.parse(msg);
+        if (parsed?.error) msg = parsed.error;
+      } catch {}
+      toast({ title: "Couldn't save paparazzi gallery", description: msg, variant: "destructive" });
     },
   });
 
@@ -353,12 +542,96 @@ export function PdfIngestManager() {
             <h3 className="text-base font-semibold">
               Extracted {remaining.length} of {results.articles.length}{" "}
               article{results.articles.length === 1 ? "" : "s"}
+              {results.paparazzi_section && " + paparazzi section"}
             </h3>
             <span className="text-xs text-muted-foreground">
               {results.usage.input_tokens.toLocaleString()} in · {results.usage.output_tokens.toLocaleString()} out ·
               approx {formatCost(results.usage)}
             </span>
           </div>
+
+          {/* Paparazzi section — dedicated flow: extract every image
+              in the identified page range, editor prunes any false
+              positives (headers / spacers), save as one gallery-heavy
+              draft article in the paparazzi category. */}
+          {results.paparazzi_section && (
+            <Card className="border-pink-500/40" data-testid="pdf-ingest-paparazzi">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-pink-500" />
+                      Paparazzi section — pp {results.paparazzi_section.estimated_page_range[0]}
+                      –{results.paparazzi_section.estimated_page_range[1]}
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Extract every photo from the identified pages into a single gallery
+                      article filed under paparazzi.
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {paparazziState.images.length === 0 && !paparazziState.loading && (
+                  <Button type="button" onClick={extractPaparazzi} data-testid="pdf-ingest-paparazzi-extract">
+                    <ImagePlus className="mr-2 h-4 w-4" /> Extract paparazzi photos
+                  </Button>
+                )}
+                {paparazziState.loading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Pulling photos from PDF…
+                  </div>
+                )}
+                {paparazziState.images.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        {paparazziState.selected.length}/{paparazziState.images.length} selected.
+                        Click any thumbnail to toggle. First-selected becomes the featured image.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setPaparazziState({ ...paparazziState, selected: paparazziState.images.map((im) => im.url) })
+                          }
+                        >
+                          Select all
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPaparazziState({ ...paparazziState, selected: [] })}
+                        >
+                          None
+                        </Button>
+                      </div>
+                    </div>
+                    <ThumbnailGrid
+                      state={paparazziState}
+                      onToggle={(url) => toggleImage(paparazziState, setPaparazziState, url)}
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => publishPaparazzi.mutate()}
+                      disabled={publishPaparazzi.isPending || paparazziState.selected.length === 0}
+                      data-testid="pdf-ingest-paparazzi-save"
+                    >
+                      {publishPaparazzi.isPending ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…</>
+                      ) : (
+                        <><Check className="mr-2 h-4 w-4" /> Save paparazzi gallery ({paparazziState.selected.length})</>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {remaining.length === 0 && (
             <div className="text-sm text-muted-foreground border border-dashed border-border rounded p-6 text-center">
               All extracted articles handled. Re-run to try again with different results.
@@ -441,6 +714,59 @@ export function PdfIngestManager() {
                       Suggested lead image: {merged.lead_image_description}
                     </p>
                   )}
+
+                  {/* Image extraction — pull every photo from the
+                      article's page range so the editor can pick a lead
+                      image + gallery without leaving this screen. */}
+                  {(() => {
+                    const imgState = imagesByIndex[i] || {
+                      loading: false,
+                      images: [],
+                      selected: [] as string[],
+                    };
+                    if (imgState.images.length === 0 && !imgState.loading) {
+                      return (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            extractForArticle(i, merged.estimated_page_range)
+                          }
+                          data-testid={`pdf-ingest-extract-images-${i}`}
+                        >
+                          <ImagePlus className="mr-2 h-4 w-4" /> Extract images from pp{" "}
+                          {merged.estimated_page_range[0]}–{merged.estimated_page_range[1]}
+                        </Button>
+                      );
+                    }
+                    if (imgState.loading) {
+                      return (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Pulling photos…
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          {imgState.selected.length}/{imgState.images.length} selected.
+                          First-selected becomes the featured image; the rest go into the article
+                          gallery.
+                        </p>
+                        <ThumbnailGrid
+                          state={imgState}
+                          onToggle={(url) =>
+                            toggleImage(imgState, (next) =>
+                              setImagesByIndex((prev) => ({ ...prev, [i]: next })),
+                              url,
+                            )
+                          }
+                        />
+                      </div>
+                    );
+                  })()}
+
                   <div className="flex items-center gap-2 pt-2">
                     <Button
                       type="button"
@@ -455,11 +781,15 @@ export function PdfIngestManager() {
                       ) : (
                         <>
                           <Check className="mr-2 h-4 w-4" /> Save as draft
+                          {(imagesByIndex[i]?.selected.length ?? 0) > 0 &&
+                            ` (+ ${imagesByIndex[i]!.selected.length} image${
+                              imagesByIndex[i]!.selected.length === 1 ? "" : "s"
+                            })`}
                         </>
                       )}
                     </Button>
                     <span className="text-xs text-muted-foreground">
-                      Opens as a draft in the article list — set the lead image + polish there.
+                      Draft goes to the article list; polish in the editor.
                     </span>
                   </div>
                 </CardContent>
@@ -468,6 +798,59 @@ export function PdfIngestManager() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Grid of thumbnail buttons with checkbox-selection state. Shared by
+ *  the per-article extractor and the paparazzi flow. Selection order
+ *  matters (first-selected = lead), so we show a small "1", "2" badge
+ *  on ticked images. */
+function ThumbnailGrid({
+  state,
+  onToggle,
+}: {
+  state: ExtractedImagesState;
+  onToggle: (url: string) => void;
+}) {
+  if (state.images.length === 0) return null;
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" data-testid="pdf-ingest-thumbs">
+      {state.images.map((img) => {
+        const idx = state.selected.indexOf(img.url);
+        const isSelected = idx !== -1;
+        return (
+          <button
+            key={img.url}
+            type="button"
+            onClick={() => onToggle(img.url)}
+            className={`relative aspect-square overflow-hidden border-2 transition-all ${
+              isSelected
+                ? "border-primary shadow-md"
+                : "border-transparent hover:border-border"
+            }`}
+            title={`page ${img.page} · ${img.width}×${img.height}`}
+          >
+            <img
+              src={img.url}
+              alt=""
+              loading="lazy"
+              className="w-full h-full object-cover"
+            />
+            {isSelected && (
+              <span
+                className="absolute top-1 left-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                aria-hidden
+              >
+                {idx + 1}
+              </span>
+            )}
+            <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1 rounded">
+              p{img.page}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
