@@ -166,7 +166,11 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const base64 = await fetchPdfAsBase64(pdfUrl);
 
-  const response = await client.messages.create({
+  // Use streaming — the SDK refuses non-streaming requests that could
+  // exceed 10 minutes (max_tokens=64k + a full-issue PDF qualifies).
+  // finalMessage() waits for the stream to complete and returns the
+  // aggregated message with usage stats, same shape as .create() would.
+  const stream = client.messages.stream({
     model: MODEL,
     max_tokens: MAX_OUTPUT_TOKENS,
     system: SYSTEM_PROMPT,
@@ -190,6 +194,7 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
       { role: "assistant", content: "{" },
     ],
   });
+  const response = await stream.finalMessage();
 
   const rawResponse = response.content
     .filter((b) => b.type === "text")
