@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, Sparkles, Check, X, ExternalLink, ImagePlus, Camera } from "lucide-react";
+import { Loader2, FileText, Sparkles, Check, X, ExternalLink, ImagePlus, Camera, Users, Palette } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ExtractedArticle {
@@ -18,16 +18,71 @@ interface ExtractedArticle {
   lead_image_description: string;
 }
 
-interface PaparazziSection {
+type PhotoSectionType = "fashion_shoot" | "event" | "paparazzi" | "portfolio";
+
+interface PhotoSection {
+  type: PhotoSectionType;
   estimated_page_range: [number, number];
   label: string;
+  credits: string;
+  caption_hint: string;
 }
 
 interface IngestResponse {
   articles: ExtractedArticle[];
-  paparazzi_section: PaparazziSection | null;
+  photo_sections: PhotoSection[];
+  /** Kept for one deploy — old server versions still populate it. */
+  paparazzi_section: { estimated_page_range: [number, number]; label: string } | null;
   usage: { input_tokens: number; output_tokens: number };
+  page_count?: number;
 }
+
+/** Per-photo-section save mapping: which category, contentType, and
+ *  icon a given section type gets. Keeps the save flow uniform (one
+ *  publishSection mutation) while letting the UI + resulting draft
+ *  reflect the section's actual editorial identity. */
+const PHOTO_SECTION_META: Record<
+  PhotoSectionType,
+  {
+    categorySlug: string;
+    contentType: "article" | "photoshoot";
+    /** Icon component (rendered as <Icon className="w-4 h-4" />). */
+    icon: typeof Camera;
+    /** Accent classes for the card header (border + icon colour). */
+    accent: string;
+    /** Human label for the type. Shown next to the section header. */
+    typeLabel: string;
+  }
+> = {
+  fashion_shoot: {
+    categorySlug: "fashion-shoots",
+    contentType: "photoshoot",
+    icon: Camera,
+    accent: "border-pink-500/40 text-pink-500",
+    typeLabel: "Fashion shoot",
+  },
+  event: {
+    categorySlug: "events",
+    contentType: "article",
+    icon: Users,
+    accent: "border-purple-500/40 text-purple-500",
+    typeLabel: "Event",
+  },
+  paparazzi: {
+    categorySlug: "paparazzi",
+    contentType: "article",
+    icon: Camera,
+    accent: "border-yellow-500/40 text-yellow-600",
+    typeLabel: "Paparazzi",
+  },
+  portfolio: {
+    categorySlug: "culture",
+    contentType: "photoshoot",
+    icon: Palette,
+    accent: "border-blue-500/40 text-blue-500",
+    typeLabel: "Portfolio",
+  },
+};
 
 interface ExtractedImage {
   url: string;
@@ -141,15 +196,11 @@ export function PdfIngestManager() {
   // Per-article image extraction state. Keyed by extraction index so
   // each feature card owns its own loading / thumbnails / selection.
   const [imagesByIndex, setImagesByIndex] = useState<Record<number, ExtractedImagesState>>({});
-  // Paparazzi flow — separate state so it doesn't clash with the
-  // article-index scheme above. The paparazzi_section from Claude's
-  // extract gives us the initial page range; the editor can then hit
-  // Extract to pull all images, review, and Save as a gallery.
-  const [paparazziState, setPaparazziState] = useState<ExtractedImagesState>({
-    loading: false,
-    images: [],
-    selected: [],
-  });
+  // Per-photo-section state (paparazzi + fashion shoots + events +
+  // portfolios). Keyed by section index in results.photo_sections so
+  // multiple sections in one issue each get their own extraction /
+  // selection state.
+  const [sectionStates, setSectionStates] = useState<Record<number, ExtractedImagesState>>({});
 
   const { data: issuesData } = useQuery<{ issues: Issue[] }>({
     queryKey: ["/api/issues"],
@@ -232,16 +283,20 @@ export function PdfIngestManager() {
 
   /**
    * Pulls every image out of the given page range, uploads each to R2,
-   * returns the list. Used by both the per-feature card and the
-   * paparazzi flow.
+   * returns the list. Used by both the per-feature card and photo
+   * sections. `loose=true` drops the aggressive dimension filter so
+   * photo sections (fashion shoots, paparazzi, events) catch even the
+   * small crop-outs — editor prunes decorative junk from the grid.
    */
   const runImageExtraction = async (
     pageRange: [number, number],
+    opts: { loose?: boolean } = {},
   ): Promise<ExtractedImage[]> => {
     const res = await apiRequest("POST", "/api/admin/ingest-pdf/extract-images", {
       pdfUrl: pdfUrl.trim(),
       pageRange,
       issueNumber: issueNumber ? Number(issueNumber) : null,
+      loose: !!opts.loose,
     });
     const data = await res.json();
     return data.images ?? [];
@@ -291,15 +346,21 @@ export function PdfIngestManager() {
     }
   };
 
-  const extractPaparazzi = async () => {
-    const range = results?.paparazzi_section?.estimated_page_range;
-    if (!range) return;
-    setPaparazziState({ loading: true, images: [], selected: [] });
+  const extractSection = async (index: number, section: PhotoSection) => {
+    setSectionStates((prev) => ({
+      ...prev,
+      [index]: { loading: true, images: [], selected: prev[index]?.selected ?? [] },
+    }));
     try {
-      const images = await runImageExtraction(range);
-      // Paparazzi: pre-select everything — that IS the intent. Editor
-      // ticks off decorative headers / spacers if any got through.
-      setPaparazziState({ loading: false, images, selected: images.map((im) => im.url) });
+      // loose=true — photo sections are meant to be visual, so we skip
+      // the aggressive filter and let even small crops through.
+      const images = await runImageExtraction(section.estimated_page_range, { loose: true });
+      // Pre-select everything by default. Editor ticks off any
+      // decorative headers / spacers that slipped through, then Saves.
+      setSectionStates((prev) => ({
+        ...prev,
+        [index]: { loading: false, images, selected: images.map((im) => im.url) },
+      }));
     } catch (err: any) {
       const raw = err?.message || "";
       const m = raw.match(/^\d+:\s*(.*)$/);
@@ -308,8 +369,15 @@ export function PdfIngestManager() {
         const parsed = JSON.parse(msg);
         if (parsed?.error) msg = parsed.error;
       } catch {}
-      setPaparazziState({ loading: false, images: [], selected: [], error: msg });
-      toast({ title: "Paparazzi extraction failed", description: msg, variant: "destructive" });
+      setSectionStates((prev) => ({
+        ...prev,
+        [index]: { loading: false, images: [], selected: [], error: msg },
+      }));
+      toast({
+        title: `${PHOTO_SECTION_META[section.type].typeLabel} extraction failed`,
+        description: msg,
+        variant: "destructive",
+      });
     }
   };
 
@@ -377,34 +445,44 @@ export function PdfIngestManager() {
     },
   });
 
-  const publishPaparazzi = useMutation({
-    mutationFn: async () => {
-      const label = results?.paparazzi_section?.label || "Paparazzi";
-      const range = results?.paparazzi_section?.estimated_page_range;
-      const picks = paparazziState.selected;
-      if (!range) throw new Error("No paparazzi section identified");
+  const publishSection = useMutation({
+    mutationFn: async ({ section, index }: { section: PhotoSection; index: number }) => {
+      const state = sectionStates[index];
+      const picks = state?.selected ?? [];
       if (picks.length === 0) throw new Error("Select at least one photo");
-      const paparazziCategoryId =
-        categories.find((c) => c.slug === "paparazzi")?.id ||
-        categories.find((c) => c.slug.includes("paparazzi"))?.id ||
-        categoryIdBySlugHint("paparazzi") ||
+      const meta = PHOTO_SECTION_META[section.type];
+
+      const categoryId =
+        categories.find((c) => c.slug === meta.categorySlug)?.id ||
+        categories.find((c) => c.slug.includes(meta.categorySlug))?.id ||
         categories[0]?.id;
       const authorId = authorIdByName("Gallery") || authors[0]?.id;
-      if (!paparazziCategoryId) throw new Error("No 'paparazzi' category found — create one first.");
+      if (!categoryId)
+        throw new Error(`No "${meta.categorySlug}" category found — create one first.`);
       if (!authorId) throw new Error("No authors in the DB — can't save.");
-      const issueLabel = issueNumber ? ` — Gallery ${issueNumber}` : "";
-      const title = `${label}${issueLabel}`;
+
+      // Compose title. If Claude gave us a real label, prefer that;
+      // otherwise use the type label with the issue number as a
+      // suffix so drafts are always distinguishable in the list.
+      const suffix = issueNumber ? ` — Gallery ${issueNumber}` : "";
+      const title = section.label
+        ? section.label + (section.type === "paparazzi" ? suffix : "")
+        : `${meta.typeLabel}${suffix}`;
+
       const payload = {
         title,
         slug: slugify(title),
-        excerpt: "",
+        excerpt: section.caption_hint || "",
         content: "",
-        categoryId: paparazziCategoryId,
+        categoryId,
         authorId,
-        photographer: "",
+        // credits mostly relevant to fashion shoots — populate the
+        // photographer field with anything Claude captured so the
+        // editor doesn't have to re-type it.
+        photographer: section.credits || "",
         illustrator: "",
         status: "draft" as const,
-        contentType: "article" as const,
+        contentType: meta.contentType,
         featuredImage: picks[0],
         galleryImages: picks.map((url) => ({ url })),
         readTime: 1,
@@ -413,19 +491,23 @@ export function PdfIngestManager() {
         tags: [],
       };
       const res = await apiRequest("POST", "/api/articles", payload);
-      return res.json();
+      return { data: await res.json(), section, index };
     },
-    onSuccess: () => {
+    onSuccess: ({ section, index }) => {
       queryClient.invalidateQueries({
         predicate: (q) =>
           typeof q.queryKey[0] === "string" &&
           (q.queryKey[0] as string).startsWith("/api/articles"),
       });
+      const count = sectionStates[index]?.selected.length ?? 0;
       toast({
-        title: "Paparazzi gallery saved",
-        description: `${paparazziState.selected.length} photos — draft in the article list.`,
+        title: `${PHOTO_SECTION_META[section.type].typeLabel} saved`,
+        description: `${count} photos — draft in the article list.`,
       });
-      setPaparazziState({ loading: false, images: [], selected: [] });
+      setSectionStates((prev) => ({
+        ...prev,
+        [index]: { loading: false, images: [], selected: [] },
+      }));
     },
     onError: (err: any) => {
       const raw = err?.message || "";
@@ -435,7 +517,7 @@ export function PdfIngestManager() {
         const parsed = JSON.parse(msg);
         if (parsed?.error) msg = parsed.error;
       } catch {}
-      toast({ title: "Couldn't save paparazzi gallery", description: msg, variant: "destructive" });
+      toast({ title: "Couldn't save photo section", description: msg, variant: "destructive" });
     },
   });
 
@@ -554,7 +636,10 @@ export function PdfIngestManager() {
             <h3 className="text-base font-semibold">
               Extracted {remaining.length} of {results.articles.length}{" "}
               article{results.articles.length === 1 ? "" : "s"}
-              {results.paparazzi_section && " + paparazzi section"}
+              {(results.photo_sections?.length ?? 0) > 0 &&
+                ` + ${results.photo_sections.length} photo section${
+                  results.photo_sections.length === 1 ? "" : "s"
+                }`}
             </h3>
             <span className="text-xs text-muted-foreground">
               {results.usage.input_tokens.toLocaleString()} in · {results.usage.output_tokens.toLocaleString()} out ·
@@ -562,87 +647,124 @@ export function PdfIngestManager() {
             </span>
           </div>
 
-          {/* Paparazzi section — dedicated flow: extract every image
-              in the identified page range, editor prunes any false
-              positives (headers / spacers), save as one gallery-heavy
-              draft article in the paparazzi category. */}
-          {results.paparazzi_section && (
-            <Card className="border-pink-500/40" data-testid="pdf-ingest-paparazzi">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Camera className="w-4 h-4 text-pink-500" />
-                      Paparazzi section — pp {results.paparazzi_section.estimated_page_range[0]}
-                      –{results.paparazzi_section.estimated_page_range[1]}
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Extract every photo from the identified pages into a single gallery
-                      article filed under paparazzi.
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {paparazziState.images.length === 0 && !paparazziState.loading && (
-                  <Button type="button" onClick={extractPaparazzi} data-testid="pdf-ingest-paparazzi-extract">
-                    <ImagePlus className="mr-2 h-4 w-4" /> Extract paparazzi photos
-                  </Button>
-                )}
-                {paparazziState.loading && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Pulling photos from PDF…
-                  </div>
-                )}
-                {paparazziState.images.length > 0 && (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-muted-foreground">
-                        {paparazziState.selected.length}/{paparazziState.images.length} selected.
-                        Click any thumbnail to toggle. First-selected becomes the featured image.
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            setPaparazziState({ ...paparazziState, selected: paparazziState.images.map((im) => im.url) })
-                          }
-                        >
-                          Select all
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPaparazziState({ ...paparazziState, selected: [] })}
-                        >
-                          None
-                        </Button>
-                      </div>
+          {/* Photo sections — fashion shoots, events, paparazzi, and
+              portfolios. Extract-images uses loose thresholds so even
+              small crops come through; the editor prunes decorative
+              junk from the thumbnail grid before saving. Each section
+              lands as a draft with the right category + contentType
+              per PHOTO_SECTION_META. */}
+          {results.photo_sections?.map((section, sIndex) => {
+            const meta = PHOTO_SECTION_META[section.type];
+            const Icon = meta.icon;
+            const state = sectionStates[sIndex] || { loading: false, images: [], selected: [] };
+            return (
+              <Card
+                key={`section-${sIndex}`}
+                className={`${meta.accent.split(" ")[0]}`}
+                data-testid={`pdf-ingest-section-${sIndex}`}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Icon className={`w-4 h-4 ${meta.accent.split(" ")[1] || ""}`} />
+                        {meta.typeLabel}
+                        {section.label && `: ${section.label}`}
+                        <span className="text-xs font-normal text-muted-foreground ml-1">
+                          pp {section.estimated_page_range[0]}–{section.estimated_page_range[1]}
+                        </span>
+                      </CardTitle>
+                      {section.caption_hint && (
+                        <p className="text-xs text-muted-foreground mt-1">{section.caption_hint}</p>
+                      )}
+                      {section.credits && (
+                        <p className="text-xs italic text-muted-foreground mt-1">
+                          Credits: {section.credits}
+                        </p>
+                      )}
                     </div>
-                    <ThumbnailGrid
-                      state={paparazziState}
-                      onToggle={(url) => toggleImage(paparazziState, setPaparazziState, url)}
-                    />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {state.images.length === 0 && !state.loading && (
                     <Button
                       type="button"
-                      onClick={() => publishPaparazzi.mutate()}
-                      disabled={publishPaparazzi.isPending || paparazziState.selected.length === 0}
-                      data-testid="pdf-ingest-paparazzi-save"
+                      onClick={() => extractSection(sIndex, section)}
+                      data-testid={`pdf-ingest-section-extract-${sIndex}`}
                     >
-                      {publishPaparazzi.isPending ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…</>
-                      ) : (
-                        <><Check className="mr-2 h-4 w-4" /> Save paparazzi gallery ({paparazziState.selected.length})</>
-                      )}
+                      <ImagePlus className="mr-2 h-4 w-4" /> Extract photos
                     </Button>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  )}
+                  {state.loading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Pulling photos from PDF…
+                    </div>
+                  )}
+                  {state.images.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          {state.selected.length}/{state.images.length} selected.
+                          Click a thumbnail to toggle. First-selected becomes the featured image.
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setSectionStates((prev) => ({
+                                ...prev,
+                                [sIndex]: { ...state, selected: state.images.map((im) => im.url) },
+                              }))
+                            }
+                          >
+                            Select all
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setSectionStates((prev) => ({
+                                ...prev,
+                                [sIndex]: { ...state, selected: [] },
+                              }))
+                            }
+                          >
+                            None
+                          </Button>
+                        </div>
+                      </div>
+                      <ThumbnailGrid
+                        state={state}
+                        onToggle={(url) =>
+                          toggleImage(state, (next) =>
+                            setSectionStates((prev) => ({ ...prev, [sIndex]: next })),
+                            url,
+                          )
+                        }
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => publishSection.mutate({ section, index: sIndex })}
+                        disabled={publishSection.isPending || state.selected.length === 0}
+                        data-testid={`pdf-ingest-section-save-${sIndex}`}
+                      >
+                        {publishSection.isPending ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…</>
+                        ) : (
+                          <>
+                            <Check className="mr-2 h-4 w-4" /> Save {meta.typeLabel.toLowerCase()} ({state.selected.length})
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
 
           {remaining.length === 0 && (
             <div className="text-sm text-muted-foreground border border-dashed border-border rounded p-6 text-center">

@@ -53,6 +53,12 @@ interface ExtractOptions {
   /** Optional issue number — used to scope the R2 key so extracts group
    *  together in the bucket (`pdf-extracts/issue-8/...`). */
   issueNumber?: number | null;
+  /** When true, drop the aggressive dimension / byte filters and pull
+   *  effectively everything raster. Use for photo sections
+   *  (fashion shoots, paparazzi, events) where the whole point is
+   *  visual and even small crops matter — editor prunes decorative
+   *  junk from the thumbnail grid. */
+  loose?: boolean;
 }
 
 // Loosened after real-world use: 400×400 was catching too many
@@ -63,6 +69,14 @@ interface ExtractOptions {
 const DEFAULT_MIN_WIDTH = 250;
 const DEFAULT_MIN_HEIGHT = 250;
 const DEFAULT_MIN_BYTES = 15 * 1024;
+
+// Photo-section extraction (fashion shoots, paparazzi, events) pulls
+// everything visual — filters are only there to reject obvious 1px
+// separators and near-empty images. Editor prunes junk from the
+// thumbnail grid.
+const LOOSE_MIN_WIDTH = 100;
+const LOOSE_MIN_HEIGHT = 100;
+const LOOSE_MIN_BYTES = 4 * 1024;
 
 /**
  * Extract every embedded image from a PDF page range, upload each to
@@ -95,9 +109,11 @@ export async function extractImagesFromPageRange(
     throw new Error("pageRange too wide — extract at most 40 pages at once");
   }
 
-  const minWidth = opts.minWidth ?? DEFAULT_MIN_WIDTH;
-  const minHeight = opts.minHeight ?? DEFAULT_MIN_HEIGHT;
-  const minBytes = opts.minBytes ?? DEFAULT_MIN_BYTES;
+  // Loose mode swaps in the photo-section defaults. Explicit
+  // opts.min* still wins so callers can force specific thresholds.
+  const minWidth = opts.minWidth ?? (opts.loose ? LOOSE_MIN_WIDTH : DEFAULT_MIN_WIDTH);
+  const minHeight = opts.minHeight ?? (opts.loose ? LOOSE_MIN_HEIGHT : DEFAULT_MIN_HEIGHT);
+  const minBytes = opts.minBytes ?? (opts.loose ? LOOSE_MIN_BYTES : DEFAULT_MIN_BYTES);
   const issueSlug = opts.issueNumber
     ? `issue-${opts.issueNumber}`
     : "unassigned";

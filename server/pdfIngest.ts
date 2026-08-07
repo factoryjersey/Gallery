@@ -72,15 +72,29 @@ For each real feature, capture:
   • suggested_category — one of: ${CATEGORY_HINTS.join(", ")}. Pick the best fit; use "culture" as a catch-all for arts / features you can't slot elsewhere.
   • lead_image_description — one short sentence describing what image on those pages would work as the lead. You can only guess from captions + surrounding text since you don't see the images directly.
 
-Additionally, identify the PAPARAZZI section if present — Gallery Magazine has, since day one, run a section of party / society photos usually labelled "Paparazzi" or "Snapped" or "Out and About". This is typically 4-12 contiguous pages of grouped party photos with heavy caption text. If you find it, include a paparazzi_section object with its page range and the printed label. Ignore if you're not sure — false positives here mean the editor imports the wrong pages as a gallery.
+Additionally, identify any PHOTO SECTIONS — pages that are deliberately image-heavy with minimal narrative prose. These are DELIBERATE editorial content (not the "small captioned photos" you're supposed to skip in the article list above); the difference is scale and intent. Types to look for:
+
+  • fashion_shoot — an editorial fashion / beauty shoot, usually 4-8 pages of styled photography with credits at the end ("Photography by X, Styling by Y, Model Z"). The transcript will be sparse — mostly credits + one-line captions.
+  • event — coverage of a single named event (gala, launch, opening, awards), usually 1-4 pages with a header naming the event and photo captions naming attendees. NOT the general paparazzi rollup.
+  • paparazzi — the general nightlife / party rollup. Typically 4-12 contiguous pages, labelled "Paparazzi" or "Snapped" or "Out and About", covering multiple events grouped together. Only ONE per issue.
+  • portfolio — a photographer / artist portfolio feature. Rare.
+
+For each photo section, capture:
+  • type — one of the four above.
+  • estimated_page_range — [startPage, endPage]
+  • label — printed section header if present ("Paparazzi", "SS05 Denim", "Battle of the Flowers Gala"), else best-guess from context
+  • credits — for fashion_shoot only: any "Photography by / Styling by / Model" credit line. Empty string if absent or not a fashion_shoot.
+  • caption_hint — one short sentence describing what the photos appear to show, based on the caption text.
+
+Ignore if you're not sure — a false positive means the editor imports the wrong pages as a gallery.
 
 Return valid JSON, no code fences, no prose:
 {
   "articles": [ { "title": "...", "standfirst": "...", "byline": "...", "body": "...", "estimated_page_range": [n, m], "suggested_category": "...", "lead_image_description": "..." } ],
-  "paparazzi_section": { "estimated_page_range": [n, m], "label": "Paparazzi" } | null
+  "photo_sections": [ { "type": "fashion_shoot" | "event" | "paparazzi" | "portfolio", "estimated_page_range": [n, m], "label": "...", "credits": "...", "caption_hint": "..." } ]
 }
 
-If the transcript contains no extractable feature articles, return { "articles": [], "paparazzi_section": null }.`;
+If the transcript has neither feature articles nor photo sections, return { "articles": [], "photo_sections": [] }.`;
 
 export interface ExtractedArticle {
   title: string;
@@ -92,6 +106,22 @@ export interface ExtractedArticle {
   lead_image_description: string;
 }
 
+export type PhotoSectionType = "fashion_shoot" | "event" | "paparazzi" | "portfolio";
+
+export interface PhotoSection {
+  type: PhotoSectionType;
+  estimated_page_range: [number, number];
+  label: string;
+  /** Fashion-shoot credit line (photography / styling / model). Empty
+   *  for other types or when absent. */
+  credits: string;
+  /** One-sentence description of what the photos appear to show. */
+  caption_hint: string;
+}
+
+/** Kept for one deploy so any old callers referencing paparazzi_section
+ *  don't break at the moment of upgrade. Derived from the first
+ *  paparazzi entry in photo_sections if present. */
 export interface PaparazziSection {
   estimated_page_range: [number, number];
   label: string;
@@ -99,12 +129,34 @@ export interface PaparazziSection {
 
 export interface IngestResult {
   articles: ExtractedArticle[];
+  photo_sections: PhotoSection[];
   paparazzi_section: PaparazziSection | null;
   /** Raw usage from the Claude call so callers can display / log costs. */
   usage: { input_tokens: number; output_tokens: number };
   /** How many pages the PDF had, so the UI can show "extracted from N
    *  pages". Derived from the transcript's page markers. */
   page_count: number;
+}
+
+const VALID_PHOTO_TYPES = new Set<PhotoSectionType>([
+  "fashion_shoot",
+  "event",
+  "paparazzi",
+  "portfolio",
+]);
+
+/** Human-readable default when Claude omits a label. */
+function defaultLabelFor(type: PhotoSectionType): string {
+  switch (type) {
+    case "fashion_shoot":
+      return "Fashion shoot";
+    case "event":
+      return "Event";
+    case "paparazzi":
+      return "Paparazzi";
+    case "portfolio":
+      return "Portfolio";
+  }
 }
 
 /**
@@ -157,6 +209,7 @@ async function pdfToPageTranscript(pdfUrl: string): Promise<{ text: string; page
 
 function parseJsonPayload(text: string): {
   articles: ExtractedArticle[];
+  photo_sections: PhotoSection[];
   paparazzi_section: PaparazziSection | null;
 } {
   const trimmed = text.trim();
@@ -177,21 +230,46 @@ function parseJsonPayload(text: string): {
     if (!Array.isArray(parsed?.articles)) {
       throw new Error("Response missing `articles` array");
     }
-    let paparazzi: PaparazziSection | null = null;
-    const p = parsed.paparazzi_section;
-    if (
-      p &&
-      Array.isArray(p.estimated_page_range) &&
-      p.estimated_page_range.length === 2 &&
-      Number.isInteger(p.estimated_page_range[0]) &&
-      Number.isInteger(p.estimated_page_range[1])
-    ) {
-      paparazzi = {
-        estimated_page_range: [p.estimated_page_range[0], p.estimated_page_range[1]],
-        label: typeof p.label === "string" && p.label.trim() ? p.label.trim() : "Paparazzi",
-      };
+
+    // Normalise photo_sections: filter out malformed entries, coerce
+    // types to known values, ensure all required fields exist as
+    // strings so the client can trust the shape.
+    const rawSections = Array.isArray(parsed?.photo_sections)
+      ? parsed.photo_sections
+      : [];
+    const photo_sections: PhotoSection[] = [];
+    for (const s of rawSections) {
+      if (
+        !s ||
+        !VALID_PHOTO_TYPES.has(s.type) ||
+        !Array.isArray(s.estimated_page_range) ||
+        s.estimated_page_range.length !== 2 ||
+        !Number.isInteger(s.estimated_page_range[0]) ||
+        !Number.isInteger(s.estimated_page_range[1])
+      ) {
+        continue;
+      }
+      photo_sections.push({
+        type: s.type,
+        estimated_page_range: [s.estimated_page_range[0], s.estimated_page_range[1]],
+        label:
+          typeof s.label === "string" && s.label.trim()
+            ? s.label.trim()
+            : defaultLabelFor(s.type),
+        credits: typeof s.credits === "string" ? s.credits.trim() : "",
+        caption_hint: typeof s.caption_hint === "string" ? s.caption_hint.trim() : "",
+      });
     }
-    return { articles: parsed.articles, paparazzi_section: paparazzi };
+
+    // Backwards-compat: derive paparazzi_section from the first
+    // paparazzi entry in photo_sections. Old client code (pre this
+    // deploy) still reads this field.
+    const firstPap = photo_sections.find((s) => s.type === "paparazzi");
+    const paparazzi_section: PaparazziSection | null = firstPap
+      ? { estimated_page_range: firstPap.estimated_page_range, label: firstPap.label }
+      : null;
+
+    return { articles: parsed.articles, photo_sections, paparazzi_section };
   } catch (err: any) {
     console.error(
       "pdfIngest parse failed. Raw payload head:",
@@ -259,9 +337,10 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
     .map((b) => (b as { type: "text"; text: string }).text)
     .join("");
 
-  const { articles, paparazzi_section } = parseJsonPayload(raw);
+  const { articles, photo_sections, paparazzi_section } = parseJsonPayload(raw);
   return {
     articles,
+    photo_sections,
     paparazzi_section,
     usage: {
       input_tokens: response.usage.input_tokens,

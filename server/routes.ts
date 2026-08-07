@@ -253,7 +253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Response: { images: [{ url, page, seq, width, height, bytes }] }
   app.post("/api/admin/ingest-pdf/extract-images", async (req, res) => {
     try {
-      const { pdfUrl, pageRange, issueNumber } = req.body ?? {};
+      const { pdfUrl, pageRange, issueNumber, loose } = req.body ?? {};
       if (!pdfUrl || typeof pdfUrl !== "string" || !pdfUrl.trim()) {
         return res.status(400).json({ error: "pdfUrl is required" });
       }
@@ -275,6 +275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const images = await extractImagesFromPageRange(pdfUrl, pageRange as [number, number], {
         issueNumber: typeof issueNumber === "number" ? issueNumber : null,
+        loose: !!loose,
       });
       res.json({ images });
     } catch (error: any) {
