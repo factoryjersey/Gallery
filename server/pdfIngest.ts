@@ -284,17 +284,26 @@ function parseJsonPayload(text: string): {
   }
 }
 
-export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
+/** Callback the route handler passes in so ingest phases stream out
+ *  as SSE events (in addition to being logged server-side). */
+export type PhaseCallback = (name: string, extra?: Record<string, unknown>) => void;
+
+export async function ingestPdf(
+  pdfUrl: string,
+  onPhase?: PhaseCallback,
+): Promise<IngestResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not set");
   }
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const startedAt = Date.now();
-  const phase = (name: string, extra?: Record<string, unknown>) =>
+  const phase = (name: string, extra?: Record<string, unknown>) => {
     console.log(
       `[pdfIngest] ${((Date.now() - startedAt) / 1000).toFixed(1)}s ${name}` +
         (extra ? " " + JSON.stringify(extra) : ""),
     );
+    onPhase?.(name, extra);
+  };
 
   phase("start", { pdfUrl });
 

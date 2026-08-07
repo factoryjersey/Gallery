@@ -201,6 +201,10 @@ export function PdfIngestManager() {
   // multiple sections in one issue each get their own extraction /
   // selection state.
   const [sectionStates, setSectionStates] = useState<Record<number, ExtractedImagesState>>({});
+  // Latest phase reported by the server during an in-flight extract.
+  // Used by <ExtractionProgress> to show a truthful hint instead of
+  // the time-based approximation from earlier.
+  const [phaseMsg, setPhaseMsg] = useState<{ name: string; elapsed: number } | null>(null);
 
   const { data: issuesData } = useQuery<{ issues: Issue[] }>({
     queryKey: ["/api/issues"],
@@ -244,19 +248,71 @@ export function PdfIngestManager() {
 
   const ingest = useMutation({
     mutationFn: async (url: string): Promise<IngestResponse> => {
-      const res = await apiRequest("POST", "/api/admin/ingest-pdf", { pdfUrl: url });
-      // Endpoint writes a whitespace keepalive during the long Claude
-      // call — that means the response body arrives as `<spaces><json>`.
-      // JSON.parse via res.json() handles leading whitespace fine.
-      // Also: status is always 200 for the long path (headers commit
-      // before we know the outcome), so errors show up as an `error`
-      // field in the body rather than a non-2xx status — throw here
-      // so onError picks them up.
-      const data = await res.json();
-      if (data?.error) throw new Error(data.error);
-      return data;
+      // SSE endpoint — reads a stream of `event:` / `data:` blocks.
+      // Progress events land in `phaseMsg` state; the final result
+      // event resolves the promise. Errors come back as an `error`
+      // event (or a non-2xx status if the request itself failed).
+      setPhaseMsg({ name: "sending request", elapsed: 0 });
+      const res = await fetch("/api/admin/ingest-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfUrl: url }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`${res.status}: ${text || res.statusText}`);
+      }
+      if (!res.body) throw new Error("No response stream available");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult: IngestResponse | null = null;
+      let finalError: string | null = null;
+      // Parse the SSE stream one event at a time. Events are separated
+      // by a blank line (\n\n). Each event has `event:` and `data:`
+      // lines; we take the JSON off the data line.
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep;
+        while ((sep = buffer.indexOf("\n\n")) !== -1) {
+          const block = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          if (!block.trim()) continue;
+          let eventName = "message";
+          let dataStr = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+          }
+          if (!dataStr) continue;
+          let data: any;
+          try {
+            data = JSON.parse(dataStr);
+          } catch {
+            continue;
+          }
+          if (eventName === "phase") {
+            setPhaseMsg({ name: data.name, elapsed: data.elapsed ?? 0 });
+          } else if (eventName === "heartbeat") {
+            setPhaseMsg((prev) =>
+              prev ? { ...prev, elapsed: data.elapsed ?? prev.elapsed } : prev,
+            );
+          } else if (eventName === "result") {
+            finalResult = data as IngestResponse;
+          } else if (eventName === "error") {
+            finalError = data?.message || "Extraction failed";
+          }
+        }
+      }
+      if (finalError) throw new Error(finalError);
+      if (!finalResult) throw new Error("Server stream ended without a result event");
+      return finalResult;
     },
     onSuccess: (data) => {
+      setPhaseMsg(null);
       setResults(data);
       setDismissed(new Set());
       setEdits({});
@@ -266,6 +322,7 @@ export function PdfIngestManager() {
       });
     },
     onError: (err: any) => {
+      setPhaseMsg(null);
       const raw = err?.message || "";
       const m = raw.match(/^\d+:\s*(.*)$/);
       let msg = m ? m[1] : raw;
@@ -625,7 +682,7 @@ export function PdfIngestManager() {
                 </a>
               )}
             </div>
-            {ingest.isPending && <ExtractionProgress />}
+            {ingest.isPending && <ExtractionProgress phase={phaseMsg} />}
           </div>
         </CardContent>
       </Card>
@@ -943,33 +1000,40 @@ export function PdfIngestManager() {
  *  running, and it's been running for X seconds") while the hint
  *  message shifts to describe the likely current phase so the editor
  *  isn't staring at a spinner wondering if it hung. */
-function ExtractionProgress() {
-  const [elapsed, setElapsed] = useState(0);
+/** Human-readable label for each server-side phase name. Anything we
+ *  don't recognise falls through as-is. */
+const PHASE_LABELS: Record<string, string> = {
+  "sending request": "Sending request to the server…",
+  start: "Fetching the PDF from R2…",
+  "pdftotext done": "PDF text layer read. Sending to Claude…",
+  "claude call opening": "Waiting for Claude to read the transcript…",
+  "claude call done": "Claude returned. Parsing results…",
+};
+
+function ExtractionProgress({
+  phase,
+}: {
+  /** Server-side phase state fed in from the ingest mutation. When
+   *  null, we fall back to a plain "starting" message. */
+  phase: { name: string; elapsed: number } | null;
+}) {
+  // Fallback elapsed counter — the server's heartbeat updates
+  // phase.elapsed every 5s, but we tick locally in between so the
+  // counter feels alive.
+  const [localElapsed, setLocalElapsed] = useState(0);
   useEffect(() => {
-    const id = window.setInterval(() => setElapsed((s) => s + 1), 1000);
+    setLocalElapsed(Math.floor(phase?.elapsed ?? 0));
+    const id = window.setInterval(() => setLocalElapsed((s) => s + 1), 1000);
     return () => window.clearInterval(id);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase?.name]);
 
-  // Approximate phase timings from watching typical runs on issue 8:
-  //   0-5s  : fetching PDF from R2 + running pdftotext
-  //   5-15s : sending transcript to Claude, waiting for first token
-  //   15s+  : Claude generating the JSON payload (bulk of runtime)
-  //   90s+  : whatever we're doing is taking longer than expected —
-  //           usually still working, but worth flagging to the editor
-  //           so they don't assume it's dead
-  const hint =
-    elapsed < 5
-      ? "Downloading the PDF from R2…"
-      : elapsed < 15
-        ? "Reading the PDF's text layer…"
-        : elapsed < 90
-          ? "Sending to Claude and waiting for structured extraction…"
-          : elapsed < 180
-            ? "Still going — a full issue can take 2–3 minutes."
-            : "Taking longer than expected — Claude might be having a slow moment.";
-
-  const mm = String(Math.floor(elapsed / 60)).padStart(1, "0");
-  const ss = String(elapsed % 60).padStart(2, "0");
+  const shown = Math.max(localElapsed, Math.floor(phase?.elapsed ?? 0));
+  const hint = phase
+    ? PHASE_LABELS[phase.name] ?? phase.name
+    : "Starting…";
+  const mm = String(Math.floor(shown / 60));
+  const ss = String(shown % 60).padStart(2, "0");
 
   return (
     <div
@@ -978,7 +1042,7 @@ function ExtractionProgress() {
     >
       <span
         className="font-mono tabular-nums font-medium text-foreground"
-        aria-label={`${elapsed} seconds elapsed`}
+        aria-label={`${shown} seconds elapsed`}
       >
         {mm}:{ss}
       </span>

@@ -209,38 +209,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "pdfUrl must be a valid URL" });
     }
 
-    // Long-running phase — the Claude call routinely takes 60-180
-    // seconds. Railway's edge proxy (and most others) kill idle HTTP
-    // responses after ~60-100s, so we commit headers early and write a
-    // whitespace byte every 15s to keep the connection warm. The
-    // final res.end() writes the actual JSON body, which parses fine
-    // even with leading whitespace (JSON.parse ignores it).
+    // Long-running phase — the Claude call takes 60-200+ seconds. The
+    // earlier whitespace-keepalive approach worked in theory but
+    // Railway's edge proxy buffered the JSON response type and killed
+    // the connection despite our writes. Switching to SSE
+    // (text/event-stream) since proxies universally recognise
+    // event-stream as "pass through immediately, don't buffer" — plus
+    // it gives us real progress events instead of client-side guessing.
     //
-    // Status is left at 200 unconditionally because we can't change
-    // it after the first res.write — errors are surfaced by the
-    // presence of an `error` field in the JSON body instead.
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.write(" ");
-    const keepalive = setInterval(() => {
+    // Wire format:
+    //   event: phase       data: {name, elapsed, ...}
+    //   event: heartbeat   data: {elapsed}
+    //   event: result      data: {articles, photo_sections, usage, page_count}
+    //   event: error       data: {message}
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    // nginx-style hint asking any intermediate proxy not to buffer.
+    // Cheap belt-and-braces even if the event-stream content-type
+    // should be enough on its own.
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof (res as any).flushHeaders === "function") {
+      (res as any).flushHeaders();
+    }
+
+    const startedAt = Date.now();
+    const send = (event: string, data: unknown) => {
       try {
-        res.write(" ");
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       } catch {
-        /* connection already closed — the interval will get cleared
-           in the outer try/finally below. */
+        /* connection already closed */
       }
-    }, 15_000);
+    };
+    // Heartbeat every 5s so any intermediate proxy sees fresh bytes
+    // well within its idle timeout. Cheap — a dozen extra tiny writes
+    // across a 200s call.
+    const heartbeat = setInterval(() => {
+      send("heartbeat", { elapsed: Math.round((Date.now() - startedAt) / 1000) });
+    }, 5_000);
 
     try {
-      const result = await ingestPdf(pdfUrl);
-      res.end(JSON.stringify(result));
+      send("phase", { name: "starting", elapsed: 0 });
+      const result = await ingestPdf(pdfUrl, (name, extra) =>
+        send("phase", { name, elapsed: (Date.now() - startedAt) / 1000, ...(extra || {}) }),
+      );
+      send("result", result);
     } catch (error: any) {
       console.error("ingest-pdf failed:", error?.message || error);
       const message = error?.message?.includes("ANTHROPIC_API_KEY")
         ? "PDF ingestion isn't configured — ANTHROPIC_API_KEY is missing on the server"
         : error?.message || "PDF ingestion failed — try again";
-      res.end(JSON.stringify({ error: message }));
+      send("error", { message });
     } finally {
-      clearInterval(keepalive);
+      clearInterval(heartbeat);
+      res.end();
     }
   });
 
