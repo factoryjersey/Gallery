@@ -536,7 +536,6 @@ export function PdfIngestManager() {
             </div>
             {ingest.isPending && <ExtractionProgress />}
           </div>
-          </div>
         </CardContent>
       </Card>
 
