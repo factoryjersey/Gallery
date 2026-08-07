@@ -233,10 +233,50 @@ export function PdfIngestManager() {
     return match?.id;
   };
 
-  // Fuzzy match the extracted byline to an existing author row.
-  // Exact-name first, then normalised match (case + spaces).
-  const authorIdByName = (name: string): string | undefined => {
-    const clean = (name || "").trim();
+  /**
+   * Clean a raw byline string into a plain name. Handles the ways
+   * magazine bylines get printed:
+   *   "By John Smith"                → "John Smith"
+   *   "Words by Anna Le Brun"        → "Anna Le Brun"
+   *   "Interview by Jane Doe"        → "Jane Doe"
+   *   "Text and photography by X"    → "X"
+   *   "John Smith reports"           → "John Smith"
+   *   "John Smith | @jsmith"         → "John Smith"
+   *   "JOHN SMITH"                   → "John Smith" (title-cased on save;
+   *                                    matched case-insensitively)
+   * Returns empty string for anything unparseable.
+   */
+  const cleanByline = (raw: string): string => {
+    let name = (raw || "").trim();
+    if (!name) return "";
+    // Drop everything after a pipe / bullet / em-dash — usually a
+    // handle or role suffix.
+    name = name.split(/[|•—]/)[0].trim();
+    // Strip prefixed roles ("By", "Words by", "Interview by",
+    // "Text by", "Photography by", "Reported by").
+    name = name.replace(
+      /^(?:by|words\s+by|interview\s+by|text\s+by|photography\s+by|reported\s+by|text\s+and\s+photography\s+by|photos\s+and\s+words\s+by)\s+/i,
+      "",
+    );
+    // Strip trailing "reports" / "writes" / etc.
+    name = name.replace(/\s+(?:reports?|writes?)\.?\s*$/i, "");
+    // Collapse whitespace and trim again after stripping.
+    name = name.replace(/\s+/g, " ").trim();
+    // Reject if it's now nothing, or clearly not a name (all-caps
+    // section labels like "GALLERY" sometimes end up here from the
+    // pdftotext transcript).
+    if (!name || name.length < 3 || name.length > 80) return "";
+    return name;
+  };
+
+  /**
+   * Match a byline to an existing author row. Cleans the byline first,
+   * then tries exact match, then case-insensitive normalised match.
+   * Returns the author id if found, or undefined so the caller can
+   * decide whether to create one.
+   */
+  const authorIdByName = (rawName: string): string | undefined => {
+    const clean = cleanByline(rawName);
     if (!clean) return undefined;
     let match = authors.find((a) => a.name === clean);
     if (!match) {
@@ -244,6 +284,20 @@ export function PdfIngestManager() {
       match = authors.find((a) => a.name.toLowerCase().replace(/\s+/g, " ") === norm);
     }
     return match?.id;
+  };
+
+  /**
+   * Create an author row on the fly for a byline we don't recognise.
+   * Server auto-generates the slug from the name (see storage.createAuthor).
+   * Returns the new author id — throws on network failure so the
+   * caller can fall back to authors[0].
+   */
+  const createAuthorFromByline = async (rawName: string): Promise<string | undefined> => {
+    const name = cleanByline(rawName);
+    if (!name) return undefined;
+    const res = await apiRequest("POST", "/api/authors", { name });
+    const data = await res.json();
+    return data?.author?.id;
   };
 
   const ingest = useMutation({
@@ -449,7 +503,27 @@ export function PdfIngestManager() {
       const merged = { ...article, ...edits[i] } as ExtractedArticle;
       const categoryId =
         categoryIdBySlugHint(merged.suggested_category) || categories[0]?.id;
-      const authorId = authorIdByName(merged.byline) || authors[0]?.id;
+      // Author resolution ladder:
+      //   1. Match the cleaned byline against an existing author.
+      //   2. No match + non-empty byline → create a new author on the
+      //      fly so old contributors get real rows (better than
+      //      attributing everything to authors[0]).
+      //   3. Empty byline → fall back to authors[0] (usually the
+      //      house account) since we need SOMETHING to satisfy the
+      //      NOT NULL author_id column.
+      let authorId = authorIdByName(merged.byline);
+      const cleanedByline = cleanByline(merged.byline);
+      if (!authorId && cleanedByline) {
+        try {
+          authorId = await createAuthorFromByline(merged.byline);
+          // Refresh the authors list so subsequent saves in the same
+          // session see the new author (and the badges recolour).
+          queryClient.invalidateQueries({ queryKey: ["/api/authors"] });
+        } catch (err) {
+          console.warn("Auto-create author failed, falling back:", err);
+        }
+      }
+      if (!authorId) authorId = authors[0]?.id;
       if (!categoryId) throw new Error("No categories in the DB — can't save.");
       if (!authorId) throw new Error("No authors in the DB — can't save.");
       const words = wordCount(merged.body);
