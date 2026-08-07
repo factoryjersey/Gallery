@@ -31,17 +31,12 @@ import CategoryList from "@/components/CategoryList";
 import { CategoryHierarchyUpdater } from "@/components/CategoryHierarchyUpdater";
 import AuthorList from "@/components/AuthorList";
 import PeopleManager from "@/components/PeopleManager";
-import WordPressImporter from "@/components/WordPressImporter";
-import WordPressDBMigration from "@/components/WordPressDBMigration";
-import WordPressAuthorUpdater from "@/components/WordPressAuthorUpdater";
 import { MediaManager } from "@/components/MediaManager";
 import { MediaIndexing } from "@/components/MediaIndexing";
-import { WPSync } from "@/components/WPSync";
 import { FeaturedStoriesManager } from "@/components/FeaturedStoriesManager";
 import { PdfIngestManager } from "@/components/PdfIngestManager";
 import { SplashSlidesManager } from "@/components/SplashSlidesManager";
 import { CartoonsManager } from "@/components/CartoonsManager";
-import { DataMigration } from "@/components/DataMigration";
 import IssuesManager from "@/components/IssuesManager";
 import { ContributorsManager } from "@/components/ContributorsManager";
 import { PageViewsReport } from "@/components/PageViewsReport";
@@ -269,18 +264,6 @@ export default function Admin() {
                   Storage & Indexing
                 </button>
                 <button
-                  onClick={() => setActiveTab("import")}
-                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
-                    activeTab === "import" 
-                      ? "bg-primary text-primary-foreground" 
-                      : "text-foreground hover:bg-accent"
-                  }`}
-                  data-testid="nav-import"
-                >
-                  <Upload className="w-5 h-5 mr-3" />
-                  WordPress Import
-                </button>
-                <button
                   onClick={() => setActiveTab("featured")}
                   className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
                     activeTab === "featured"
@@ -327,30 +310,6 @@ export default function Admin() {
                 >
                   <Pencil className="w-5 h-5 mr-3" />
                   Cartoons
-                </button>
-                <button
-                  onClick={() => setActiveTab("migration")}
-                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
-                    activeTab === "migration"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-foreground hover:bg-accent"
-                  }`}
-                  data-testid="nav-migration"
-                >
-                  <Database className="w-5 h-5 mr-3" />
-                  Data Migration
-                </button>
-                <button
-                  onClick={() => setActiveTab("sync")}
-                  className={`w-full flex items-center px-4 py-3 rounded font-medium text-left ${
-                    activeTab === "sync" 
-                      ? "bg-primary text-primary-foreground" 
-                      : "text-foreground hover:bg-accent"
-                  }`}
-                  data-testid="nav-sync"
-                >
-                  <RefreshCw className="w-5 h-5 mr-3" />
-                  Live Sync
                 </button>
                 <button
                   onClick={() => setActiveTab("issues")}
@@ -569,33 +528,6 @@ export default function Admin() {
                 )
               )}
 
-              {activeTab === "import" && (
-                <div className="space-y-6">
-                  <Tabs defaultValue="xml" data-testid="import-tabs">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="xml" data-testid="tab-xml-import">
-                        Full Import
-                      </TabsTrigger>
-                      <TabsTrigger value="authors" data-testid="tab-authors-update">
-                        Update Authors
-                      </TabsTrigger>
-                      <TabsTrigger value="database" data-testid="tab-db-import">
-                        Database Migration
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="xml" data-testid="xml-import-content">
-                      <WordPressImporter />
-                    </TabsContent>
-                    <TabsContent value="authors" data-testid="authors-update-content">
-                      <WordPressAuthorUpdater />
-                    </TabsContent>
-                    <TabsContent value="database" data-testid="db-import-content">
-                      <WordPressDBMigration />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              )}
-
               {activeTab === "categories" && (
                 <div className="space-y-6">
                   <CategoryHierarchyUpdater />
@@ -629,14 +561,6 @@ export default function Admin() {
 
               {activeTab === "cartoons" && (
                 <CartoonsManager />
-              )}
-
-              {activeTab === "migration" && (
-                <DataMigration />
-              )}
-
-              {activeTab === "sync" && (
-                <WPSync />
               )}
 
               {activeTab === "issues" && (
