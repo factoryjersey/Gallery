@@ -55,9 +55,14 @@ interface ExtractOptions {
   issueNumber?: number | null;
 }
 
-const DEFAULT_MIN_WIDTH = 400;
-const DEFAULT_MIN_HEIGHT = 400;
-const DEFAULT_MIN_BYTES = 25 * 1024;
+// Loosened after real-world use: 400×400 was catching too many
+// legitimate small photos (crop-outs, sidebar portraits, product
+// shots). 250×250 still filters obvious decorative icons and rule
+// graphics but lets more real content through — the editor can
+// untick any decorative junk with one click in the thumbnail grid.
+const DEFAULT_MIN_WIDTH = 250;
+const DEFAULT_MIN_HEIGHT = 250;
+const DEFAULT_MIN_BYTES = 15 * 1024;
 
 /**
  * Extract every embedded image from a PDF page range, upload each to
