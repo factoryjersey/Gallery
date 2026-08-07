@@ -14,7 +14,10 @@ import Anthropic from "@anthropic-ai/sdk";
  */
 
 const MODEL = "claude-sonnet-5";
-const MAX_OUTPUT_TOKENS = 16_384;
+// 64k output is well within Claude 5 Sonnet's ceiling and gives us
+// headroom for a full-issue extraction (many features + long bodies +
+// verbatim quotes). At 16k we saw truncated JSON on a modest 2005 issue.
+const MAX_OUTPUT_TOKENS = 64_000;
 
 // Categories the editor uses today — we ask Claude to pick from this
 // list rather than invent free-form ones so the mapping to our
@@ -102,8 +105,21 @@ function parseJsonPayload(text: string): {
   paparazzi_section: PaparazziSection | null;
 } {
   const trimmed = text.trim();
-  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]+?)\s*```$/);
-  const raw = fenceMatch ? fenceMatch[1] : trimmed;
+  // Robust extraction: find the first `{` and the LAST `}` anywhere
+  // in the response. Handles all the ways Claude can wrap the payload:
+  //   1. Raw JSON (best case)
+  //   2. Code-fenced (```json … ```)
+  //   3. Prose preamble + JSON + trailing prose
+  //   4. Fence-started but truncated response (no closing fence)
+  // Falls back to the whole trimmed text if we can't find braces,
+  // which lets JSON.parse produce a more informative error than our
+  // brace-hunting logic would.
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  const raw =
+    firstBrace !== -1 && lastBrace > firstBrace
+      ? trimmed.slice(firstBrace, lastBrace + 1)
+      : trimmed;
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed?.articles)) {
@@ -127,7 +143,19 @@ function parseJsonPayload(text: string): {
     }
     return { articles: parsed.articles, paparazzi_section: paparazzi };
   } catch (err: any) {
-    throw new Error(`Couldn't parse Claude's JSON: ${err?.message || err}`);
+    // Log the raw payload so we can eyeball what Claude actually
+    // returned when parsing fails on the next issue. Truncated to
+    // keep logs sane; full response goes to console for local repro.
+    console.error(
+      "pdfIngest parse failed. Raw payload head:",
+      text.slice(0, 500),
+      "\n… tail:",
+      text.slice(-300),
+    );
+    throw new Error(
+      `Couldn't parse Claude's JSON (${err?.message || err}). ` +
+        `Response was ${text.length} chars — likely truncated at max_tokens or malformed.`,
+    );
   }
 }
 
@@ -156,14 +184,19 @@ export async function ingestPdf(pdfUrl: string): Promise<IngestResult> {
           },
         ],
       },
+      // Prefill the assistant's response with the opening brace so
+      // Claude has to continue in JSON mode — no room to preface with
+      // "Here's the extracted data:" or wrap in ```json ... ```.
+      { role: "assistant", content: "{" },
     ],
   });
 
-  const text = response.content
+  const rawResponse = response.content
     .filter((b) => b.type === "text")
     .map((b) => (b as { type: "text"; text: string }).text)
-    .join("")
-    .trim();
+    .join("");
+  // Prepend the prefilled brace so parseJsonPayload sees complete JSON.
+  const text = "{" + rawResponse;
 
   const { articles, paparazzi_section } = parseJsonPayload(text);
   return {
