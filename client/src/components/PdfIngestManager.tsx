@@ -194,7 +194,16 @@ export function PdfIngestManager() {
   const ingest = useMutation({
     mutationFn: async (url: string): Promise<IngestResponse> => {
       const res = await apiRequest("POST", "/api/admin/ingest-pdf", { pdfUrl: url });
-      return res.json();
+      // Endpoint writes a whitespace keepalive during the long Claude
+      // call — that means the response body arrives as `<spaces><json>`.
+      // JSON.parse via res.json() handles leading whitespace fine.
+      // Also: status is always 200 for the long path (headers commit
+      // before we know the outcome), so errors show up as an `error`
+      // field in the body rather than a non-2xx status — throw here
+      // so onError picks them up.
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
+      return data;
     },
     onSuccess: (data) => {
       setResults(data);

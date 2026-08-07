@@ -191,34 +191,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // output_tokens } } — usage is surfaced so the editor can see the
   // rough cost per extraction (~$0.30-0.60 per issue).
   app.post("/api/admin/ingest-pdf", async (req, res) => {
+    // Validation phase — check before touching the response stream so
+    // we can still return a proper 400 with JSON body on bad input.
+    const pdfUrl = req.body?.pdfUrl;
+    if (!pdfUrl || typeof pdfUrl !== "string" || !pdfUrl.trim()) {
+      return res.status(400).json({ error: "pdfUrl is required" });
+    }
     try {
-      const pdfUrl = req.body?.pdfUrl;
-      if (!pdfUrl || typeof pdfUrl !== "string" || !pdfUrl.trim()) {
-        return res.status(400).json({ error: "pdfUrl is required" });
+      const parsed = new URL(pdfUrl);
+      const host = parsed.host;
+      if (!host.endsWith(".r2.dev") && !host.endsWith(".r2.cloudflarestorage.com")) {
+        return res.status(400).json({
+          error: "pdfUrl must point at our own R2 bucket (an *.r2.dev URL).",
+        });
       }
-      // Guard against arbitrary URL fetches — only allow our own R2
-      // origin so we can't be tricked into pulling and paying to
-      // process someone else's PDF.
-      try {
-        const parsed = new URL(pdfUrl);
-        const host = parsed.host;
-        if (!host.endsWith(".r2.dev") && !host.endsWith(".r2.cloudflarestorage.com")) {
-          return res.status(400).json({
-            error: "pdfUrl must point at our own R2 bucket (an *.r2.dev URL).",
-          });
-        }
-      } catch {
-        return res.status(400).json({ error: "pdfUrl must be a valid URL" });
-      }
+    } catch {
+      return res.status(400).json({ error: "pdfUrl must be a valid URL" });
+    }
 
+    // Long-running phase — the Claude call routinely takes 60-180
+    // seconds. Railway's edge proxy (and most others) kill idle HTTP
+    // responses after ~60-100s, so we commit headers early and write a
+    // whitespace byte every 15s to keep the connection warm. The
+    // final res.end() writes the actual JSON body, which parses fine
+    // even with leading whitespace (JSON.parse ignores it).
+    //
+    // Status is left at 200 unconditionally because we can't change
+    // it after the first res.write — errors are surfaced by the
+    // presence of an `error` field in the JSON body instead.
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.write(" ");
+    const keepalive = setInterval(() => {
+      try {
+        res.write(" ");
+      } catch {
+        /* connection already closed — the interval will get cleared
+           in the outer try/finally below. */
+      }
+    }, 15_000);
+
+    try {
       const result = await ingestPdf(pdfUrl);
-      res.json(result);
+      res.end(JSON.stringify(result));
     } catch (error: any) {
       console.error("ingest-pdf failed:", error?.message || error);
       const message = error?.message?.includes("ANTHROPIC_API_KEY")
         ? "PDF ingestion isn't configured — ANTHROPIC_API_KEY is missing on the server"
         : error?.message || "PDF ingestion failed — try again";
-      res.status(500).json({ error: message });
+      res.end(JSON.stringify({ error: message }));
+    } finally {
+      clearInterval(keepalive);
     }
   });
 
