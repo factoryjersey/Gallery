@@ -23,6 +23,7 @@ import {
 } from "./featureImport";
 import { getSitemapData, renderSitemapXml, renderRobotsTxt } from "./sitemap";
 import { generateExcerpt } from "./aiExcerpt";
+import { ingestPdf } from "./pdfIngest";
 import { ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -173,6 +174,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error?.message?.includes("ANTHROPIC_API_KEY")
           ? "AI excerpt drafting isn't configured — ANTHROPIC_API_KEY is missing on the server"
           : "Failed to generate excerpt — try again";
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // PDF ingestion — Claude 5 Sonnet reads the whole PDF and returns
+  // structured JSON of every main feature article (skip snippets, ads,
+  // etc). Nothing publishes here; the admin gets a preview panel and
+  // publishes per-article after review.
+  //
+  // Body: { pdfUrl: string } — absolute URL to the PDF, typically an
+  // R2 URL from the issues table.
+  //
+  // Response: { articles: ExtractedArticle[], usage: { input_tokens,
+  // output_tokens } } — usage is surfaced so the editor can see the
+  // rough cost per extraction (~$0.30-0.60 per issue).
+  app.post("/api/admin/ingest-pdf", async (req, res) => {
+    try {
+      const pdfUrl = req.body?.pdfUrl;
+      if (!pdfUrl || typeof pdfUrl !== "string" || !pdfUrl.trim()) {
+        return res.status(400).json({ error: "pdfUrl is required" });
+      }
+      // Guard against arbitrary URL fetches — only allow our own R2
+      // origin so we can't be tricked into pulling and paying to
+      // process someone else's PDF.
+      try {
+        const parsed = new URL(pdfUrl);
+        const host = parsed.host;
+        if (!host.endsWith(".r2.dev") && !host.endsWith(".r2.cloudflarestorage.com")) {
+          return res.status(400).json({
+            error: "pdfUrl must point at our own R2 bucket (an *.r2.dev URL).",
+          });
+        }
+      } catch {
+        return res.status(400).json({ error: "pdfUrl must be a valid URL" });
+      }
+
+      const result = await ingestPdf(pdfUrl);
+      res.json(result);
+    } catch (error: any) {
+      console.error("ingest-pdf failed:", error?.message || error);
+      const message = error?.message?.includes("ANTHROPIC_API_KEY")
+        ? "PDF ingestion isn't configured — ANTHROPIC_API_KEY is missing on the server"
+        : error?.message || "PDF ingestion failed — try again";
       res.status(500).json({ error: message });
     }
   });
