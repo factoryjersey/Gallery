@@ -259,7 +259,9 @@ function mergeChunkResults(
     }
   }
   return {
-    articles: [...articlesByTitle.values()],
+    // Array.from — the tsconfig target predates iterator spread, so
+    // [...map.values()] trips TS2802 even though esbuild handles it.
+    articles: Array.from(articlesByTitle.values()),
     photo_sections: bySection,
   };
 }
