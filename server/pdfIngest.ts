@@ -323,37 +323,73 @@ export async function ingestPdf(
   // is now text-only and much faster than the vision-heavy whole-PDF
   // path, but 60s+ is realistic for full-issue extraction so streaming
   // is still the safe path.
+  //
+  // Wrap the whole "call Claude → parse JSON" in a retry-once so a
+  // single flaky response (Claude echoing back the transcript instead
+  // of returning JSON, occasional stream aborts, transient 5xxs)
+  // doesn't fail an entire batch-imported issue. Also enforce a hard
+  // 6-minute per-attempt timeout via AbortSignal — the previous
+  // Claude stream would occasionally hang indefinitely, forcing the
+  // batch script user to Ctrl+C and manually resume.
+  const PER_ATTEMPT_TIMEOUT_MS = 6 * 60 * 1000;
+
+  const callAndParse = async (attempt: number) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
+    try {
+      const stream = client.messages.stream(
+        {
+          model: MODEL,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          system: SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: `Here is the text transcript of the magazine. Extract main features per the schema; return JSON only.\n\n${transcript}`,
+            },
+          ],
+        },
+        { signal: controller.signal },
+      );
+      const response = await stream.finalMessage();
+      phase(attempt === 1 ? "claude call done" : `claude call done (attempt ${attempt})`, {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      });
+      const raw = response.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("");
+      const parsed = parseJsonPayload(raw);
+      return { parsed, usage: response.usage };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   phase("claude call opening");
-  const stream = client.messages.stream({
-    model: MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Here is the text transcript of the magazine. Extract main features per the schema; return JSON only.\n\n${transcript}`,
-      },
-    ],
-  });
-  const response = await stream.finalMessage();
-  phase("claude call done", {
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-  });
+  let result: { parsed: ReturnType<typeof parseJsonPayload>; usage: { input_tokens: number; output_tokens: number } };
+  try {
+    result = await callAndParse(1);
+  } catch (err: any) {
+    // Log and retry once. Retry catches the two most common failure
+    // shapes: Claude echoing back the transcript instead of JSON
+    // (parseJsonPayload throws), and the stream aborting or hitting
+    // the per-attempt timeout above. If the retry ALSO fails, throw
+    // whichever error occurred second — the caller decides how to
+    // surface it (batch script logs + moves on; the admin UI toasts).
+    const kind = err?.name === "AbortError" ? "timeout" : "error";
+    phase(`claude call ${kind}, retrying once`, { error: String(err?.message || err).slice(0, 200) });
+    result = await callAndParse(2);
+  }
 
-  const raw = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as { type: "text"; text: string }).text)
-    .join("");
-
-  const { articles, photo_sections, paparazzi_section } = parseJsonPayload(raw);
   return {
-    articles,
-    photo_sections,
-    paparazzi_section,
+    articles: result.parsed.articles,
+    photo_sections: result.parsed.photo_sections,
+    paparazzi_section: result.parsed.paparazzi_section,
     usage: {
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
+      input_tokens: result.usage.input_tokens,
+      output_tokens: result.usage.output_tokens,
     },
     page_count: pageCount,
   };
