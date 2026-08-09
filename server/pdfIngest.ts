@@ -159,14 +159,18 @@ function defaultLabelFor(type: PhotoSectionType): string {
   }
 }
 
+interface Page {
+  page: number;
+  text: string;
+}
+
 /**
- * Download the PDF and run `pdftotext -layout` on it. The `-layout`
- * flag preserves the visual arrangement (columns, indents) which reads
- * more naturally to the language model than the default flat text
- * mode. Returns the plain-text transcript with page markers so Claude
- * can attribute articles to page ranges.
+ * Download the PDF and run `pdftotext -layout` on it. Returns one
+ * entry per non-empty page (blank pages dropped) so the caller can
+ * chunk by page range. Also returns the total page count for progress
+ * reporting.
  */
-async function pdfToPageTranscript(pdfUrl: string): Promise<{ text: string; pageCount: number }> {
+async function pdfToPages(pdfUrl: string): Promise<{ pages: Page[]; pageCount: number }> {
   const res = await fetch(pdfUrl);
   if (!res.ok) throw new Error(`PDF fetch failed: ${res.status} ${res.statusText}`);
   const buf = Buffer.from(await res.arrayBuffer());
@@ -174,37 +178,90 @@ async function pdfToPageTranscript(pdfUrl: string): Promise<{ text: string; page
   const pdfPath = path.join(dir, "input.pdf");
   await writeFile(pdfPath, buf);
   try {
-    // First, discover the page count via pdfinfo. We could infer it
-    // from the -layout output but this is more reliable and cheap.
     const { stdout: infoOut } = await execFileP("pdfinfo", [pdfPath]);
     const match = infoOut.match(/^Pages:\s+(\d+)/m);
     const pageCount = match ? Number(match[1]) : 0;
     if (!pageCount) {
       throw new Error("Couldn't read the PDF page count via pdfinfo — is it a real PDF?");
     }
-
-    // Extract text page-by-page so we can wrap each with a PAGE N
-    // marker. `pdftotext -layout -f N -l N` scopes to a single page.
-    // Alternative: single call + split on \f (form feed), which
-    // pdftotext emits between pages. Cheaper and one shell round-trip.
     const outPath = path.join(dir, "input.txt");
     await execFileP("pdftotext", ["-layout", pdfPath, outPath]);
     const wholeText = await readFile(outPath, "utf8");
-    // Poppler separates pages with a form-feed (0x0C). If the PDF is
-    // one long stream (no form feeds — rare, but possible for some
-    // exports), fall back to a single "PAGE 1" wrap.
-    const pages = wholeText.split("\f");
-    const markedPages = pages
-      .map((page, i) => {
-        const trimmed = page.replace(/\s+$/g, "");
-        if (!trimmed.trim()) return null; // skip blank pages
-        return `===== PAGE ${i + 1} =====\n${trimmed}`;
-      })
-      .filter(Boolean);
-    return { text: markedPages.join("\n\n"), pageCount };
+    // Poppler separates pages with a form-feed (0x0C).
+    const rawPages = wholeText.split("\f");
+    const pages: Page[] = [];
+    for (let i = 0; i < rawPages.length; i++) {
+      const trimmed = rawPages[i].replace(/\s+$/g, "");
+      if (!trimmed.trim()) continue; // skip blank pages
+      pages.push({ page: i + 1, text: trimmed });
+    }
+    return { pages, pageCount };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+/**
+ * Wrap a set of pages into a transcript string with per-page markers,
+ * ready to send to Claude.
+ */
+function pagesToTranscript(pages: Page[]): string {
+  return pages
+    .map((p) => `===== PAGE ${p.page} =====\n${p.text}`)
+    .join("\n\n");
+}
+
+/**
+ * Merge extraction results from multiple chunks into one deduplicated
+ * result. Articles are deduped by normalised title (chunk overlap can
+ * cause the same article to appear in adjacent chunks); we keep the
+ * entry with the longest body. Photo sections are deduped by
+ * overlapping page ranges of the same type.
+ */
+function mergeChunkResults(
+  chunks: Array<{ articles: ExtractedArticle[]; photo_sections: PhotoSection[] }>,
+): { articles: ExtractedArticle[]; photo_sections: PhotoSection[] } {
+  const normTitle = (s: string) =>
+    s.toLowerCase().replace(/\s+/g, " ").trim();
+  const articlesByTitle = new Map<string, ExtractedArticle>();
+  for (const chunk of chunks) {
+    for (const a of chunk.articles) {
+      const key = normTitle(a.title);
+      const existing = articlesByTitle.get(key);
+      if (!existing || (a.body?.length ?? 0) > (existing.body?.length ?? 0)) {
+        articlesByTitle.set(key, a);
+      }
+    }
+  }
+  // Photo sections: dedupe by type + overlapping page range. Two
+  // paparazzi sections whose ranges touch or overlap merge into one
+  // spanning the union.
+  const bySection: PhotoSection[] = [];
+  for (const chunk of chunks) {
+    outer: for (const s of chunk.photo_sections) {
+      for (const existing of bySection) {
+        if (existing.type !== s.type) continue;
+        const [aStart, aEnd] = existing.estimated_page_range;
+        const [bStart, bEnd] = s.estimated_page_range;
+        // Ranges overlap or touch (within 1 page).
+        if (bStart <= aEnd + 1 && bEnd >= aStart - 1) {
+          existing.estimated_page_range = [
+            Math.min(aStart, bStart),
+            Math.max(aEnd, bEnd),
+          ];
+          if (!existing.label && s.label) existing.label = s.label;
+          if (!existing.credits && s.credits) existing.credits = s.credits;
+          if (!existing.caption_hint && s.caption_hint) existing.caption_hint = s.caption_hint;
+          continue outer;
+        }
+      }
+      bySection.push({ ...s });
+    }
+  }
+  return {
+    articles: [...articlesByTitle.values()],
+    photo_sections: bySection,
+  };
 }
 
 function parseJsonPayload(text: string): {
@@ -307,36 +364,46 @@ export async function ingestPdf(
 
   phase("start", { pdfUrl });
 
-  // Rip the text out of the PDF. Way cheaper than sending the whole
+  // Rip text pages out of the PDF. Way cheaper than sending the whole
   // document as vision — a 48-page magazine transcript is roughly
   // 15-30k tokens vs 100k+ for the same PDF rendered.
-  const { text: transcript, pageCount } = await pdfToPageTranscript(pdfUrl);
-  phase("pdftotext done", { pageCount, transcriptChars: transcript.length });
+  const { pages, pageCount } = await pdfToPages(pdfUrl);
+  const totalChars = pages.reduce((n, p) => n + p.text.length, 0);
+  phase("pdftotext done", { pageCount, transcriptChars: totalChars });
 
-  if (!transcript.trim()) {
+  if (pages.length === 0) {
     throw new Error(
       "PDF text layer was empty — the file is probably a scan without OCR. Tesseract fallback is not yet wired.",
     );
   }
 
-  // Stream to sidestep the SDK's 10-minute no-stream guard. This call
-  // is now text-only and much faster than the vision-heavy whole-PDF
-  // path, but 60s+ is realistic for full-issue extraction so streaming
-  // is still the safe path.
-  //
-  // Wrap the whole "call Claude → parse JSON" in a retry-once so a
-  // single flaky response (Claude echoing back the transcript instead
-  // of returning JSON, occasional stream aborts, transient 5xxs)
-  // doesn't fail an entire batch-imported issue. Also enforce a hard
-  // 6-minute per-attempt timeout via AbortSignal — the previous
-  // Claude stream would occasionally hang indefinitely, forcing the
-  // batch script user to Ctrl+C and manually resume.
+  // Chunk the pages before sending to Claude. Whole-issue calls
+  // (~80k tokens on a 68-page issue, ~200k on 160-page) hit the
+  // fragile zone where Claude starts echoing the transcript instead
+  // of extracting. 25 pages per chunk keeps each call around 25-35k
+  // tokens — well inside the model's comfortable range.
+  const CHUNK_PAGES = 25;
+  const chunks: Page[][] = [];
+  for (let i = 0; i < pages.length; i += CHUNK_PAGES) {
+    chunks.push(pages.slice(i, i + CHUNK_PAGES));
+  }
+  phase("chunked", { chunks: chunks.length, pagesPerChunk: CHUNK_PAGES });
+
+  // Stream to sidestep the SDK's 10-minute no-stream guard, and wrap
+  // each call in retry-once + 6-min timeout so a single flaky chunk
+  // response doesn't fail the whole issue. Chunks are processed
+  // serially — parallel is possible but complicates rate-limit
+  // handling and the wall-clock difference on 3-5 chunks isn't worth
+  // the extra complexity for a batch job.
   const PER_ATTEMPT_TIMEOUT_MS = 6 * 60 * 1000;
 
-  const callAndParse = async (attempt: number) => {
+  const callAndParse = async (chunkPages: Page[], chunkIdx: number, attempt: number) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT_MS);
     try {
+      const transcript = pagesToTranscript(chunkPages);
+      const firstPage = chunkPages[0].page;
+      const lastPage = chunkPages[chunkPages.length - 1].page;
       const stream = client.messages.stream(
         {
           model: MODEL,
@@ -345,33 +412,37 @@ export async function ingestPdf(
           messages: [
             {
               role: "user",
-              // Wrap the transcript in explicit markers and re-affirm
-              // the schema AFTER the transcript so the last thing
-              // Claude reads is "return JSON, don't continue the
-              // text". This fixes a failure mode on very long inputs
-              // where Claude occasionally interpreted the transcript
-              // as text to continue (echoing a fragment like ": dandara
-              // sales suite…") rather than material to analyse.
               content:
-                `Below is the text transcript of a magazine issue, delimited by markers. ` +
-                `Treat it strictly as reference material to analyse — do NOT continue, ` +
-                `reproduce, or echo the transcript in your response.\n\n` +
-                `===== BEGIN MAGAZINE TRANSCRIPT =====\n\n` +
+                `Below is a chunk of a magazine issue's text transcript ` +
+                `(pages ${firstPage}–${lastPage} of ${pageCount}), delimited ` +
+                `by markers. Treat it strictly as reference material to ` +
+                `analyse — do NOT continue, reproduce, or echo the ` +
+                `transcript in your response. Only extract features / ` +
+                `photo sections that appear in THIS chunk; other chunks ` +
+                `are processed separately and merged later, so don't ` +
+                `worry about pieces that continue outside these pages.\n\n` +
+                `===== BEGIN CHUNK TRANSCRIPT =====\n\n` +
                 transcript +
-                `\n\n===== END MAGAZINE TRANSCRIPT =====\n\n` +
-                `Now return valid JSON matching the schema in the system message. ` +
-                `Start your response with the opening brace "{". No prose, no code ` +
-                `fences, no continuation of the transcript above.`,
+                `\n\n===== END CHUNK TRANSCRIPT =====\n\n` +
+                `Now return valid JSON matching the schema in the system ` +
+                `message. Start your response with the opening brace "{". ` +
+                `No prose, no code fences, no continuation of the ` +
+                `transcript above.`,
             },
           ],
         },
         { signal: controller.signal },
       );
       const response = await stream.finalMessage();
-      phase(attempt === 1 ? "claude call done" : `claude call done (attempt ${attempt})`, {
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-      });
+      phase(
+        attempt === 1
+          ? `chunk ${chunkIdx + 1}/${chunks.length} done (pp${firstPage}-${lastPage})`
+          : `chunk ${chunkIdx + 1}/${chunks.length} done attempt ${attempt} (pp${firstPage}-${lastPage})`,
+        {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+        },
+      );
       const raw = response.content
         .filter((b) => b.type === "text")
         .map((b) => (b as { type: "text"; text: string }).text)
@@ -383,30 +454,66 @@ export async function ingestPdf(
     }
   };
 
-  phase("claude call opening");
-  let result: { parsed: ReturnType<typeof parseJsonPayload>; usage: { input_tokens: number; output_tokens: number } };
-  try {
-    result = await callAndParse(1);
-  } catch (err: any) {
-    // Log and retry once. Retry catches the two most common failure
-    // shapes: Claude echoing back the transcript instead of JSON
-    // (parseJsonPayload throws), and the stream aborting or hitting
-    // the per-attempt timeout above. If the retry ALSO fails, throw
-    // whichever error occurred second — the caller decides how to
-    // surface it (batch script logs + moves on; the admin UI toasts).
-    const kind = err?.name === "AbortError" ? "timeout" : "error";
-    phase(`claude call ${kind}, retrying once`, { error: String(err?.message || err).slice(0, 200) });
-    result = await callAndParse(2);
+  const chunkResults: Array<{ articles: ExtractedArticle[]; photo_sections: PhotoSection[] }> = [];
+  let totalInput = 0;
+  let totalOutput = 0;
+  let chunksFailed = 0;
+
+  for (let idx = 0; idx < chunks.length; idx++) {
+    const chunkPages = chunks[idx];
+    phase(`chunk ${idx + 1}/${chunks.length} opening`, {
+      pages: `${chunkPages[0].page}-${chunkPages[chunkPages.length - 1].page}`,
+    });
+    let out: { parsed: ReturnType<typeof parseJsonPayload>; usage: { input_tokens: number; output_tokens: number } };
+    try {
+      out = await callAndParse(chunkPages, idx, 1);
+    } catch (err: any) {
+      const kind = err?.name === "AbortError" ? "timeout" : "error";
+      phase(`chunk ${idx + 1}/${chunks.length} ${kind}, retrying once`, {
+        error: String(err?.message || err).slice(0, 200),
+      });
+      try {
+        out = await callAndParse(chunkPages, idx, 2);
+      } catch (err2: any) {
+        // A single bad chunk shouldn't fail the whole issue — log,
+        // count, and continue with the remaining chunks. Merge below
+        // just uses what did come back.
+        chunksFailed++;
+        phase(`chunk ${idx + 1}/${chunks.length} FAILED`, {
+          error: String(err2?.message || err2).slice(0, 200),
+        });
+        continue;
+      }
+    }
+    totalInput += out.usage.input_tokens;
+    totalOutput += out.usage.output_tokens;
+    chunkResults.push({
+      articles: out.parsed.articles,
+      photo_sections: out.parsed.photo_sections,
+    });
   }
 
+  if (chunkResults.length === 0) {
+    throw new Error(`All ${chunks.length} chunk${chunks.length === 1 ? "" : "s"} failed`);
+  }
+  if (chunksFailed > 0) {
+    phase(`merging with ${chunksFailed} failed chunk(s) skipped`);
+  }
+
+  // Merge dedupe: title-match for articles, page-range overlap for
+  // photo sections. See mergeChunkResults for details.
+  const merged = mergeChunkResults(chunkResults);
+  // Backwards-compat paparazzi_section derivation, same as parseJsonPayload.
+  const firstPap = merged.photo_sections.find((s) => s.type === "paparazzi");
+  const paparazzi_section: PaparazziSection | null = firstPap
+    ? { estimated_page_range: firstPap.estimated_page_range, label: firstPap.label }
+    : null;
+
   return {
-    articles: result.parsed.articles,
-    photo_sections: result.parsed.photo_sections,
-    paparazzi_section: result.parsed.paparazzi_section,
-    usage: {
-      input_tokens: result.usage.input_tokens,
-      output_tokens: result.usage.output_tokens,
-    },
+    articles: merged.articles,
+    photo_sections: merged.photo_sections,
+    paparazzi_section,
+    usage: { input_tokens: totalInput, output_tokens: totalOutput },
     page_count: pageCount,
   };
 }
