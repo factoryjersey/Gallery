@@ -345,7 +345,23 @@ export async function ingestPdf(
           messages: [
             {
               role: "user",
-              content: `Here is the text transcript of the magazine. Extract main features per the schema; return JSON only.\n\n${transcript}`,
+              // Wrap the transcript in explicit markers and re-affirm
+              // the schema AFTER the transcript so the last thing
+              // Claude reads is "return JSON, don't continue the
+              // text". This fixes a failure mode on very long inputs
+              // where Claude occasionally interpreted the transcript
+              // as text to continue (echoing a fragment like ": dandara
+              // sales suite…") rather than material to analyse.
+              content:
+                `Below is the text transcript of a magazine issue, delimited by markers. ` +
+                `Treat it strictly as reference material to analyse — do NOT continue, ` +
+                `reproduce, or echo the transcript in your response.\n\n` +
+                `===== BEGIN MAGAZINE TRANSCRIPT =====\n\n` +
+                transcript +
+                `\n\n===== END MAGAZINE TRANSCRIPT =====\n\n` +
+                `Now return valid JSON matching the schema in the system message. ` +
+                `Start your response with the opening brace "{". No prose, no code ` +
+                `fences, no continuation of the transcript above.`,
             },
           ],
         },
