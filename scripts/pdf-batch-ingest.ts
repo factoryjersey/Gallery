@@ -145,8 +145,15 @@ const start = Date.now();
 for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
   const prefix = `[#${issueNumber}]`;
   try {
-    const issueRes = await db.query<{ pdf_url: string | null; display_label: string | null }>(
-      `SELECT pdf_url, display_label FROM issues WHERE number = $1`,
+    const issueRes = await db.query<{
+      pdf_url: string | null;
+      display_label: string | null;
+      published_at: Date | null;
+    }>(
+      // Pull published_at too so we can backdate imported drafts to the
+      // print-edition date rather than "now" — otherwise the article
+      // list shows a 2005 magazine's articles as published today.
+      `SELECT pdf_url, display_label, published_at FROM issues WHERE number = $1`,
       [issueNumber],
     );
     const issue = issueRes.rows[0];
@@ -242,9 +249,10 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
                title, slug, excerpt, content, category_id, author_id,
                photographer, illustrator, status, content_type,
                featured_image, gallery_images, read_time, issue_number,
+               published_at,
                homepage_highlight, is_featured, featured_order, views
              ) VALUES (
-               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
              )`,
             [
               title,
@@ -261,6 +269,11 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
               JSON.stringify(galleryImages),
               1,
               issueNumber,
+              // Backdate to the print-edition publish date so the
+              // article list surfaces these where they belong
+              // chronologically. Falls back to null if the issue row
+              // has no date (rare).
+              issue.published_at,
               false,
               false,
               0,
