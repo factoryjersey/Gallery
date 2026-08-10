@@ -126,16 +126,25 @@ function slugify(title: string): string {
 // original URL works natively and 5432 is preferable for long-lived
 // scripts.
 function localFriendlyDatabaseUrl(raw: string): string {
-  if (process.env.RAILWAY_ENVIRONMENT) return raw;
+  if (process.env.RAILWAY_ENVIRONMENT) {
+    console.log("(railway env detected — using DATABASE_URL as-is)");
+    return raw;
+  }
+  const isSupabase = /supabase\.(com|co)/i.test(raw);
+  let parsed: URL | null = null;
   try {
-    const u = new URL(raw);
-    if (u.port === "5432" && u.hostname.endsWith(".pooler.supabase.com")) {
-      u.port = "6543";
-      console.log("(local: swapped Supabase pooler port 5432 → 6543 for IPv4 reachability)");
-      return u.toString();
-    }
-  } catch {
-    // Fall through — leave the URL untouched if parsing fails.
+    parsed = new URL(raw);
+  } catch (err: any) {
+    console.warn(`Could not parse DATABASE_URL: ${err.message} — using raw string`);
+    return raw;
+  }
+  console.log(
+    `(local: DATABASE_URL host=${parsed.hostname} port=${parsed.port} supabase=${isSupabase})`,
+  );
+  if (isSupabase && parsed.port === "5432") {
+    parsed.port = "6543";
+    console.log(`(local: swapped port 5432 → 6543 for IPv4 reachability)`);
+    return parsed.toString();
   }
   return raw;
 }
