@@ -226,6 +226,29 @@ function categoryIdForType(type: PhotoSectionType): string | null {
   );
 }
 
+// --- Retry helper -----------------------------------------------------
+// Wrap flaky network operations (Anthropic API call, R2 PDF fetch)
+// so a single dropped connection on a phone hotspot doesn't kill the
+// whole issue. Two attempts by default: original + one retry with a
+// short backoff.
+async function withRetry<T>(fn: () => Promise<T>, label: string, attempts = 2): Promise<T> {
+  let lastErr: any;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      if (i === attempts - 1) throw err;
+      const delay = 2000 * (i + 1);
+      console.warn(
+        `  ↻ retry ${label} in ${delay}ms (attempt ${i + 1}/${attempts} failed: ${err?.message || err})`,
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 // --- Byline parsing + author resolution (for --include-articles) ------
 // Mirrors the client-side cleanByline() in PdfIngestManager.tsx so the
 // batch script attributes the same author the admin UI would.
@@ -342,7 +365,7 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
       `${prefix} ${issue.display_label || "no label"} — ingesting ${issue.pdf_url}`,
     );
     const ingestStart = Date.now();
-    const result = await ingestPdf(issue.pdf_url);
+    const result = await withRetry(() => ingestPdf(issue.pdf_url!), `ingestPdf(#${issueNumber})`);
     const ingestTook = ((Date.now() - ingestStart) / 1000).toFixed(1);
     console.log(
       `${prefix}   Claude done in ${ingestTook}s — ${result.articles.length} feature(s), ${result.photo_sections.length} photo section(s), ${result.page_count} pages`,
@@ -357,23 +380,11 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
     }
 
     for (const section of wanted) {
+      try {
       const meta = PHOTO_SECTION_MAP[section.type];
       const categoryId = categoryIdForType(section.type);
       if (!categoryId) {
         console.warn(`${prefix}   [${section.type}] no matching category — skipping section`);
-        continue;
-      }
-
-      // Pull the images. Loose thresholds so small crops make it through.
-      const images = await extractImagesFromPageRange(
-        issue.pdf_url,
-        section.estimated_page_range,
-        { issueNumber, loose: true },
-      );
-      if (images.length === 0) {
-        console.warn(
-          `${prefix}   [${section.type} pp${section.estimated_page_range[0]}-${section.estimated_page_range[1]}] no images extracted — skipping`,
-        );
         continue;
       }
 
@@ -384,11 +395,29 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
       const slug = slugify(title) + `-${issueNumber}`; // suffix with issue# to reduce collisions
 
       if (DRY_RUN) {
+        // Dry-run intentionally skips image extraction — no PDF re-fetch,
+        // no R2 uploads. Log what WOULD land based on Claude's page range.
         console.log(
-          `${prefix}   [dry] would create ${meta.typeLabel}: "${title}" (${images.length} imgs, pp${section.estimated_page_range[0]}-${section.estimated_page_range[1]})`,
+          `${prefix}   [dry] would create ${meta.typeLabel}: "${title}" (pp${section.estimated_page_range[0]}-${section.estimated_page_range[1]}, image count TBD until live)`,
         );
         sectionsCreated++;
-        imagesUploaded += images.length;
+        continue;
+      }
+
+      // Live only — pull the images with retry. Loose thresholds so
+      // small crops make it through.
+      const images = await withRetry(
+        () => extractImagesFromPageRange(
+          issue.pdf_url!,
+          section.estimated_page_range,
+          { issueNumber, loose: true },
+        ),
+        `extractImages(${section.type} pp${section.estimated_page_range[0]}-${section.estimated_page_range[1]})`,
+      );
+      if (images.length === 0) {
+        console.warn(
+          `${prefix}   [${section.type} pp${section.estimated_page_range[0]}-${section.estimated_page_range[1]}] no images extracted — skipping`,
+        );
         continue;
       }
 
@@ -463,6 +492,12 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
       );
       sectionsCreated++;
       imagesUploaded += images.length;
+      } catch (err: any) {
+        // One bad section shouldn't kill the whole issue. Log and move on.
+        console.warn(
+          `${prefix}   [${section.type} pp${section.estimated_page_range[0]}-${section.estimated_page_range[1]}] failed: ${err?.message || err} — continuing to next section`,
+        );
+      }
     }
 
     // --- Feature articles (opt-in via --include-articles) ------------
@@ -472,6 +507,7 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
     // gallery. Editor reviews in admin before publish.
     if (INCLUDE_ARTICLES && result.articles.length > 0) {
       for (const article of result.articles) {
+        try {
         const targetSlug = article.suggested_category?.trim();
         const categoryId =
           (targetSlug && categoryBySlug.get(targetSlug)) ||
@@ -483,23 +519,35 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
           continue;
         }
 
+        // Dry-run bails BEFORE author-create + image extraction so a
+        // preview run has zero DB / R2 side effects.
+        if (DRY_RUN) {
+          console.log(
+            `${prefix}   [dry] would create feature: "${article.title}" by ${cleanByline(article.byline) || "uncredited"} (pp${article.estimated_page_range[0]}-${article.estimated_page_range[1]}, image count TBD until live)`,
+          );
+          sectionsCreated++;
+          continue;
+        }
+
         // Author resolution: try to match/create from byline, else
         // fall back to the house account. Missing byline is common on
         // photo-led features — that's expected.
         const authorId = (await resolveAuthor(article.byline)) || DEFAULT_AUTHOR_ID;
 
-        // Loose image extraction across the article's page range. Even
-        // portrait-led features tend to have <5 images across 1-3
-        // pages, so this is cheap.
+        // Loose image extraction with retry. Even portrait-led features
+        // tend to have <5 images across 1-3 pages, so this is cheap.
         let images: Awaited<ReturnType<typeof extractImagesFromPageRange>> = [];
         try {
-          images = await extractImagesFromPageRange(
-            issue.pdf_url,
-            article.estimated_page_range,
-            { issueNumber, loose: true },
+          images = await withRetry(
+            () => extractImagesFromPageRange(
+              issue.pdf_url!,
+              article.estimated_page_range,
+              { issueNumber, loose: true },
+            ),
+            `extractImages(article "${article.title.slice(0, 40)}")`,
           );
         } catch (err: any) {
-          console.warn(`${prefix}   [article] image extract failed for "${article.title}": ${err?.message || err}`);
+          console.warn(`${prefix}   [article] image extract failed for "${article.title}" after retries: ${err?.message || err} — continuing with no images`);
         }
         const featuredImage = images[0]?.url || null;
         const galleryImages = images.slice(1).map((im) => ({ url: im.url }));
@@ -515,15 +563,6 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
           : body.split("\n\n").map((p) => `<p>${p.trim()}</p>`).join("\n\n");
 
         const slug = slugify(article.title) + `-${issueNumber}`;
-
-        if (DRY_RUN) {
-          console.log(
-            `${prefix}   [dry] would create feature: "${article.title}" by ${cleanByline(article.byline) || "uncredited"} (${images.length} imgs, pp${article.estimated_page_range[0]}-${article.estimated_page_range[1]})`,
-          );
-          sectionsCreated++;
-          imagesUploaded += images.length;
-          continue;
-        }
 
         let attempt = 0;
         let inserted = false;
@@ -581,6 +620,13 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
         );
         sectionsCreated++;
         imagesUploaded += images.length;
+        } catch (err: any) {
+          // One bad article shouldn't kill the whole issue's article
+          // loop — log and move to the next one.
+          console.warn(
+            `${prefix}   [article "${article.title.slice(0, 40)}"] failed: ${err?.message || err} — continuing to next article`,
+          );
+        }
       }
     }
 
