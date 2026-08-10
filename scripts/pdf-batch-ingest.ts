@@ -244,20 +244,26 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
         const candidateSlug = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
         try {
           const galleryImages = images.map((im) => ({ url: im.url }));
+          // Photo sections have very little prose but still need SEO
+          // copy — mirror the caption_hint into both excerpt AND
+          // meta_description so the standfirst on the article page and
+          // the meta description used by search / social previews are
+          // both populated from the same source.
+          const captionText = section.caption_hint || "";
           await db.query(
             `INSERT INTO articles (
                title, slug, excerpt, content, category_id, author_id,
                photographer, illustrator, status, content_type,
                featured_image, gallery_images, read_time, issue_number,
-               published_at,
+               published_at, meta_description,
                homepage_highlight, is_featured, featured_order, views
              ) VALUES (
-               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
+               $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
              )`,
             [
               title,
               candidateSlug,
-              section.caption_hint || "",
+              captionText,
               "",
               categoryId,
               DEFAULT_AUTHOR_ID,
@@ -274,6 +280,7 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
               // chronologically. Falls back to null if the issue row
               // has no date (rare).
               issue.published_at,
+              captionText,
               false,
               false,
               0,
