@@ -149,8 +149,28 @@ function localFriendlyDatabaseUrl(raw: string): string {
   return raw;
 }
 
-const db = new pg.Client({ connectionString: localFriendlyDatabaseUrl(process.env.DATABASE_URL!) });
-await db.connect();
+// pg.Pool instead of pg.Client — the batch script sits idle for
+// minutes at a time during Claude API calls, and Supabase's
+// transaction pooler drops connections after ~30 seconds of idle.
+// A Client would fire an unhandled 'error' event and crash the
+// whole run when the next query comes in. A Pool acquires a fresh
+// connection per query and handles the drop transparently.
+const db = new pg.Pool({
+  connectionString: localFriendlyDatabaseUrl(process.env.DATABASE_URL!),
+  // Idle connections in the pool are closed after 10s to avoid
+  // holding one over a long Claude call (which would let Supabase
+  // reset it under us). Fresh connection on the next query is cheap.
+  idleTimeoutMillis: 10_000,
+  // Cap concurrency — this script issues queries serially, so we
+  // never need more than a couple of connections. Keeps us well
+  // under Supabase's per-project connection limit.
+  max: 2,
+});
+// Log — but don't crash — on connection-level errors. Pool
+// auto-reconnects on the next .query() call.
+db.on("error", (err) => {
+  console.warn(`[pg pool] idle connection error (auto-recovered): ${err.message}`);
+});
 
 // --- Status mode: print progress + candidate list, then exit ---------
 // Runs before any category/author bootstrap so it's fast (~50ms) and
