@@ -13,12 +13,17 @@
  * to skip issues that already have any article filed against them.
  *
  * Usage:
+ *   railway run tsx scripts/pdf-batch-ingest.ts --status          # progress + pending list, no writes
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=100
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=10 --dry-run
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=6 \
  *     --skip-if-any --include-articles      # grab EVERYTHING in empty issues
  *
  * Flags:
+ *   --status            print a progress summary (total / with_pdf /
+ *                       processed / pending / no_pdf) plus the oldest
+ *                       100 pending issues, then exit. No writes, no
+ *                       Claude calls. Safe to run any time.
  *   --from=N            first issue number (default: 1)
  *   --to=M              last issue number, inclusive (default: 100)
  *   --types=a,b,c       comma-separated photo section types to import
@@ -52,6 +57,7 @@ const flag = (name: string, fallback?: string): string | undefined => {
 };
 const has = (name: string): boolean => process.argv.includes(`--${name}`);
 
+const STATUS_ONLY = has("status");
 const FROM = parseInt(flag("from", "1")!, 10);
 const TO = parseInt(flag("to", "100")!, 10);
 const DRY_RUN = has("dry-run");
@@ -62,7 +68,7 @@ const TYPES = (flag("types", "fashion_shoot,event,paparazzi,portfolio")!
   .map((s) => s.trim())
   .filter(Boolean) as PhotoSectionType[]);
 
-if (!Number.isInteger(FROM) || !Number.isInteger(TO) || FROM < 1 || TO < FROM) {
+if (!STATUS_ONLY && (!Number.isInteger(FROM) || !Number.isInteger(TO) || FROM < 1 || TO < FROM)) {
   console.error(`Invalid --from / --to: ${FROM} → ${TO}`);
   process.exit(1);
 }
@@ -70,18 +76,21 @@ if (!process.env.DATABASE_URL) {
   console.error("Missing DATABASE_URL — run with `railway run`.");
   process.exit(1);
 }
-if (!process.env.ANTHROPIC_API_KEY) {
+if (!STATUS_ONLY && !process.env.ANTHROPIC_API_KEY) {
+  // Status-only doesn't hit the Anthropic API, so don't demand the key.
   console.error("Missing ANTHROPIC_API_KEY.");
   process.exit(1);
 }
 
-console.log(
-  `\nBatch PDF ingest — issues ${FROM}–${TO}, types: ${TYPES.join(", ")}${
-    INCLUDE_ARTICLES ? " + feature articles" : ""
-  }${DRY_RUN ? " (dry run)" : ""}${
-    SKIP_IF_ANY ? ", skipping issues with any existing article" : ""
-  }\n`,
-);
+if (!STATUS_ONLY) {
+  console.log(
+    `\nBatch PDF ingest — issues ${FROM}–${TO}, types: ${TYPES.join(", ")}${
+      INCLUDE_ARTICLES ? " + feature articles" : ""
+    }${DRY_RUN ? " (dry run)" : ""}${
+      SKIP_IF_ANY ? ", skipping issues with any existing article" : ""
+    }\n`,
+  );
+}
 
 // --- Category + author lookups (shared across all issues) --------------
 
@@ -111,6 +120,65 @@ function slugify(title: string): string {
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
+
+// --- Status mode: print progress + candidate list, then exit ---------
+// Runs before any category/author bootstrap so it's fast (~50ms) and
+// safe to invoke frequently. No writes, no Claude calls, no image work.
+if (STATUS_ONLY) {
+  const summaryRes = await db.query<{
+    total: number;
+    with_pdf: number;
+    processed: number;
+    pending: number;
+    no_pdf: number;
+  }>(`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE pdf_url IS NOT NULL)::int AS with_pdf,
+      COUNT(*) FILTER (WHERE number IN (SELECT DISTINCT issue_number FROM articles WHERE issue_number IS NOT NULL))::int AS processed,
+      COUNT(*) FILTER (
+        WHERE pdf_url IS NOT NULL
+          AND number NOT IN (SELECT DISTINCT issue_number FROM articles WHERE issue_number IS NOT NULL)
+      )::int AS pending,
+      COUNT(*) FILTER (WHERE pdf_url IS NULL)::int AS no_pdf
+    FROM issues
+  `);
+  const s = summaryRes.rows[0];
+  const pct = (n: number) => (s.total ? Math.round((n / s.total) * 100) : 0);
+  console.log(`\nPDF ingest status`);
+  console.log(`─────────────────`);
+  console.log(`  Total issues:        ${s.total}`);
+  console.log(`  With PDF:            ${s.with_pdf}  (${pct(s.with_pdf)}%)`);
+  console.log(`  Processed (any art): ${s.processed}  (${pct(s.processed)}%)`);
+  console.log(`  Pending (PDF + 0):   ${s.pending}   ← candidates for --include-articles`);
+  console.log(`  No PDF at all:       ${s.no_pdf}`);
+
+  const pendingRes = await db.query<{
+    number: number;
+    display_label: string | null;
+    published_at: string | null;
+  }>(`
+    SELECT number, display_label, published_at::date::text AS published_at
+    FROM issues
+    WHERE pdf_url IS NOT NULL
+      AND number NOT IN (SELECT DISTINCT issue_number FROM articles WHERE issue_number IS NOT NULL)
+    ORDER BY published_at NULLS LAST, number
+    LIMIT 100
+  `);
+  console.log(`\nPending issues (up to 100, oldest first):`);
+  if (pendingRes.rows.length === 0) {
+    console.log(`  (none — every PDF-bearing issue has been processed)`);
+  } else {
+    for (const row of pendingRes.rows) {
+      console.log(
+        `  #${String(row.number).padStart(4)}  ${row.published_at ?? "        "}  ${row.display_label ?? "(no label)"}`,
+      );
+    }
+  }
+  console.log("");
+  await db.end();
+  process.exit(0);
+}
 
 // Fetch categories + a default author id up-front — we use the same for
 // every draft this batch creates.
