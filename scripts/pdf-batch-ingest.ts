@@ -1,10 +1,9 @@
 #!/usr/bin/env tsx
 /**
  * Batch PDF ingest — walks a range of issues, extracts photo sections
- * (fashion / events / paparazzi / portfolios by default) via Claude,
- * pulls the images with pdfimages, and lands each section as a draft
- * article automatically. Skips main features by default (those still
- * benefit from editor review since the text quality varies).
+ * (fashion / events / paparazzi / portfolios) and, optionally, main
+ * features (text-led + portrait-led) via Claude, pulls the images with
+ * pdfimages, and lands each as a draft automatically.
  *
  * Runtime is roughly 2-3 minutes per issue (Claude + image extraction),
  * so 100 issues ~= 4-5 hours. Log progress line per issue so the editor
@@ -16,19 +15,26 @@
  * Usage:
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=100
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=10 --dry-run
- *   railway run tsx scripts/pdf-batch-ingest.ts --from=50 --to=100 \
- *     --types=fashion_shoot,event --skip-if-any
+ *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=6 \
+ *     --skip-if-any --include-articles      # grab EVERYTHING in empty issues
  *
  * Flags:
- *   --from=N           first issue number (default: 1)
- *   --to=M             last issue number, inclusive (default: 100)
- *   --types=a,b,c      comma-separated photo section types to import
- *                      (default: fashion_shoot,event,paparazzi,portfolio)
- *   --skip-if-any      skip issues that already have any article filed
- *                      against them (prevents accidental duplicates on
- *                      re-runs)
- *   --dry-run          walk everything, log what WOULD be created, but
- *                      don't write to DB or upload to R2
+ *   --from=N            first issue number (default: 1)
+ *   --to=M              last issue number, inclusive (default: 100)
+ *   --types=a,b,c       comma-separated photo section types to import
+ *                       (default: fashion_shoot,event,paparazzi,portfolio)
+ *   --include-articles  also import feature articles as drafts — both
+ *                       text-led features and shorter portrait-led
+ *                       profile pieces. Off by default because articles
+ *                       usually want editor review; ON is the right call
+ *                       for empty back-catalogue issues where anything
+ *                       is better than nothing.
+ *   --skip-if-any       skip issues that already have any article filed
+ *                       against them (prevents accidental duplicates on
+ *                       re-runs). Pair with --include-articles when
+ *                       backfilling empty years.
+ *   --dry-run           walk everything, log what WOULD be created, but
+ *                       don't write to DB or upload to R2
  *
  * Env required (all injected by `railway run`):
  *   DATABASE_URL, ANTHROPIC_API_KEY, R2_BUCKET_NAME,
@@ -50,6 +56,7 @@ const FROM = parseInt(flag("from", "1")!, 10);
 const TO = parseInt(flag("to", "100")!, 10);
 const DRY_RUN = has("dry-run");
 const SKIP_IF_ANY = has("skip-if-any");
+const INCLUDE_ARTICLES = has("include-articles");
 const TYPES = (flag("types", "fashion_shoot,event,paparazzi,portfolio")!
   .split(",")
   .map((s) => s.trim())
@@ -70,8 +77,10 @@ if (!process.env.ANTHROPIC_API_KEY) {
 
 console.log(
   `\nBatch PDF ingest — issues ${FROM}–${TO}, types: ${TYPES.join(", ")}${
-    DRY_RUN ? " (dry run)" : ""
-  }${SKIP_IF_ANY ? ", skipping issues with any existing article" : ""}\n`,
+    INCLUDE_ARTICLES ? " + feature articles" : ""
+  }${DRY_RUN ? " (dry run)" : ""}${
+    SKIP_IF_ANY ? ", skipping issues with any existing article" : ""
+  }\n`,
 );
 
 // --- Category + author lookups (shared across all issues) --------------
@@ -116,6 +125,56 @@ function categoryIdForType(type: PhotoSectionType): string | null {
     [...categoryBySlug.entries()].find(([s]) => s.includes(meta.categorySlug))?.[1] ||
     null
   );
+}
+
+// --- Byline parsing + author resolution (for --include-articles) ------
+// Mirrors the client-side cleanByline() in PdfIngestManager.tsx so the
+// batch script attributes the same author the admin UI would.
+function cleanByline(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let s = String(raw).trim();
+  // Strip common editorial prefixes: "Words by", "Photography by",
+  // "Interview by", plain "By", "Photos by", etc.
+  s = s.replace(/^(words|photography|photographs?|photos?|interview|reporting|feature)\s+by\s+/i, "");
+  s = s.replace(/^by\s+/i, "");
+  // Cut trailing "for Gallery" / titles / role qualifiers.
+  s = s.replace(/,?\s+(for gallery|for gallery magazine).*$/i, "");
+  s = s.trim();
+  // Reject bylines that are obviously not a person name — too short is
+  // a caption fragment, too long is a whole paragraph Claude grabbed.
+  if (s.length < 3 || s.length > 80) return "";
+  return s;
+}
+
+// Resolve a cleaned byline to an author row, creating one if needed.
+// Case-insensitive name match; falls back to inserting a fresh author
+// row with an auto-suffixed slug on collision. Returns null only if
+// the byline is empty / unusable — in which case the caller uses
+// DEFAULT_AUTHOR_ID.
+async function resolveAuthor(rawByline: string | null | undefined): Promise<string | null> {
+  const name = cleanByline(rawByline);
+  if (!name) return null;
+  const existing = await db.query<{ id: string }>(
+    `SELECT id FROM authors WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+    [name],
+  );
+  if (existing.rows[0]) return existing.rows[0].id;
+  // Create — retry on slug collision, matches server storage pattern.
+  const baseSlug = slugify(name);
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    try {
+      const inserted = await db.query<{ id: string }>(
+        `INSERT INTO authors (name, slug) VALUES ($1, $2) RETURNING id`,
+        [name, slug],
+      );
+      return inserted.rows[0].id;
+    } catch (err: any) {
+      if (err?.code === "23505" && String(err?.constraint || "").includes("slug")) continue;
+      throw err;
+    }
+  }
+  return null;
 }
 
 // Default author — pick the "Gallery" house account if present, else
@@ -306,6 +365,126 @@ for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
       sectionsCreated++;
       imagesUploaded += images.length;
     }
+
+    // --- Feature articles (opt-in via --include-articles) ------------
+    // Text-led features AND portrait-led profile pieces — both come
+    // through as entries in result.articles. We drop them in as drafts
+    // with real body text, first extracted image as featured, rest as
+    // gallery. Editor reviews in admin before publish.
+    if (INCLUDE_ARTICLES && result.articles.length > 0) {
+      for (const article of result.articles) {
+        const targetSlug = article.suggested_category?.trim();
+        const categoryId =
+          (targetSlug && categoryBySlug.get(targetSlug)) ||
+          categoryBySlug.get("culture") ||
+          categoryBySlug.get("features") ||
+          null;
+        if (!categoryId) {
+          console.warn(`${prefix}   [article] no matching category for "${article.title}" — skipping`);
+          continue;
+        }
+
+        // Author resolution: try to match/create from byline, else
+        // fall back to the house account. Missing byline is common on
+        // photo-led features — that's expected.
+        const authorId = (await resolveAuthor(article.byline)) || DEFAULT_AUTHOR_ID;
+
+        // Loose image extraction across the article's page range. Even
+        // portrait-led features tend to have <5 images across 1-3
+        // pages, so this is cheap.
+        let images: Awaited<ReturnType<typeof extractImagesFromPageRange>> = [];
+        try {
+          images = await extractImagesFromPageRange(
+            issue.pdf_url,
+            article.estimated_page_range,
+            { issueNumber, loose: true },
+          );
+        } catch (err: any) {
+          console.warn(`${prefix}   [article] image extract failed for "${article.title}": ${err?.message || err}`);
+        }
+        const featuredImage = images[0]?.url || null;
+        const galleryImages = images.slice(1).map((im) => ({ url: im.url }));
+
+        // Compose body: prepend standfirst as an intro paragraph if
+        // present, then the article body verbatim. Excerpt = standfirst
+        // (or first ~200 chars of body if no standfirst).
+        const standfirst = (article.standfirst || "").trim();
+        const body = (article.body || "").trim();
+        const excerpt = standfirst || body.slice(0, 200).replace(/\s+\S*$/, "") + (body.length > 200 ? "…" : "");
+        const content = standfirst
+          ? `<p><em>${standfirst}</em></p>\n\n${body.split("\n\n").map((p) => `<p>${p.trim()}</p>`).join("\n\n")}`
+          : body.split("\n\n").map((p) => `<p>${p.trim()}</p>`).join("\n\n");
+
+        const slug = slugify(article.title) + `-${issueNumber}`;
+
+        if (DRY_RUN) {
+          console.log(
+            `${prefix}   [dry] would create feature: "${article.title}" by ${cleanByline(article.byline) || "uncredited"} (${images.length} imgs, pp${article.estimated_page_range[0]}-${article.estimated_page_range[1]})`,
+          );
+          sectionsCreated++;
+          imagesUploaded += images.length;
+          continue;
+        }
+
+        let attempt = 0;
+        let inserted = false;
+        while (attempt < 20 && !inserted) {
+          const candidateSlug = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
+          try {
+            await db.query(
+              `INSERT INTO articles (
+                 title, slug, excerpt, content, category_id, author_id,
+                 photographer, illustrator, status, content_type,
+                 featured_image, gallery_images, read_time, issue_number,
+                 published_at, meta_description,
+                 homepage_highlight, is_featured, featured_order, views
+               ) VALUES (
+                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+               )`,
+              [
+                article.title,
+                candidateSlug,
+                excerpt,
+                content,
+                categoryId,
+                authorId,
+                "", // photographer — features don't reliably credit
+                "",
+                "draft",
+                "article",
+                featuredImage,
+                JSON.stringify(galleryImages),
+                Math.max(1, Math.ceil(body.split(/\s+/).length / 220)), // rough reading time
+                issueNumber,
+                issue.published_at,
+                excerpt, // meta_description mirrors excerpt
+                false,
+                false,
+                0,
+                0,
+              ],
+            );
+            inserted = true;
+          } catch (err: any) {
+            if (err?.code === "23505" && String(err?.constraint || "").includes("slug")) {
+              attempt++;
+              continue;
+            }
+            throw err;
+          }
+        }
+        if (!inserted) {
+          console.warn(`${prefix}   [article] slug collision after 20 tries — skipped "${article.title}"`);
+          continue;
+        }
+        console.log(
+          `${prefix}   ✓ Feature: "${article.title}" by ${cleanByline(article.byline) || "uncredited"} (${images.length} imgs)`,
+        );
+        sectionsCreated++;
+        imagesUploaded += images.length;
+      }
+    }
+
     issuesProcessed++;
   } catch (err: any) {
     issuesFailed++;
