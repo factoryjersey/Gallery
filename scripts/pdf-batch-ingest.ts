@@ -121,15 +121,15 @@ function slugify(title: string): string {
 // Supabase's session-mode pooler on port 5432 is often unreachable from
 // external clients (IPv6-only in most regions). The transaction-mode
 // pooler on 6543 accepts IPv4 and is the recommended external port —
-// same URL, same credentials, just a different port. Only swap when
-// running LOCALLY: inside Railway (RAILWAY_ENVIRONMENT is set) the
-// original URL works natively and 5432 is preferable for long-lived
-// scripts.
+// same URL, same credentials, just a different port. This script is a
+// maintenance tool that only ever runs from a developer's terminal via
+// `railway run`, so we always want the local-friendly variant.
+//
+// Note: `railway run` sets RAILWAY_ENVIRONMENT in the injected env to
+// emulate prod, so that variable is NOT a reliable "am I actually on
+// Railway?" signal. Since this script never runs on Railway infra, we
+// just always swap.
 function localFriendlyDatabaseUrl(raw: string): string {
-  if (process.env.RAILWAY_ENVIRONMENT) {
-    console.log("(railway env detected — using DATABASE_URL as-is)");
-    return raw;
-  }
   const isSupabase = /supabase\.(com|co)/i.test(raw);
   let parsed: URL | null = null;
   try {
@@ -139,11 +139,11 @@ function localFriendlyDatabaseUrl(raw: string): string {
     return raw;
   }
   console.log(
-    `(local: DATABASE_URL host=${parsed.hostname} port=${parsed.port} supabase=${isSupabase})`,
+    `DATABASE_URL host=${parsed.hostname} port=${parsed.port} supabase=${isSupabase}`,
   );
   if (isSupabase && parsed.port === "5432") {
     parsed.port = "6543";
-    console.log(`(local: swapped port 5432 → 6543 for IPv4 reachability)`);
+    console.log(`Swapped Supabase pooler port 5432 → 6543 for IPv4 reachability`);
     return parsed.toString();
   }
   return raw;
