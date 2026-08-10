@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, Sparkles, Check, X, ExternalLink, ImagePlus, Camera, Users, Palette } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, FileText, Sparkles, Check, X, ExternalLink, ImagePlus, Camera, Users, Palette, Pencil, Trash2, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ExtractedArticle {
@@ -183,7 +184,15 @@ function bodyToHtml(body: string): string {
     .join("\n");
 }
 
-export function PdfIngestManager() {
+interface PdfIngestManagerProps {
+  /** Optional editor-open callback. Same shape as ArticleList's — the
+   *  parent tracks which article is being edited and swaps its content
+   *  for the editor. Wired through so the Review tab's Edit button can
+   *  jump straight into the article editor without a page navigation. */
+  onEditArticle?: (articleId: string) => void;
+}
+
+export function PdfIngestManager({ onEditArticle }: PdfIngestManagerProps = {}) {
   const { toast } = useToast();
   const [pdfUrl, setPdfUrl] = useState<string>("");
   const [issueNumber, setIssueNumber] = useState<string>("");
@@ -672,6 +681,18 @@ export function PdfIngestManager() {
         </p>
       </div>
 
+      <Tabs defaultValue="import" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="import" data-testid="pdf-ingest-tab-import">
+            Import
+          </TabsTrigger>
+          <TabsTrigger value="review" data-testid="pdf-ingest-tab-review">
+            Review drafts
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="import" className="space-y-6 mt-0">
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -1069,6 +1090,256 @@ export function PdfIngestManager() {
           })}
         </div>
       )}
+
+        </TabsContent>
+
+        <TabsContent value="review" className="mt-0">
+          <PdfDraftReview onEditArticle={onEditArticle} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/** Human-readable draft "type" derived from an article's category slug
+ *  + contentType. This is the label that shows next to each draft in
+ *  the Review tab so the editor can eyeball at a glance whether a row
+ *  is an event, a fashion shoot, a paparazzi/nightlife roundup, etc.
+ *  Falls back to "Feature" for anything not in the recognised set. */
+function draftTypeLabel(
+  categorySlug: string | null | undefined,
+  contentType: string | null | undefined,
+): { label: string; tone: string } {
+  const slug = (categorySlug || "").toLowerCase();
+  if (contentType === "photoshoot" || slug === "fashion-shoots") {
+    return { label: "Fashion shoot", tone: "border-pink-500/40 text-pink-600" };
+  }
+  if (slug === "events") return { label: "Event", tone: "border-purple-500/40 text-purple-600" };
+  if (slug === "paparazzi" || slug === "nightlife") {
+    return { label: "Nightlife", tone: "border-yellow-500/40 text-yellow-700" };
+  }
+  if (contentType === "cartoon") return { label: "Cartoon", tone: "border-teal-500/40 text-teal-600" };
+  if (contentType === "gallery") return { label: "Gallery", tone: "border-blue-500/40 text-blue-600" };
+  return { label: "Feature", tone: "border-slate-500/40 text-slate-600" };
+}
+
+/** Review tab content: every draft in the system, grouped by issue, with
+ *  the type label + inline actions (edit, publish, delete). The editor's
+ *  natural next step after an ingest — instead of hunting through the
+ *  main article list with issue + status filters, everything relevant
+ *  to the PDF-ingest workflow lives here. */
+function PdfDraftReview({
+  onEditArticle,
+}: {
+  onEditArticle?: (articleId: string) => void;
+}) {
+  const { toast } = useToast();
+  // Pull ALL drafts in one shot. 500 is generous — the batch script's
+  // absolute worst-case landed ~40 drafts per issue, so 500 covers
+  // 12+ full issues of un-reviewed backlog. Bumping later if we ever
+  // outgrow it is trivial.
+  const { data, isLoading } = useQuery<{ articles: any[] }>({
+    queryKey: ["/api/articles", { status: "draft", limit: 500 }],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/articles?status=draft&limit=500");
+      return res.json();
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async (id: string) =>
+      apiRequest("PUT", `/api/articles/${id}`, { status: "published" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          typeof q.queryKey[0] === "string" &&
+          (q.queryKey[0] as string).startsWith("/api/articles"),
+      });
+      toast({ title: "Published", description: "Draft is now live." });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Couldn't publish",
+        description: err?.message || "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/articles/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          typeof q.queryKey[0] === "string" &&
+          (q.queryKey[0] as string).startsWith("/api/articles"),
+      });
+      toast({ title: "Deleted", description: "Draft removed." });
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Couldn't delete",
+        description: err?.message || "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  // Group drafts by issueNumber, then sort descending so the most-recent
+  // issues (highest number) surface first. Nulls (no issue link) sink
+  // to the bottom under an "Online-only / no issue" header.
+  const grouped = useMemo(() => {
+    const drafts = data?.articles ?? [];
+    const byIssue = new Map<number | null, any[]>();
+    for (const d of drafts) {
+      const key = typeof d.issueNumber === "number" ? d.issueNumber : null;
+      const list = byIssue.get(key) ?? [];
+      list.push(d);
+      byIssue.set(key, list);
+    }
+    // Sort the buckets: known issue numbers desc, then null last.
+    const keys = Array.from(byIssue.keys()).sort((a, b) => {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return b - a;
+    });
+    return keys.map((k) => ({ issueNumber: k, drafts: byIssue.get(k)! }));
+  }, [data?.articles]);
+
+  const totalCount = data?.articles?.length ?? 0;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-muted-foreground">
+        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+        Loading drafts…
+      </div>
+    );
+  }
+
+  if (totalCount === 0) {
+    return (
+      <div className="text-center py-16 text-muted-foreground">
+        <p className="mb-1">No drafts to review.</p>
+        <p className="text-sm">
+          Once you import a PDF from the <strong>Import</strong> tab, unpublished
+          drafts land here for a final look before going live.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="pdf-draft-review">
+      <div className="text-sm text-muted-foreground">
+        {totalCount} draft{totalCount === 1 ? "" : "s"} across{" "}
+        {grouped.length} issue{grouped.length === 1 ? "" : "s"}. Grouped by
+        issue, newest first.
+      </div>
+
+      {grouped.map((group) => (
+        <Card key={group.issueNumber ?? "orphan"}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>
+                {group.issueNumber != null
+                  ? `Gallery #${group.issueNumber}`
+                  : "Online-only / no issue"}
+              </span>
+              <Badge variant="secondary" className="font-normal">
+                {group.drafts.length} draft
+                {group.drafts.length === 1 ? "" : "s"}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            {group.drafts.map((d) => {
+              const type = draftTypeLabel(d.category?.slug, d.contentType);
+              const byline = d.author?.name || "uncredited";
+              return (
+                <div
+                  key={d.id}
+                  className="flex items-center gap-3 px-3 py-2 rounded border border-border hover:bg-muted/40 transition-colors"
+                  data-testid={`draft-row-${d.id}`}
+                >
+                  {d.featuredImage ? (
+                    <img
+                      src={d.featuredImage}
+                      alt=""
+                      className="w-12 h-12 object-cover rounded flex-shrink-0"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                      <ImagePlus className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <Badge variant="outline" className={`${type.tone} flex-shrink-0`}>
+                    {type.label}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate" title={d.title}>
+                      {d.title}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      by {byline}
+                      {d.publishedAt && (
+                        <>
+                          {" · "}
+                          {new Date(d.publishedAt).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {onEditArticle && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEditArticle(d.id)}
+                        data-testid={`draft-edit-${d.id}`}
+                        title="Edit draft"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => publishMutation.mutate(d.id)}
+                      disabled={publishMutation.isPending}
+                      data-testid={`draft-publish-${d.id}`}
+                      title="Publish draft"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `Delete draft "${d.title}"? This cannot be undone.`,
+                          )
+                        ) {
+                          deleteMutation.mutate(d.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      data-testid={`draft-delete-${d.id}`}
+                      title="Delete draft"
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }

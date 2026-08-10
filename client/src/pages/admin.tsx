@@ -552,7 +552,22 @@ export default function Admin() {
               )}
 
               {activeTab === "pdf-ingest" && (
-                <PdfIngestManager />
+                editingArticleId ? (
+                  <div>
+                    <Button
+                      variant="ghost"
+                      onClick={handleCloseEditor}
+                      className="mb-4"
+                      data-testid="button-back-to-pdf-ingest"
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back to PDF Ingest
+                    </Button>
+                    <ArticleEditor articleId={editingArticleId} onClose={handleCloseEditor} />
+                  </div>
+                ) : (
+                  <PdfIngestManager onEditArticle={handleEditArticle} />
+                )
               )}
 
               {activeTab === "splash" && (
