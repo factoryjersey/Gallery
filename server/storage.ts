@@ -526,7 +526,16 @@ export class DatabaseStorage implements IStorage {
     }
 
     const orderColumn = articles[orderBy];
-    const orderFunc = orderDir === 'asc' ? asc : desc;
+    // Explicit NULLS LAST on DESC sorts — Postgres's default is NULLS
+    // FIRST for DESC, which lets any published article with a missing
+    // published_at (a legacy import, an admin-UI create that didn't
+    // supply a date, etc.) bubble to the top of chronological lists.
+    // The hero and article-list surfaces both order via this method,
+    // so this single guard covers the class of "old article suddenly
+    // appeared at the top of the homepage" bugs.
+    const orderExpr = orderDir === 'asc'
+      ? asc(orderColumn)
+      : sql`${orderColumn} DESC NULLS LAST`;
 
     const result = await db
       .select({
@@ -538,7 +547,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(authors, eq(articles.authorId, authors.id))
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .where(whereCondition)
-      .orderBy(orderFunc(orderColumn))
+      .orderBy(orderExpr)
       .limit(limit)
       .offset(offset);
 
@@ -581,7 +590,10 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(authors, eq(articles.authorId, authors.id))
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .where(and(eq(articles.isFeatured, true), eq(articles.status, 'published'), ne(articles.contentType, 'gallery')))
-      .orderBy(desc(articles.publishedAt), asc(articles.featuredOrder))
+      // NULLS LAST — a pinned article with a missing publishedAt should
+      // not out-rank a real print date. Same reasoning as the getArticles
+      // ordering above; this is the hero surface where the bug hurt most.
+      .orderBy(sql`${articles.publishedAt} DESC NULLS LAST`, asc(articles.featuredOrder))
       .limit(limit);
 
     const pinnedWithTags: ArticleWithDetails[] = [];
@@ -769,7 +781,8 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(authors, eq(articles.authorId, authors.id))
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .where(and(eq(articleContributors.contributorId, contributorId), eq(articles.status, "published")))
-      .orderBy(desc(articles.publishedAt));
+      // NULLS LAST — contributor page should show dated pieces first.
+      .orderBy(sql`${articles.publishedAt} DESC NULLS LAST`);
 
     // Collapse one article appearing in multiple roles into a single entry
     const byArticleId = new Map<string, ArticleWithDetails & { roles: string[] }>();

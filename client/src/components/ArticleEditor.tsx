@@ -61,6 +61,12 @@ const articleSchema = z.object({
   // as a nullable integer rather than an FK so the import can attach the
   // number even when the issue row doesn't exist yet.
   issueNumber: z.number().int().nullable().optional(),
+  // ISO date string (yyyy-MM-dd) — bound to a native <input type="date">.
+  // Empty string means "not set". The server auto-populates from the issue's
+  // print-edition date when this is empty AND status flips to published,
+  // but the editor may want to override for online-only pieces or to
+  // correct a mis-imported date.
+  publishedAt: z.string().optional(),
   homepageHighlight: z.boolean().optional(),
 });
 
@@ -122,7 +128,13 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   });
 
   const { data: issuesData } = useQuery<{
-    issues: Array<{ id: string; number: number; title: string | null; displayLabel: string | null }>;
+    issues: Array<{
+      id: string;
+      number: number;
+      title: string | null;
+      displayLabel: string | null;
+      publishedAt: string | null;
+    }>;
   }>({
     queryKey: ["/api/issues"],
   });
@@ -150,6 +162,12 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         metaDescription: article.metaDescription || "",
         readTime: article.readTime,
         issueNumber: typeof article.issueNumber === "number" ? article.issueNumber : null,
+        // ISO string → date input needs yyyy-MM-dd only. Slice at 10
+        // chars to drop the time-of-day and timezone junk. Null becomes
+        // empty string so the field renders as "empty" not "invalid".
+        publishedAt: article.publishedAt
+          ? new Date(article.publishedAt).toISOString().slice(0, 10)
+          : "",
         homepageHighlight: !!article.homepageHighlight,
       });
       setSelectedTags(article.tags?.map((t: any) => t.id) || []);
@@ -728,11 +746,27 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                 return (
                   <Select
                     value={currentStr}
-                    onValueChange={(v) =>
-                      form.setValue("issueNumber", v === "none" ? null : Number(v), {
-                        shouldDirty: true,
-                      })
-                    }
+                    onValueChange={(v) => {
+                      const nextIssueNumber = v === "none" ? null : Number(v);
+                      form.setValue("issueNumber", nextIssueNumber, { shouldDirty: true });
+                      // Auto-fill publishedAt from the picked issue's
+                      // print-edition date, but ONLY when the date field
+                      // is currently empty. Never overwrite an editor's
+                      // explicit choice — if they've typed a date, keep
+                      // it. This matches the server's precedence rules:
+                      // explicit > existing > issue date > NOW().
+                      const currentDate = form.getValues("publishedAt");
+                      if (!currentDate && nextIssueNumber != null) {
+                        const picked = issues.find((i) => i.number === nextIssueNumber);
+                        if (picked?.publishedAt) {
+                          form.setValue(
+                            "publishedAt",
+                            new Date(picked.publishedAt).toISOString().slice(0, 10),
+                            { shouldDirty: true },
+                          );
+                        }
+                      }
+                    }}
                   >
                     <SelectTrigger id="issue-number" className="w-full max-w-sm" data-testid="article-issue-select">
                       <SelectValue placeholder="None" />
@@ -754,6 +788,58 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   </Select>
                 );
               })()}
+
+              {/* Date published — bound to the yyyy-MM-dd portion of
+                  publishedAt. When an issue is picked and this field is
+                  empty, the issue's print-edition date is dropped in
+                  automatically (see the issue picker's onValueChange).
+                  Sits under the picker so the two "when" fields are
+                  visually grouped. */}
+              <div className="mt-3 space-y-1">
+                <Label htmlFor="published-at" className="text-sm">
+                  Date published
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="published-at"
+                    type="date"
+                    className="w-full max-w-sm"
+                    value={form.watch("publishedAt") || ""}
+                    onChange={(e) =>
+                      form.setValue("publishedAt", e.target.value, { shouldDirty: true })
+                    }
+                    data-testid="article-published-at"
+                  />
+                  {form.watch("issueNumber") != null && (() => {
+                    const currentIssueNumber = form.watch("issueNumber") as number;
+                    const picked = (issuesData?.issues ?? []).find(
+                      (i) => i.number === currentIssueNumber,
+                    );
+                    const issueDate = picked?.publishedAt
+                      ? new Date(picked.publishedAt).toISOString().slice(0, 10)
+                      : "";
+                    const currentDate = form.watch("publishedAt");
+                    if (!issueDate || currentDate === issueDate) return null;
+                    return (
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground underline whitespace-nowrap"
+                        onClick={() =>
+                          form.setValue("publishedAt", issueDate, { shouldDirty: true })
+                        }
+                        title={`Reset to Gallery #${currentIssueNumber}'s print date (${issueDate})`}
+                      >
+                        Use issue date
+                      </button>
+                    );
+                  })()}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Defaults to the print-edition date of the picked issue.
+                  Leave empty and the server will fill it in from the issue
+                  when the article is published.
+                </p>
+              </div>
 
               {/* Promote to the homepage Latest Highlights hero band (only
                   effective for the latest issue; older issues' flagged

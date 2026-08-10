@@ -77,6 +77,71 @@ async function latestPublishedIssueNumber(): Promise<number | null> {
 const HIGHLIGHTS_MAX = 5;
 
 /**
+ * Coerce a publishedAt value from whatever the caller sent (empty
+ * string from an empty <input type="date">, yyyy-MM-dd string, ISO
+ * string, Date object, null, undefined) into either a Date, null, or
+ * undefined. Kept lenient because callers include the admin UI, the
+ * WordPress importer, the batch script, and future integrations —
+ * each of which has historically sent slightly different shapes.
+ *
+ * Called BEFORE Zod validation so the strict `z.date()` schema
+ * generated from the timestamp column accepts what we hand it.
+ */
+function coerceArticleDateFields(body: any): void {
+  if (!body || typeof body !== "object") return;
+  const raw = body.publishedAt;
+  if (raw === undefined) return; // leave alone — treat as "not sent"
+  if (raw === null || raw === "") {
+    body.publishedAt = null;
+    return;
+  }
+  if (raw instanceof Date) return; // already a Date
+  if (typeof raw === "string") {
+    const d = new Date(raw);
+    // Invalid dates (typo, garbage) get stripped to undefined rather
+    // than passed through as NaN — Zod's date validator would trip on
+    // an Invalid Date object with a less-clear error message.
+    body.publishedAt = Number.isNaN(d.getTime()) ? undefined : d;
+  }
+}
+
+/**
+ * Guarantee an article being SAVED as published has a sensible
+ * published_at, since a NULL date on a published row breaks the
+ * "current issue" surfaces and (until the NULLS-LAST fix landed) let
+ * old imports bubble to the top of the homepage hero.
+ *
+ * Precedence:
+ *   1. Whatever `publishedAt` the caller explicitly set → keep it.
+ *   2. Whatever `publishedAt` the existing row already has → keep it.
+ *   3. The article's issue's `published_at` (print-edition date) → use it.
+ *   4. NOW() as a last resort.
+ *
+ * Only fires when the effective status is 'published'. Drafts keep their
+ * NULL publishedAt as before — we only care about surfaces that filter
+ * for status='published'.
+ */
+async function ensurePublishedAt<T extends { status?: string; publishedAt?: unknown; issueNumber?: number | null }>(
+  data: T,
+  existing?: { status?: string | null; publishedAt?: Date | null; issueNumber?: number | null },
+): Promise<T> {
+  const effectiveStatus = data.status ?? existing?.status ?? "draft";
+  if (effectiveStatus !== "published") return data;
+  if (data.publishedAt) return data;
+  if (existing?.publishedAt) return data;
+  const issueNumber = data.issueNumber ?? existing?.issueNumber ?? null;
+  if (issueNumber == null) {
+    return { ...data, publishedAt: new Date() };
+  }
+  const [issue] = await db
+    .select({ publishedAt: issues.publishedAt })
+    .from(issues)
+    .where(eq(issues.number, issueNumber))
+    .limit(1);
+  return { ...data, publishedAt: issue?.publishedAt ?? new Date() };
+}
+
+/**
  * Enforce the homepage-highlights cap across the whole site (not
  * per-issue). Called after any article save where homepage_highlight
  * ends up true.
@@ -772,7 +837,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/articles", async (req, res) => {
     try {
-      const validatedData = insertArticleSchema.parse(req.body);
+      coerceArticleDateFields(req.body);
+      const parsed = insertArticleSchema.parse(req.body);
+      // Auto-populate publishedAt when saving a published article without
+      // an explicit date — prefers the issue's print-edition date so
+      // back-catalogue imports sort chronologically, not "just now".
+      const validatedData = await ensurePublishedAt(parsed);
       const { tags: tagIds, ...articleData } = req.body;
 
       // Auto-suffix the slug on collision. Two articles with the same
@@ -831,7 +901,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/articles/:id", async (req, res) => {
     try {
       const { tags: tagIds, ...articleData } = req.body;
-      const validatedData = insertArticleSchema.partial().parse(articleData);
+      coerceArticleDateFields(articleData);
+      const parsed = insertArticleSchema.partial().parse(articleData);
+
+      // Auto-populate publishedAt when THIS update flips status to
+      // 'published' without an explicit date. Only round-trip to the
+      // existing row when we actually need to (status change without a
+      // date in the body) — most saves skip this entirely.
+      let validatedData = parsed;
+      if (parsed.status === "published" && !parsed.publishedAt) {
+        const [existing] = await db
+          .select({
+            status: articles.status,
+            publishedAt: articles.publishedAt,
+            issueNumber: articles.issueNumber,
+          })
+          .from(articles)
+          .where(eq(articles.id, req.params.id))
+          .limit(1);
+        validatedData = await ensurePublishedAt(parsed, existing);
+      }
 
       const article = await storage.updateArticle(req.params.id, validatedData, tagIds);
       if (!article) {
