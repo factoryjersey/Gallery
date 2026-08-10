@@ -118,7 +118,29 @@ function slugify(title: string): string {
     .slice(0, 80);
 }
 
-const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+// Supabase's session-mode pooler on port 5432 is often unreachable from
+// external clients (IPv6-only in most regions). The transaction-mode
+// pooler on 6543 accepts IPv4 and is the recommended external port —
+// same URL, same credentials, just a different port. Only swap when
+// running LOCALLY: inside Railway (RAILWAY_ENVIRONMENT is set) the
+// original URL works natively and 5432 is preferable for long-lived
+// scripts.
+function localFriendlyDatabaseUrl(raw: string): string {
+  if (process.env.RAILWAY_ENVIRONMENT) return raw;
+  try {
+    const u = new URL(raw);
+    if (u.port === "5432" && u.hostname.endsWith(".pooler.supabase.com")) {
+      u.port = "6543";
+      console.log("(local: swapped Supabase pooler port 5432 → 6543 for IPv4 reachability)");
+      return u.toString();
+    }
+  } catch {
+    // Fall through — leave the URL untouched if parsing fails.
+  }
+  return raw;
+}
+
+const db = new pg.Client({ connectionString: localFriendlyDatabaseUrl(process.env.DATABASE_URL!) });
 await db.connect();
 
 // --- Status mode: print progress + candidate list, then exit ---------
