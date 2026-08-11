@@ -16,6 +16,8 @@
  *   railway run tsx scripts/pdf-batch-ingest.ts --status          # progress + pending list, no writes
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=100
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=10 --dry-run
+ *   railway run tsx scripts/pdf-batch-ingest.ts --year=2007,2008 \
+ *     --include-articles --skip-if-any      # backfill every 2007/2008 edition
  *   railway run tsx scripts/pdf-batch-ingest.ts --from=1 --to=6 \
  *     --skip-if-any --include-articles      # grab EVERYTHING in empty issues
  *
@@ -26,6 +28,11 @@
  *                       Claude calls. Safe to run any time.
  *   --from=N            first issue number (default: 1)
  *   --to=M              last issue number, inclusive (default: 100)
+ *   --year=YYYY,YYYY    comma-separated publication years. Resolves to
+ *                       the issue numbers whose print-edition date falls
+ *                       in those years (and that have a PDF), then
+ *                       processes those. Takes precedence over
+ *                       --from / --to.
  *   --types=a,b,c       comma-separated photo section types to import
  *                       (default: fashion_shoot,event,paparazzi,portfolio)
  *   --include-articles  also import feature articles as drafts — both
@@ -67,8 +74,20 @@ const TYPES = (flag("types", "fashion_shoot,event,paparazzi,portfolio")!
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean) as PhotoSectionType[]);
+// Comma-separated list of publication years to include, e.g.
+// --year=2007,2008. When set, replaces --from/--to iteration with the
+// resolved set of issue numbers whose print-edition date falls in those
+// years. Handy for backfilling "all of year X" without hand-computing
+// the issue-number range (Gallery's numbering shifted between monthly
+// and bimonthly over the years).
+const YEARS = (flag("year", "") || "")
+  .split(",")
+  .map((y) => parseInt(y.trim(), 10))
+  .filter((n) => Number.isInteger(n));
 
-if (!STATUS_ONLY && (!Number.isInteger(FROM) || !Number.isInteger(TO) || FROM < 1 || TO < FROM)) {
+// --from / --to are ignored when --year is used, so skip their validation
+// in that case. Otherwise fall back to the old contiguous-range check.
+if (!STATUS_ONLY && YEARS.length === 0 && (!Number.isInteger(FROM) || !Number.isInteger(TO) || FROM < 1 || TO < FROM)) {
   console.error(`Invalid --from / --to: ${FROM} → ${TO}`);
   process.exit(1);
 }
@@ -83,8 +102,11 @@ if (!STATUS_ONLY && !process.env.ANTHROPIC_API_KEY) {
 }
 
 if (!STATUS_ONLY) {
+  const scopeDesc = YEARS.length > 0
+    ? `year(s) ${YEARS.join(", ")}`
+    : `issues ${FROM}–${TO}`;
   console.log(
-    `\nBatch PDF ingest — issues ${FROM}–${TO}, types: ${TYPES.join(", ")}${
+    `\nBatch PDF ingest — ${scopeDesc}, types: ${TYPES.join(", ")}${
       INCLUDE_ARTICLES ? " + feature articles" : ""
     }${DRY_RUN ? " (dry run)" : ""}${
       SKIP_IF_ANY ? ", skipping issues with any existing article" : ""
@@ -343,7 +365,35 @@ let sectionsCreated = 0;
 let imagesUploaded = 0;
 const start = Date.now();
 
-for (let issueNumber = FROM; issueNumber <= TO; issueNumber++) {
+// Resolve the actual list of issue numbers to process. Two modes:
+//   --year=YYYY,YYYY  → query for issues whose print date falls in
+//                       those years AND that have a pdf_url
+//   --from / --to     → the classic contiguous integer range
+// The rest of the loop doesn't care which mode fed it — same shape.
+let issueNumbers: number[];
+if (YEARS.length > 0) {
+  const res = await db.query<{ number: number }>(
+    `SELECT number FROM issues
+     WHERE EXTRACT(YEAR FROM published_at) = ANY($1::int[])
+       AND pdf_url IS NOT NULL
+     ORDER BY number`,
+    [YEARS],
+  );
+  issueNumbers = res.rows.map((r) => r.number);
+  console.log(
+    `Resolved --year=${YEARS.join(",")} → ${issueNumbers.length} issue(s): ${issueNumbers.join(", ") || "(none — no PDF-bearing issues in those years)"}\n`,
+  );
+  if (issueNumbers.length === 0) {
+    console.log("Nothing to do. Exiting.");
+    await db.end();
+    process.exit(0);
+  }
+} else {
+  issueNumbers = [];
+  for (let n = FROM; n <= TO; n++) issueNumbers.push(n);
+}
+
+for (const issueNumber of issueNumbers) {
   const prefix = `[#${issueNumber}]`;
   try {
     const issueRes = await db.query<{
