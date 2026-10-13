@@ -190,7 +190,35 @@ console.log(`  Raw <img> tags:         ${rawImgs}`);
 console.log(`  Unique images found:    ${collected.length}`);
 
 if (collected.length === 0) {
-  console.log("Nothing to do — no inline images found in the body.");
+  // No inline images to move, but the article may already have the
+  // 15/67/whatever images in galleryImages (legacy WordPress imports
+  // store them there with just a placeholder <!-- wp:gallery -->
+  // marker in the body). In that case there's nothing to transform
+  // — we just need to flip the layout flag so the article page uses
+  // the full-width-masonry treatment. Idempotent: if the flag is
+  // already set, we exit cleanly without a write.
+  const already = (article.gallery_images ?? []).length;
+  if (already === 0) {
+    console.log("Nothing to do — article has no gallery images at all.");
+    await pool.end();
+    process.exit(0);
+  }
+  if (article.gallery_layout === "full-width-masonry") {
+    console.log(`Nothing to do — ${already} image(s) already in galleryImages and layout is already full-width-masonry.`);
+    await pool.end();
+    process.exit(0);
+  }
+  console.log(`No inline images to move, but ${already} image(s) already in galleryImages. Flipping gallery_layout → full-width-masonry.`);
+  if (DRY_RUN) {
+    console.log("\n(dry run — no writes)");
+    await pool.end();
+    process.exit(0);
+  }
+  await pool.query(
+    `UPDATE articles SET gallery_layout = 'full-width-masonry', updated_at = NOW() WHERE id = $1`,
+    [article.id],
+  );
+  console.log(`\n✓ Updated. View: https://gallery.je/article/${article.slug}`);
   await pool.end();
   process.exit(0);
 }

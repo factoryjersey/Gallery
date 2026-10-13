@@ -164,14 +164,17 @@ export default function Article() {
           negative margins to run full-bleed on black. */}
       <article
         className={`mx-auto px-6 py-10 ${
-          isExplicitPhotoshoot || isFullWidthGallery
-            ? // Narrow reading column for both — the gallery sits
-              // below as full-bleed via its own negative-margin
-              // trick, independent of the article container width.
-              "max-w-[760px]"
-            : layout === "two-col"
-              ? "max-w-[1200px]"
-              : "max-w-[760px]"
+          isExplicitPhotoshoot
+            ? "max-w-[760px]"
+            : isFullWidthGallery
+              ? // Site width — the title + body stretch across the
+                // whole page so there's no awkward whitespace on
+                // either side of a short header above a full-bleed
+                // masonry. Matches the max-w category pages use.
+                "max-w-[1296px]"
+              : layout === "two-col"
+                ? "max-w-[1200px]"
+                : "max-w-[760px]"
         }`}
       >
 
@@ -217,7 +220,72 @@ export default function Article() {
           )}
         </div>
 
+        {/* Compact meta strip — only for full-width-masonry articles.
+            Puts category + tags + byline + date + read-time all on one
+            inline row so the header isn't three stacked lines wasting
+            vertical space above the (full-width) title + body. */}
+        {isFullWidthGallery && (
+          <div
+            className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-6 pb-4 border-b border-border"
+            style={{ fontFamily: "Arial, sans-serif", fontSize: 12, color: "hsl(0 0% 43%)" }}
+            data-testid="compact-meta"
+          >
+            <Link href={`/category/${article.category.slug}`}>
+              <span
+                className="hover:opacity-70 transition-opacity cursor-pointer"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "hsl(182 55% 56%)",
+                }}
+                data-testid="article-category"
+              >
+                {article.category.name}
+              </span>
+            </Link>
+            {article.tags.map((tag: any) => (
+              <span
+                key={tag.id}
+                style={{
+                  fontSize: 11,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "hsl(0 0% 60%)",
+                  border: "1px solid hsl(0 0% 85%)",
+                  padding: "2px 8px",
+                }}
+                data-testid={`article-tag-${tag.slug}`}
+              >
+                {tag.name}
+              </span>
+            ))}
+            <span>
+              By{" "}
+              {article.author.slug ? (
+                <Link href={`/author/${article.author.slug}`}>
+                  <a className="hover:underline">
+                    <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.author.name}</strong>
+                  </a>
+                </Link>
+              ) : (
+                <strong style={{ color: "hsl(0 0% 4%)", fontWeight: 600 }}>{article.author.name}</strong>
+              )}
+            </span>
+            <span>—</span>
+            <span data-testid="article-date">
+              {format(new Date(article.publishedAt || article.createdAt), "d MMMM yyyy")}
+            </span>
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              <span data-testid="article-read-time">{article.readTime} min read</span>
+            </span>
+          </div>
+        )}
+
         {/* Header */}
+        {!isFullWidthGallery && (
         <header className="mb-8">
           {/* Category + tags */}
           <div className="flex flex-wrap items-center gap-4 mb-5">
@@ -389,6 +457,7 @@ export default function Article() {
             )}
           </div>
         </header>
+        )}
 
         {/* Body content — non-photoshoot. Photoshoots render outside this
             container so the slider can be full-page width (see below).
