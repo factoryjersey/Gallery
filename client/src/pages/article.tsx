@@ -164,17 +164,14 @@ export default function Article() {
           negative margins to run full-bleed on black. */}
       <article
         className={`mx-auto px-6 py-10 ${
-          isExplicitPhotoshoot
-            ? "max-w-[760px]"
-            : isFullWidthGallery
-              ? // Wider so the two-column header+excerpt arrangement
-                // gets a comfortable reading width per column while
-                // the masonry below still runs to the viewport edge
-                // via the negative-margin trick.
-                "max-w-[1100px]"
-              : layout === "two-col"
-                ? "max-w-[1200px]"
-                : "max-w-[760px]"
+          isExplicitPhotoshoot || isFullWidthGallery
+            ? // Narrow reading column for both — the gallery sits
+              // below as full-bleed via its own negative-margin
+              // trick, independent of the article container width.
+              "max-w-[760px]"
+            : layout === "two-col"
+              ? "max-w-[1200px]"
+              : "max-w-[760px]"
         }`}
       >
 
@@ -481,22 +478,15 @@ export default function Article() {
               {article.contentType === "gallery" ? (
                 <PaparazziGallery content={article.content} />
               ) : isFullWidthGallery ? (
-                // Full-width-masonry header. Grid-template-rows + named
-                // columns so on desktop (md+) the arrangement is:
-                //   | title  | excerpt |     ← row 1
-                //   | body   | excerpt |     ← row 2 (excerpt spans both)
-                // and on mobile (single column) the natural DOM order
-                // becomes title → excerpt → body, which is the standard
-                // magazine standfirst-before-body reading flow. Keeping
-                // the three nodes as grid siblings lets us control
-                // mobile ordering via DOM alone while still arranging
-                // them freely in a two-column grid on desktop.
-                <div
-                  className="mb-10 grid gap-6 md:gap-12 md:grid-cols-[7fr_5fr]"
-                  style={{ gridTemplateRows: "auto 1fr" }}
-                >
+                // Full-width-masonry header, single-column flow:
+                //   Title → Standfirst (italic, left-ruled) → Body
+                // Everything at the standard reading width so a long
+                // body copy and a short standfirst don't produce a
+                // lopsided two-column layout with white space on one
+                // side. The gallery below still runs full-bleed.
+                <div className="mb-10">
                   <h1
-                    className="md:col-start-1 md:row-start-1"
+                    className="mb-6"
                     style={{
                       fontFamily: "Georgia, serif",
                       fontSize: "clamp(28px, 4vw, 42px)",
@@ -511,8 +501,8 @@ export default function Article() {
                     {article.title}
                   </h1>
                   {article.excerpt && (
-                    <aside
-                      className="md:col-start-2 md:row-start-1 md:row-span-2"
+                    <p
+                      className="mb-6"
                       style={{
                         fontFamily: "Georgia, serif",
                         fontSize: 20,
@@ -525,14 +515,12 @@ export default function Article() {
                       data-testid="article-excerpt"
                     >
                       {article.excerpt}
-                    </aside>
+                    </p>
                   )}
-                  <div className="md:col-start-1 md:row-start-2">
-                    <RichContent
-                      content={article.content}
-                      className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
-                    />
-                  </div>
+                  <RichContent
+                    content={article.content}
+                    className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
+                  />
                 </div>
               ) : (
                 <RichContent
