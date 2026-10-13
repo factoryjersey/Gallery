@@ -544,15 +544,21 @@ export default function Article() {
                 );
               })()}
 
-              {article.contentType === "gallery" ? (
-                <PaparazziGallery content={article.content} />
-              ) : isFullWidthGallery ? (
+              {isFullWidthGallery ? (
                 // Full-width-masonry header, single-column flow:
                 //   Title → Standfirst (italic, left-ruled) → Body
                 // Everything at the standard reading width so a long
                 // body copy and a short standfirst don't produce a
                 // lopsided two-column layout with white space on one
                 // side. The gallery below still runs full-bleed.
+                //
+                // This branch wins over the contentType==='gallery'
+                // PaparazziGallery branch below so an editor who
+                // explicitly set the layout to full-width-masonry
+                // gets what they asked for, even on a 'gallery' type
+                // article where PaparazziGallery would otherwise
+                // scrape <img> tags out of the body (and render
+                // nothing for a body that only contains text).
                 <div className="mb-10">
                   <h1
                     className="mb-6"
@@ -591,6 +597,12 @@ export default function Article() {
                     className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
                   />
                 </div>
+              ) : article.contentType === "gallery" ? (
+                // Paparazzi-style gallery: scrape every <img> out of
+                // the body HTML and render them on a dark grid. Used
+                // only when the editor hasn't picked an explicit
+                // galleryLayout above.
+                <PaparazziGallery content={article.content} />
               ) : (
                 <RichContent
                   content={article.content}
