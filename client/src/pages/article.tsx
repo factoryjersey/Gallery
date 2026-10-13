@@ -164,11 +164,17 @@ export default function Article() {
           negative margins to run full-bleed on black. */}
       <article
         className={`mx-auto px-6 py-10 ${
-          isExplicitPhotoshoot || isFullWidthGallery
+          isExplicitPhotoshoot
             ? "max-w-[760px]"
-            : layout === "two-col"
-              ? "max-w-[1200px]"
-              : "max-w-[760px]"
+            : isFullWidthGallery
+              ? // Wider so the two-column header+excerpt arrangement
+                // gets a comfortable reading width per column while
+                // the masonry below still runs to the viewport edge
+                // via the negative-margin trick.
+                "max-w-[1100px]"
+              : layout === "two-col"
+                ? "max-w-[1200px]"
+                : "max-w-[760px]"
         }`}
       >
 
@@ -253,24 +259,28 @@ export default function Article() {
             ))}
           </div>
 
-          {/* Title */}
-          <h1
-            className="mb-5"
-            style={{
-              fontFamily: "Georgia, serif",
-              fontSize: "clamp(28px, 4vw, 42px)",
-              fontWeight: 400,
-              lineHeight: 1.18,
-              letterSpacing: "-0.5px",
-              color: "hsl(0 0% 4%)",
-            }}
-            data-testid="article-title"
-          >
-            {article.title}
-          </h1>
+          {/* Title + excerpt — hidden from the header when the
+              full-width-masonry layout is on; both get re-rendered
+              side-by-side in a two-column grid below so the eye
+              lands on the picture gallery sooner. */}
+          {!isFullWidthGallery && (
+            <h1
+              className="mb-5"
+              style={{
+                fontFamily: "Georgia, serif",
+                fontSize: "clamp(28px, 4vw, 42px)",
+                fontWeight: 400,
+                lineHeight: 1.18,
+                letterSpacing: "-0.5px",
+                color: "hsl(0 0% 4%)",
+              }}
+              data-testid="article-title"
+            >
+              {article.title}
+            </h1>
+          )}
 
-          {/* Excerpt / standfirst */}
-          {article.excerpt && (
+          {!isFullWidthGallery && article.excerpt && (
             <p
               className="mb-6"
               style={{
@@ -392,7 +402,7 @@ export default function Article() {
             {/* Lead media — video wins if the editor set one, otherwise
                 the featured image acts as usual. Video containers keep
                 the same sticky-left behaviour on 2-col layouts. */}
-            {article.featuredVideo && article.contentType !== "gallery" && (
+            {article.featuredVideo && article.contentType !== "gallery" && !isFullWidthGallery && (
               <figure
                 className={
                   layout === "two-col"
@@ -408,7 +418,7 @@ export default function Article() {
                 />
               </figure>
             )}
-            {!article.featuredVideo && article.featuredImage && article.contentType !== "gallery" && (
+            {!article.featuredVideo && article.featuredImage && article.contentType !== "gallery" && !isFullWidthGallery && (
               <figure
                 className={
                   layout === "two-col"
@@ -470,6 +480,60 @@ export default function Article() {
 
               {article.contentType === "gallery" ? (
                 <PaparazziGallery content={article.content} />
+              ) : isFullWidthGallery ? (
+                // Full-width-masonry header. Grid-template-rows + named
+                // columns so on desktop (md+) the arrangement is:
+                //   | title  | excerpt |     ← row 1
+                //   | body   | excerpt |     ← row 2 (excerpt spans both)
+                // and on mobile (single column) the natural DOM order
+                // becomes title → excerpt → body, which is the standard
+                // magazine standfirst-before-body reading flow. Keeping
+                // the three nodes as grid siblings lets us control
+                // mobile ordering via DOM alone while still arranging
+                // them freely in a two-column grid on desktop.
+                <div
+                  className="mb-10 grid gap-6 md:gap-12 md:grid-cols-[7fr_5fr]"
+                  style={{ gridTemplateRows: "auto 1fr" }}
+                >
+                  <h1
+                    className="md:col-start-1 md:row-start-1"
+                    style={{
+                      fontFamily: "Georgia, serif",
+                      fontSize: "clamp(28px, 4vw, 42px)",
+                      fontWeight: 400,
+                      lineHeight: 1.18,
+                      letterSpacing: "-0.5px",
+                      color: "hsl(0 0% 4%)",
+                      margin: 0,
+                    }}
+                    data-testid="article-title"
+                  >
+                    {article.title}
+                  </h1>
+                  {article.excerpt && (
+                    <aside
+                      className="md:col-start-2 md:row-start-1 md:row-span-2"
+                      style={{
+                        fontFamily: "Georgia, serif",
+                        fontSize: 20,
+                        lineHeight: 1.55,
+                        color: "hsl(0 0% 20%)",
+                        fontStyle: "italic",
+                        borderLeft: "3px solid hsl(52 97% 56%)",
+                        paddingLeft: 20,
+                      }}
+                      data-testid="article-excerpt"
+                    >
+                      {article.excerpt}
+                    </aside>
+                  )}
+                  <div className="md:col-start-1 md:row-start-2">
+                    <RichContent
+                      content={article.content}
+                      className="prose prose-lg max-w-none prose-headings:font-serif prose-headings:font-normal prose-p:text-foreground prose-p:leading-relaxed prose-p:font-serif prose-a:text-secondary prose-a:no-underline hover:prose-a:underline"
+                    />
+                  </div>
+                </div>
               ) : (
                 <RichContent
                   content={article.content}
