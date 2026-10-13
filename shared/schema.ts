@@ -92,6 +92,18 @@ export const articles = pgTable("articles", {
   contentType: text("content_type").notNull().default("article"),
   // Issue number (bimonthly edition)
   issueNumber: integer("issue_number"),
+  // Optional per-article override for how galleryImages render on the
+  // article page. Nullable — null means "use the default heuristic"
+  // (events category → EventsGrid, 12+ images → GalleryGrid inline,
+  // etc; see article.tsx for the full fallback). Explicit values:
+  //   'full-width-masonry' → text (title + byline + body) renders at
+  //     the top in the standard reading column; galleryImages then
+  //     render below as a full-bleed masonry (natural aspect ratios,
+  //     viewport-edge to viewport-edge). Best for picture-led features
+  //     where the gallery IS the story.
+  // Add more values here as new treatments appear — the field is just
+  // text, so adding a value is editor-side only.
+  galleryLayout: text("gallery_layout"),
 });
 
 export const issues = pgTable("issues", {

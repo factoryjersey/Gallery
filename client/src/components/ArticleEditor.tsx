@@ -68,6 +68,11 @@ const articleSchema = z.object({
   // correct a mis-imported date.
   publishedAt: z.string().optional(),
   homepageHighlight: z.boolean().optional(),
+  // Optional per-article override for how galleryImages render on the
+  // article page. "" (empty) → auto / default. 'full-width-masonry' →
+  // text at the top in the standard reading column, then full-bleed
+  // masonry below. Add more values here as new treatments appear.
+  galleryLayout: z.string().optional(),
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -169,6 +174,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
           ? new Date(article.publishedAt).toISOString().slice(0, 10)
           : "",
         homepageHighlight: !!article.homepageHighlight,
+        galleryLayout: article.galleryLayout || "",
       });
       setSelectedTags(article.tags?.map((t: any) => t.id) || []);
       // The article already has a slug, so treat the field as touched —
@@ -838,6 +844,45 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                   Defaults to the print-edition date of the picked issue.
                   Leave empty and the server will fill it in from the issue
                   when the article is published.
+                </p>
+              </div>
+
+              {/* Gallery layout — per-article override for how the
+                  galleryImages array renders on the article page. "Auto"
+                  keeps the existing heuristic (events → EventsGrid, 12+
+                  → GalleryGrid inline, etc). "Text at top, full-width
+                  masonry" promotes the images: the body copy renders
+                  first in the standard reading column, then the gallery
+                  takes over as a full-bleed masonry below. Best for
+                  picture-led features. Only meaningful when the article
+                  has galleryImages. */}
+              <div className="mt-3 space-y-1">
+                <Label htmlFor="gallery-layout" className="text-sm">
+                  Gallery layout
+                </Label>
+                <Select
+                  value={form.watch("galleryLayout") || "auto"}
+                  onValueChange={(v) =>
+                    form.setValue("galleryLayout", v === "auto" ? "" : v, { shouldDirty: true })
+                  }
+                >
+                  <SelectTrigger
+                    id="gallery-layout"
+                    className="w-full max-w-sm"
+                    data-testid="article-gallery-layout"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (default)</SelectItem>
+                    <SelectItem value="full-width-masonry">
+                      Text at top, full-width masonry below
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Only applies when the article has gallery images. Default
+                  keeps the inline treatment the article page picks today.
                 </p>
               </div>
 

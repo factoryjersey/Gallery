@@ -49,6 +49,19 @@ export default function Article() {
     !(Array.isArray(article?.galleryImages) && article!.galleryImages!.length > 0);
   const isPhotoshoot = isExplicitPhotoshoot || isLegacyPhotoshoot;
 
+  // Editor-selected "text at the top, full-width masonry below" layout
+  // for picture-led features that aren't contentType=photoshoot. When
+  // on, we force the narrow reading column (header + byline + body),
+  // skip the inline gallery render inside the article container, and
+  // append a full-bleed PhotoshootMasonry after the body. Only applies
+  // when the article actually has galleryImages to show — otherwise
+  // falls through to the default inline treatment.
+  const isFullWidthGallery =
+    !isPhotoshoot &&
+    article?.galleryLayout === "full-width-masonry" &&
+    Array.isArray(article?.galleryImages) &&
+    (article!.galleryImages as any[]).length > 0;
+
   // Desktop layout preference: 2-col is the default — featured image
   // sticky on the left, body copy on the right, magazine-spread feel.
   // 1-col is the classic centred-narrow read. We persist whatever the
@@ -151,7 +164,7 @@ export default function Article() {
           negative margins to run full-bleed on black. */}
       <article
         className={`mx-auto px-6 py-10 ${
-          isExplicitPhotoshoot
+          isExplicitPhotoshoot || isFullWidthGallery
             ? "max-w-[760px]"
             : layout === "two-col"
               ? "max-w-[1200px]"
@@ -183,7 +196,7 @@ export default function Article() {
           {/* Hide the 1-col / 2-col toggle for photoshoots — the gallery
               renders full-bleed regardless, and the body is skipped, so
               the toggle has nothing meaningful to switch. */}
-          {!isExplicitPhotoshoot && <LayoutToggle layout={layout} setLayout={setLayout} />}
+          {!isExplicitPhotoshoot && !isFullWidthGallery && <LayoutToggle layout={layout} setLayout={setLayout} />}
           {isAdmin && article && (
             <button
               onClick={() => {
@@ -375,7 +388,7 @@ export default function Article() {
             2-col mode wraps the lead image + body in a grid so the image
             sits left (sticky on desktop) while the copy reads right. */}
         {!isPhotoshoot && (
-          <div className={layout === "two-col" ? "lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10 lg:items-start" : ""}>
+          <div className={layout === "two-col" && !isFullWidthGallery ? "lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10 lg:items-start" : ""}>
             {/* Lead media — video wins if the editor set one, otherwise
                 the featured image acts as usual. Video containers keep
                 the same sticky-left behaviour on 2-col layouts. */}
@@ -431,7 +444,7 @@ export default function Article() {
                      / 12+ images → GalleryGrid (masonry, captions in
                      lightbox only).
                    - everything else → GalleryCarousel (inline flow). */}
-              {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && (() => {
+              {Array.isArray(article.galleryImages) && article.galleryImages.length > 0 && !isFullWidthGallery && (() => {
                 const imgs = article.galleryImages;
                 const isEvents = article.category?.slug === "events";
                 const useGrid =
@@ -464,6 +477,25 @@ export default function Article() {
                 />
               )}
             </div>
+          </div>
+        )}
+
+        {/* Full-width gallery below the body — only when the editor
+            picked galleryLayout='full-width-masonry' AND the article has
+            galleryImages. Negative-margin trick escapes the article
+            container's max-width + horizontal padding, so the masonry
+            runs edge-to-edge even though its parent is a 760px column.
+            Rendered OUTSIDE the body div so it sits visually under all
+            the text, not interleaved with it. */}
+        {isFullWidthGallery && (
+          <div
+            className="mt-10"
+            style={{ marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}
+          >
+            <PhotoshootMasonry
+              images={article.galleryImages as any}
+              altPrefix={article.title}
+            />
           </div>
         )}
 
