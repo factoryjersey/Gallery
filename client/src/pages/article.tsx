@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useDocumentMeta } from "@/hooks/useDocumentMeta";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Clock, ArrowLeft, ArrowRight, Edit, Columns, AlignLeft } from "lucide-react";
+import { Clock, ArrowLeft, ArrowRight, Edit, Columns, AlignLeft, LayoutGrid, Rows3 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Link } from "wouter";
@@ -11,6 +11,7 @@ import ArticleGallery from "@/components/ArticleGallery";
 import RichContent from "@/components/RichContent";
 import PaparazziGallery from "@/components/PaparazziGallery";
 import PhotoshootSlider from "@/components/PhotoshootSlider";
+import PhotoshootMasonry from "@/components/PhotoshootMasonry";
 import GalleryCarousel from "@/components/GalleryCarousel";
 import GalleryGrid from "@/components/GalleryGrid";
 import PhotoshootGrid from "@/components/PhotoshootGrid";
@@ -61,6 +62,22 @@ export default function Article() {
   useEffect(() => {
     try { window.localStorage.setItem("gallery-article-layout", layout); } catch {}
   }, [layout]);
+
+  // Photoshoot gallery layout preference. Separate from `layout` above
+  // because that controls the reading column; this controls the photo
+  // grid itself. 'grid' = PhotoshootGrid (3-across square crops,
+  // dramatic uniform rhythm). 'masonry' = PhotoshootMasonry (natural
+  // aspect ratios, better for shoots mixing portrait + landscape).
+  // Persisted per-browser so the reader's chosen view sticks across
+  // photoshoots.
+  const [photoshootLayout, setPhotoshootLayout] = useState<"grid" | "masonry">(() => {
+    if (typeof window === "undefined") return "grid";
+    const stored = window.localStorage.getItem("gallery-photoshoot-layout");
+    return stored === "masonry" || stored === "grid" ? stored : "grid";
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem("gallery-photoshoot-layout", photoshootLayout); } catch {}
+  }, [photoshootLayout]);
 
   // Per-article title, description, and Open Graph image so link
   // previews on Slack / WhatsApp / LinkedIn / Twitter render properly,
@@ -505,10 +522,28 @@ export default function Article() {
               className="my-8"
               style={{ marginLeft: "calc(50% - 50vw)", marginRight: "calc(50% - 50vw)" }}
             >
-              <PhotoshootGrid
-                images={article.galleryImages}
-                altPrefix={article.title}
-              />
+              {/* Layout toggle for the photoshoot gallery. Sits above
+                  the grid, right-aligned inside the editorial reading
+                  column so it doesn't float out into the full-bleed
+                  black area below. The grid itself still escapes to
+                  the viewport edges via the parent's negative margin. */}
+              <div className="max-w-[1296px] mx-auto px-6 flex justify-end mb-3">
+                <PhotoshootLayoutToggle
+                  layout={photoshootLayout}
+                  setLayout={setPhotoshootLayout}
+                />
+              </div>
+              {photoshootLayout === "masonry" ? (
+                <PhotoshootMasonry
+                  images={article.galleryImages}
+                  altPrefix={article.title}
+                />
+              ) : (
+                <PhotoshootGrid
+                  images={article.galleryImages}
+                  altPrefix={article.title}
+                />
+              )}
             </div>
           )}
         {isLegacyPhotoshoot && (
@@ -633,6 +668,72 @@ function LayoutToggle({
         data-testid="layout-two-col"
       >
         <Columns className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// Photoshoot-gallery layout toggle. Sibling to LayoutToggle above but
+// controls the gallery grid (PhotoshootGrid vs PhotoshootMasonry), not
+// the reading-column layout. Icon-only on mobile to save header space,
+// with a labelled variant on sm+ because the two options are visually
+// subtle enough that an uppercase word-tag helps readers understand
+// what the toggle does on first encounter.
+function PhotoshootLayoutToggle({
+  layout,
+  setLayout,
+}: {
+  layout: "grid" | "masonry";
+  setLayout: (l: "grid" | "masonry") => void;
+}) {
+  const btn = (active: boolean) =>
+    `inline-flex items-center gap-1.5 py-1.5 px-3 transition-colors ${
+      active
+        ? "bg-foreground text-white"
+        : "text-muted-foreground hover:text-foreground"
+    }`;
+  return (
+    <div
+      className="inline-flex items-center border border-border"
+      role="radiogroup"
+      aria-label="Photoshoot layout"
+      data-testid="photoshoot-layout-toggle"
+    >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={layout === "grid"}
+        onClick={() => setLayout("grid")}
+        className={btn(layout === "grid")}
+        style={{
+          fontFamily: "Arial, sans-serif",
+          fontSize: 11,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+        }}
+        title="Grid — uniform square crops, 3-across"
+        data-testid="photoshoot-layout-grid"
+      >
+        <LayoutGrid className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Grid</span>
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={layout === "masonry"}
+        onClick={() => setLayout("masonry")}
+        className={`${btn(layout === "masonry")} border-l border-border`}
+        style={{
+          fontFamily: "Arial, sans-serif",
+          fontSize: 11,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+        }}
+        title="Masonry — natural aspect ratios, good for mixed portrait + landscape"
+        data-testid="photoshoot-layout-masonry"
+      >
+        <Rows3 className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline">Masonry</span>
       </button>
     </div>
   );
