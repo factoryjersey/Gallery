@@ -34,6 +34,7 @@ import AuthorPicker from "@/components/AuthorPicker";
 import ContributorsPicker, { type CreditEntry } from "@/components/ContributorsPicker";
 import TipTapEditor from "@/components/TipTapEditor";
 import ImageCropDialog from "@/components/ImageCropDialog";
+import MediaPickerDialog from "@/components/MediaPickerDialog";
 import { apiRequest } from "@/lib/queryClient";
 
 const articleSchema = z.object({
@@ -100,6 +101,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   // write the resulting URL into; the dialog handles the rest.
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [cropTarget, setCropTarget] = useState<"featuredImage" | "splashImage">("featuredImage");
+  // Toggles the media library picker modal for the gallery panel. When
+  // true, MediaPickerDialog opens and the editor can tick existing
+  // uploads to add straight into galleryImages — no re-upload needed.
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -1103,11 +1108,12 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
             <div className="space-y-2">
               <Label>Image Gallery (optional)</Label>
               <p className="text-xs text-muted-foreground -mt-1">
-                Upload one or more images to attach a sliding gallery to this article.
-                Drag-and-drop reorder via the arrow buttons. Captions are optional.
+                Upload new images or pick existing ones from the media
+                library. Drag-and-drop reorder via the arrow buttons. Captions
+                are optional.
               </p>
 
-              <div className="flex gap-4 items-start">
+              <div className="flex gap-4 items-start flex-wrap">
                 <Input
                   type="file"
                   accept="image/*"
@@ -1118,13 +1124,45 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
                       e.target.value = "";
                     }
                   }}
+                  className="flex-1 min-w-[200px]"
                   data-testid="gallery-image-input"
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setMediaPickerOpen(true)}
+                  data-testid="gallery-pick-from-library"
+                >
+                  Pick from library
+                </Button>
                 <span className="text-xs text-muted-foreground self-center whitespace-nowrap">
                   {(form.watch("galleryImages")?.length ?? 0)} image
                   {(form.watch("galleryImages")?.length ?? 0) === 1 ? "" : "s"}
                 </span>
               </div>
+
+              {/* Media library picker — opens a modal with the uploaded
+                  media grid; selected images get appended straight to
+                  galleryImages (de-duped against what's already there
+                  via excludeUrls so the editor can't double-add). */}
+              <MediaPickerDialog
+                open={mediaPickerOpen}
+                onOpenChange={setMediaPickerOpen}
+                excludeUrls={(form.watch("galleryImages") || []).map((g) => g.url)}
+                onPick={(urls) => {
+                  const existing = form.getValues("galleryImages") || [];
+                  const additions = urls.map((url) => ({ url }));
+                  form.setValue(
+                    "galleryImages",
+                    [...existing, ...additions],
+                    { shouldDirty: true },
+                  );
+                  toast({
+                    title: `Added ${urls.length} image${urls.length === 1 ? "" : "s"}`,
+                    description: "Scroll down to reorder or caption them.",
+                  });
+                }}
+              />
 
               {(form.watch("galleryImages")?.length ?? 0) > 0 && (
                 <div className="space-y-2 mt-2">
