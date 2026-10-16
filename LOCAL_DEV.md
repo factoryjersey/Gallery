@@ -10,18 +10,28 @@ frontend together with hot module reload — save a file, the browser updates.
 git clone https://github.com/factoryjersey/Gallery.git
 cd Gallery
 pnpm install
-cp .env.local.example .env.local   # then fill in the values — see below
+cp .env.local.example .env.local
 ```
+
+Then fill in `.env.local` — see "Environment variables" below.
 
 **Node 20+** (the Dockerfile pins 20.19.3). **pnpm** is the package
 manager — don't use `npm install`, it will fight the `pnpm-lock.yaml`.
 
+> Paste these one line at a time. Interactive zsh does not treat `#` as a
+> comment, so pasting a command with a trailing `# note (like this)`
+> fails with `unknown file attribute` and the command never runs.
+
 ## Day to day
 
 ```bash
-pnpm dev     # http://localhost:5070 — frontend + API, hot reload
-pnpm check   # tsc --noEmit; run this before you push
+pnpm dev
+pnpm check
 ```
+
+`pnpm dev` serves the frontend and API together on
+http://localhost:5070 with hot reload. `pnpm check` is `tsc --noEmit` —
+run it before you push.
 
 `pnpm dev` loads `.env.local` automatically
 (`tsx --env-file-if-exists=.env.local`). That file is gitignored — your
