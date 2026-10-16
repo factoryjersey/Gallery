@@ -193,6 +193,7 @@ export default function Category() {
                 isLoading={isLoading}
                 pagination={articlesData?.pagination}
                 onPageChange={setCurrentPage}
+                imageAspect="square"
               />
             </div>
             <div className="lg:col-span-1">

@@ -30,12 +30,17 @@ interface ArticleGridProps {
   onPageChange?: (page: number) => void;
   itemsPerPage?: number;
   onItemsPerPageChange?: (limit: number) => void;
+  /** Aspect ratio for grid-view tile images. '3/2' (default) keeps the
+   *  historical landscape crop; 'square' switches to 1:1. Only applies
+   *  to the grid view — the masonry view always honours each image's
+   *  natural proportions regardless. */
+  imageAspect?: "3/2" | "square";
 }
 
-function SkeletonCard() {
+function SkeletonCard({ aspect = "3/2" }: { aspect?: string }) {
   return (
     <div className="flex flex-col gap-3 border-b border-border pb-6">
-      <div className="w-full bg-border animate-pulse" style={{ aspectRatio: "3/2" }} />
+      <div className="w-full bg-border animate-pulse" style={{ aspectRatio: aspect }} />
       <div className="h-3 bg-border rounded w-16 animate-pulse" />
       <div className="h-5 bg-border rounded w-3/4 animate-pulse" />
       <div className="h-3 bg-border rounded w-1/3 animate-pulse" />
@@ -50,7 +55,11 @@ export default function ArticleGrid({
   onPageChange,
   itemsPerPage = 20,
   onItemsPerPageChange,
+  imageAspect = "3/2",
 }: ArticleGridProps) {
+  // CSS aspect-ratio literal for the grid tiles. "1/1" is the square
+  // crop callers get when they pass imageAspect="square".
+  const tileAspect = imageAspect === "square" ? "1/1" : "3/2";
   // Hydrate from localStorage on mount so SSR renders the default,
   // then swaps to the reader's saved preference. Avoids a flash of
   // the stored layout before React hydrates.
@@ -79,7 +88,7 @@ export default function ArticleGrid({
           <span className="gallery-section-label">Latest Stories</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-8">
-          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} aspect={tileAspect} />)}
         </div>
       </div>
     );
@@ -168,7 +177,7 @@ export default function ArticleGrid({
               data-testid={`article-card-${article.slug}`}
             >
               {/* Image */}
-              <div className="overflow-hidden w-full" style={{ aspectRatio: "3/2" }}>
+              <div className="overflow-hidden w-full" style={{ aspectRatio: tileAspect }}>
                 {article.featuredImage ? (
                   <LazyImage
                     src={article.featuredImage}
