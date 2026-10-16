@@ -63,6 +63,59 @@ real values, or pull them from the Railway project's variables tab.
 3. **Run `pnpm check` before pushing.** There is no CI on this repo, so a
    type error won't surface until Railway's build fails after your push.
 
+## Working against a local copy of the database
+
+Rather than pointing `DATABASE_URL` at production, clone it once into a
+local Postgres. Then you can edit articles, upload images and break
+things in `/admin` without any of it being real.
+
+You need Postgres running locally plus the client tools:
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+```
+
+Then, with the production URL from the Railway variables tab:
+
+```bash
+export PROD_DATABASE_URL='postgres://...'
+./scripts/clone-db-local.sh --dry-run
+pnpm db:clone-local
+```
+
+It drops and recreates `gallery_dev` on localhost, dumps production into
+it, and prints row counts. Set `LOCAL_DATABASE_URL` to use a different
+local database. Re-run it whenever you want fresh content.
+
+Afterwards point `.env.local` at the copy:
+
+```
+DATABASE_URL=postgres://localhost:5432/gallery_dev
+```
+
+**Two tables arrive empty, by design** — schema but no rows:
+
+| Table | Why |
+| --- | --- |
+| `users` | Admin usernames and password hashes. Nothing needs them: `/admin` authenticates against the `ADMIN_PASSWORD` env var (`server/adminAuth.ts`), not this table. |
+| `subscribers` | The newsletter list — real email addresses, names and unsubscribe tokens. It has no bearing on anything you can see in the UI, so there is no reason for a copy to exist on a laptop. |
+
+Everything the site renders — articles, authors, categories, tags,
+issues, media, splash slides, site settings — comes across in full.
+
+Three caveats:
+
+- `authors.email` **does** come across, and holds contributor email
+  addresses. Treat the local copy as real data: don't commit a dump,
+  don't paste rows into a ticket.
+- Images are **not** copied. They load from the public R2 CDN, so they
+  render fine, but uploading locally writes to the real R2 bucket unless
+  you point the `R2_*` variables at a scratch bucket.
+- `pg_dump` must be the same major version as the server or newer. If
+  you get a "server version mismatch" error, your Homebrew Postgres is
+  older than Railway's.
+
 ## How deploys work
 
 Railway auto-deploys on every push to `main`. There is no build or test
