@@ -63,7 +63,7 @@ export default function Article() {
     (article!.galleryImages as any[]).length > 0;
 
   // Desktop layout preference: 2-col is the default — featured image
-  // sticky on the left, body copy on the right, magazine-spread feel.
+  // on the left, body copy on the right, magazine-spread feel.
   // 1-col is the classic centred-narrow read. We persist whatever the
   // visitor last chose to localStorage so an explicit pick sticks
   // across visits; new visitors land on 2-col.
@@ -462,17 +462,17 @@ export default function Article() {
         {/* Body content — non-photoshoot. Photoshoots render outside this
             container so the slider can be full-page width (see below).
             2-col mode wraps the lead image + body in a grid so the image
-            sits left (sticky on desktop) while the copy reads right. */}
+            sits left while the copy reads right. The image scrolls away
+            with the page rather than following the reader down. */}
         {!isPhotoshoot && (
           <div className={layout === "two-col" && !isFullWidthGallery ? "lg:grid lg:grid-cols-[5fr_7fr] lg:gap-10 lg:items-start" : ""}>
             {/* Lead media — video wins if the editor set one, otherwise
-                the featured image acts as usual. Video containers keep
-                the same sticky-left behaviour on 2-col layouts. */}
+                the featured image acts as usual. */}
             {article.featuredVideo && article.contentType !== "gallery" && !isFullWidthGallery && (
               <figure
                 className={
                   layout === "two-col"
-                    ? "mb-8 -mx-6 sm:mx-0 lg:m-0 lg:sticky lg:top-40"
+                    ? "mb-8 -mx-6 sm:mx-0 lg:m-0"
                     : "mb-8 -mx-6 sm:mx-0"
                 }
                 data-testid="article-featured-video"
@@ -488,10 +488,7 @@ export default function Article() {
               <figure
                 className={
                   layout === "two-col"
-                    ? // Sticky offset = full header height (masthead + category
-                      // nav ≈ 144px) + a small breathing gap, so the image
-                      // parks just below the nav rather than tucking under it.
-                      "mb-8 -mx-6 sm:mx-0 lg:m-0 lg:sticky lg:top-40"
+                    ? "mb-8 -mx-6 sm:mx-0 lg:m-0"
                     : "mb-8 -mx-6 sm:mx-0"
                 }
               >
