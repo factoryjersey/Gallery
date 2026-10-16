@@ -52,6 +52,15 @@ export const articles = pgTable("articles", {
   // Higher-resolution image used in the splash intro slideshow. Optional;
   // falls back to featuredImage when null.
   splashImage: text("splash_image"),
+  // Optional per-placement crops. Each falls back to featuredImage when
+  // empty, so the featured image stays the single required upload and
+  // these only exist where an editor wants a better-fitting crop.
+  //   heroImage   — homepage featured-stories slideshow (wide band)
+  //   squareImage — homepage / category square tiles
+  //   issueImage  — 3:2 cards on the /current-issue page
+  heroImage: text("hero_image"),
+  squareImage: text("square_image"),
+  issueImage: text("issue_image"),
   // Optional ordered image gallery for the article page. JSON-encoded array
   // of { url: string, caption?: string }; rendered as a slider above the
   // body when present.

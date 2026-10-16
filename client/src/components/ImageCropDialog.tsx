@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactCrop, {
   centerCrop,
+  convertToPixelCrop,
   makeAspectCrop,
   type Crop,
   type PixelCrop,
@@ -17,6 +18,20 @@ interface Props {
   onCropped: (blob: Blob, originalName: string) => void;
   /** Cancel / dismiss — discards the chosen file. */
   onCancel: () => void;
+  /** Aspect the crop box opens at (null = Free). Defaults to 5:4. Set per
+   *  image slot so the guide matches where the image will be shown. */
+  defaultAspect?: number | null;
+  /** Optional heading + one-line note naming the slot being cropped,
+   *  e.g. "Homepage tile — square". */
+  title?: string;
+  hint?: string;
+  /** Position in a multi-crop sequence (one upload → several slot crops).
+   *  Shows "Step n of total" and labels Apply as "Apply & next". */
+  step?: { index: number; total: number };
+  /** When set, shows a Skip button that moves past this crop without
+   *  producing an image. */
+  onSkip?: () => void;
+  skipLabel?: string;
 }
 
 // Aspect ratio presets. 5:4 landscape is the default per editorial brief
@@ -26,8 +41,10 @@ interface Props {
 const PRESETS: Array<{ label: string; value: number | null; hint: string }> = [
   { label: "5 × 4", value: 5 / 4, hint: "Landscape — default for portraits" },
   { label: "4 × 5", value: 4 / 5, hint: "Tall portrait crop" },
-  { label: "1 × 1", value: 1, hint: "Square" },
+  { label: "1 × 1", value: 1, hint: "Square — homepage tiles" },
+  { label: "3 × 2", value: 3 / 2, hint: "Current-issue cards" },
   { label: "16 × 9", value: 16 / 9, hint: "Wide / banner" },
+  { label: "21 × 9", value: 21 / 9, hint: "Homepage slideshow band" },
   { label: "Free", value: null, hint: "Any aspect ratio" },
 ];
 
@@ -66,11 +83,21 @@ function makeInitialCrop(width: number, height: number, aspect: number | null): 
  * sharp-based variant generation continues to apply to the cropped
  * result.
  */
-export default function ImageCropDialog({ file, onCropped, onCancel }: Props) {
+export default function ImageCropDialog({
+  file,
+  onCropped,
+  onCancel,
+  defaultAspect = DEFAULT_ASPECT,
+  title = "Crop image",
+  hint = "Drag the handles to set the crop, switch aspect ratio below.",
+  step,
+  onSkip,
+  skipLabel = "Skip",
+}: Props) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState<Crop | undefined>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
-  const [aspect, setAspect] = useState<number | null>(DEFAULT_ASPECT);
+  const [aspect, setAspect] = useState<number | null>(defaultAspect);
   const [processing, setProcessing] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
@@ -83,16 +110,22 @@ export default function ImageCropDialog({ file, onCropped, onCancel }: Props) {
       setCompletedCrop(null);
       return;
     }
+    // Each open starts on the slot's own guide, not whatever ratio the
+    // previous crop was left on.
+    setAspect(defaultAspect);
     const reader = new FileReader();
     reader.onload = () => setImageSrc(reader.result as string);
     reader.readAsDataURL(file);
-  }, [file]);
+  }, [file, defaultAspect]);
 
   const onImageLoad = useCallback(
     (e: React.SyntheticEvent<HTMLImageElement>) => {
       const { width, height } = e.currentTarget;
       const initial = makeInitialCrop(width, height, aspect);
       setCrop(initial);
+      // Seed completedCrop too, so the starting box can be applied
+      // without having to nudge a handle first.
+      setCompletedCrop(convertToPixelCrop(initial, width, height));
     },
     [aspect],
   );
@@ -102,7 +135,11 @@ export default function ImageCropDialog({ file, onCropped, onCancel }: Props) {
   const handleAspectChange = (value: number | null) => {
     setAspect(value);
     const img = imgRef.current;
-    if (img) setCrop(makeInitialCrop(img.width, img.height, value));
+    if (img) {
+      const next = makeInitialCrop(img.width, img.height, value);
+      setCrop(next);
+      setCompletedCrop(convertToPixelCrop(next, img.width, img.height));
+    }
   };
 
   const handleApply = async () => {
@@ -147,10 +184,8 @@ export default function ImageCropDialog({ file, onCropped, onCancel }: Props) {
       <div className="bg-background rounded-md shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
         <header className="px-5 py-3 border-b border-border flex items-center justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold leading-tight">Crop image</h3>
-            <p className="text-xs text-muted-foreground">
-              Drag the handles to set the crop, switch aspect ratio below.
-            </p>
+            <h3 className="text-base font-semibold leading-tight">{title}</h3>
+            <p className="text-xs text-muted-foreground">{hint}</p>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {PRESETS.map((p) => {
@@ -196,9 +231,25 @@ export default function ImageCropDialog({ file, onCropped, onCancel }: Props) {
         </div>
 
         <footer className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
+          {step && step.total > 1 && (
+            <span className="mr-auto text-xs text-muted-foreground" data-testid="crop-step">
+              Step {step.index} of {step.total}
+            </span>
+          )}
           <Button type="button" variant="ghost" onClick={onCancel} disabled={processing}>
             Cancel
           </Button>
+          {onSkip && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onSkip}
+              disabled={processing}
+              data-testid="crop-skip"
+            >
+              {skipLabel}
+            </Button>
+          )}
           <Button
             type="button"
             onClick={handleApply}
@@ -210,7 +261,7 @@ export default function ImageCropDialog({ file, onCropped, onCancel }: Props) {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cropping…
               </>
             ) : (
-              "Apply crop"
+              step && step.index < step.total ? "Apply & next" : "Apply crop"
             )}
           </Button>
         </footer>

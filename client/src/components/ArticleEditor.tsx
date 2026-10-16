@@ -54,6 +54,9 @@ const articleSchema = z.object({
   // any input and renders a friendly error for unrecognised URLs.
   featuredVideo: z.string().optional(),
   splashImage: z.string().optional(),
+  heroImage: z.string().optional(),
+  squareImage: z.string().optional(),
+  issueImage: z.string().optional(),
   galleryImages: z.array(z.object({ url: z.string(), caption: z.string().optional() })).optional(),
   metaTitle: z.string().optional(),
   metaDescription: z.string().optional(),
@@ -76,6 +79,51 @@ const articleSchema = z.object({
   galleryLayout: z.string().optional(),
 });
 
+type ImageTarget = "featuredImage" | "splashImage" | "heroImage" | "squareImage" | "issueImage";
+
+/** Per-slot crop guides. `aspect` is the ratio the crop box opens at
+ *  (null = Free); it matches how the image is displayed on the site. */
+const IMAGE_SLOTS: Record<
+  ImageTarget,
+  { label: string; aspect: number | null; description: string; cropHint: string }
+> = {
+  featuredImage: {
+    label: "Featured image",
+    aspect: null,
+    description:
+      "Shown at the top of the article page. Crop freely. Also used anywhere a placement crop below isn't set.",
+    cropHint: "Free crop — shown at the top of the article page.",
+  },
+  heroImage: {
+    label: "Homepage slideshow",
+    aspect: 21 / 9,
+    description:
+      "Wide band across the top of the homepage. 21:9 guide; the exact shape varies with screen size, so keep the subject near the top-centre.",
+    cropHint: "21:9 guide — the slideshow is a wide band; edges may trim slightly on some screens.",
+  },
+  squareImage: {
+    label: "Homepage tile",
+    aspect: 1,
+    description: "Square tiles in Latest Highlights and the category sections on the homepage.",
+    cropHint: "Square — homepage and category tiles.",
+  },
+  issueImage: {
+    label: "Current issue card",
+    aspect: 3 / 2,
+    description: "3:2 landscape cards on the Current Issue page.",
+    cropHint: "3:2 landscape — Current Issue page cards.",
+  },
+  splashImage: {
+    label: "Splash image",
+    aspect: 5 / 4,
+    description: "",
+    cropHint: "Drag the handles to set the crop, switch aspect ratio below.",
+  },
+};
+
+/** Crops a featured-image upload steps through, in order. */
+const FEATURED_CROP_SEQUENCE: ImageTarget[] = ["featuredImage", "heroImage", "squareImage", "issueImage"];
+
 type ArticleFormData = z.infer<typeof articleSchema>;
 
 interface ArticleEditorProps {
@@ -97,10 +145,14 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   // Tracks the in-flight AI excerpt request so the button can show a
   // spinner and double-click is debounced.
   const [generatingExcerpt, setGeneratingExcerpt] = useState(false);
-  // Crop-dialog state. We stash the picked File + which form field to
-  // write the resulting URL into; the dialog handles the rest.
+  // Crop-dialog state. We stash the picked File + the queue of form
+  // fields still to crop it for; the head of the queue is the crop on
+  // screen. A featured-image upload queues every placement so one file
+  // walks through all the crops in turn.
   const [cropFile, setCropFile] = useState<File | null>(null);
-  const [cropTarget, setCropTarget] = useState<"featuredImage" | "splashImage">("featuredImage");
+  const [cropQueue, setCropQueue] = useState<ImageTarget[]>([]);
+  const [cropTotal, setCropTotal] = useState(0);
+  const cropTarget: ImageTarget = cropQueue[0] ?? "featuredImage";
   // Toggles the media library picker modal for the gallery panel. When
   // true, MediaPickerDialog opens and the editor can tick existing
   // uploads to add straight into galleryImages — no re-upload needed.
@@ -167,6 +219,9 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         featuredImage: article.featuredImage || "",
         featuredVideo: article.featuredVideo || "",
         splashImage: article.splashImage || "",
+        heroImage: article.heroImage || "",
+        squareImage: article.squareImage || "",
+        issueImage: article.issueImage || "",
         galleryImages: Array.isArray(article.galleryImages) ? article.galleryImages : [],
         metaTitle: article.metaTitle || "",
         metaDescription: article.metaDescription || "",
@@ -417,9 +472,33 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
    *  field its eventual cropped Blob will populate. The dialog itself
    *  calls back to handleCropApplied → handleImageUpload to finish the
    *  upload. */
-  const openCropForUpload = (file: File, target: "featuredImage" | "splashImage") => {
-    setCropTarget(target);
+  const openCropForUpload = (file: File, target: ImageTarget) => {
+    const queue = target === "featuredImage" ? FEATURED_CROP_SEQUENCE : [target];
+    setCropQueue(queue);
+    setCropTotal(queue.length);
     setCropFile(file);
+  };
+
+  /** Move to the next crop in the queue, closing the dialog after the last. */
+  const advanceCropQueue = () => {
+    const rest = cropQueue.slice(1);
+    setCropQueue(rest);
+    if (rest.length === 0) setCropFile(null);
+  };
+
+  /** Skip a placement crop: clear the slot so it falls back to the
+   *  (newly uploaded) featured image rather than keeping a crop of an
+   *  older photo. */
+  const handleCropSkipped = () => {
+    if (cropTarget !== "featuredImage") {
+      form.setValue(cropTarget, "", { shouldDirty: true });
+    }
+    advanceCropQueue();
+  };
+
+  const handleCropCancelled = () => {
+    setCropQueue([]);
+    setCropFile(null);
   };
 
   /** Called from ImageCropDialog with the cropped JPEG Blob — wraps it
@@ -430,11 +509,11 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     const baseName = originalName.replace(/\.[^.]+$/, "");
     const croppedFile = new File([blob], `${baseName}-cropped.jpg`, { type: "image/jpeg" });
     const target = cropTarget;
-    setCropFile(null);
+    advanceCropQueue();
     handleImageUpload(croppedFile, target);
   };
 
-  const handleImageUpload = async (file: File, target: "featuredImage" | "splashImage" = "featuredImage") => {
+  const handleImageUpload = async (file: File, target: ImageTarget = "featuredImage") => {
     let uploadSucceeded = false;
     try {
       const formData = new FormData();
@@ -469,15 +548,12 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
         throw new Error("No image URL returned");
       }
 
-      form.setValue(target, imageUrl);
+      form.setValue(target, imageUrl, { shouldDirty: true });
       uploadSucceeded = true;
 
       toast({
         title: "Image uploaded",
-        description:
-          target === "splashImage"
-            ? "Splash image has been uploaded successfully."
-            : "Featured image has been uploaded successfully.",
+        description: `${IMAGE_SLOTS[target].label} has been uploaded successfully.`,
       });
     } catch (error) {
       console.error("Upload error:", error);
@@ -611,14 +687,72 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     }
   };
 
+  /** One upload row: label, guide note, file picker (→ crop dialog at
+   *  the slot's aspect), and a thumbnail preview at that same shape. */
+  const renderImageSlot = (target: Exclude<ImageTarget, "splashImage">) => {
+    const slot = IMAGE_SLOTS[target];
+    const url = form.watch(target);
+    return (
+      <div className="space-y-2" data-testid={`image-slot-${target}`}>
+        <Label>{slot.label}</Label>
+        <p className="text-xs text-muted-foreground -mt-1">{slot.description}</p>
+        <div className="flex gap-4 items-center flex-wrap">
+          <Input
+            type="file"
+            accept="image/*"
+            className="max-w-xs"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) openCropForUpload(file, target);
+              // Reset the input so picking the same file again
+              // still re-triggers onChange.
+              e.target.value = "";
+            }}
+            data-testid={target === "featuredImage" ? "featured-image-input" : `${target}-input`}
+          />
+          {url ? (
+            <div className="flex items-center gap-2">
+              <img
+                src={url}
+                alt={`${slot.label} preview`}
+                className="h-14 w-auto object-cover border border-border"
+                style={slot.aspect ? { aspectRatio: String(slot.aspect) } : undefined}
+              />
+              <button
+                type="button"
+                className="text-xs underline text-muted-foreground hover:text-foreground"
+                onClick={() => form.setValue(target, "", { shouldDirty: true })}
+                data-testid={`${target}-clear`}
+              >
+                Clear
+              </button>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">
+              {target === "featuredImage" ? "Not set" : "Not set — uses the featured image"}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Crop dialog — opens after a featured/splash file is picked,
           uploads the cropped Blob through the same media pipeline. */}
       <ImageCropDialog
+        // Remount per step so each crop starts fresh at its own guide.
+        key={`${cropTarget}-${cropQueue.length}`}
         file={cropFile}
-        onCancel={() => setCropFile(null)}
+        onCancel={handleCropCancelled}
         onCropped={handleCropApplied}
+        defaultAspect={IMAGE_SLOTS[cropTarget].aspect}
+        title={`Crop — ${IMAGE_SLOTS[cropTarget].label}`}
+        hint={IMAGE_SLOTS[cropTarget].cropHint}
+        step={{ index: cropTotal - cropQueue.length + 1, total: cropTotal }}
+        onSkip={cropTarget !== "featuredImage" && cropTotal > 1 ? handleCropSkipped : undefined}
+        skipLabel="Skip — use featured image"
       />
       <Card>
         <CardHeader>
@@ -959,28 +1093,26 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               </div>
             </div>
 
-            {/* Featured Image */}
-            <div className="space-y-2">
-              <Label>Featured Image</Label>
-              <div className="flex gap-4 items-start">
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) openCropForUpload(file, "featuredImage");
-                    // Reset the input so picking the same file again
-                    // still re-triggers onChange.
-                    e.target.value = "";
-                  }}
-                  data-testid="featured-image-input"
-                />
-                {form.watch("featuredImage") && (
-                  <div className="text-sm text-muted-foreground">
-                    ✓ Featured image uploaded
-                  </div>
-                )}
+            {/* Featured Image — free crop, shown on the article page and
+                the fallback for every placement crop below. */}
+            {renderImageSlot("featuredImage")}
+
+            {/* Placement crops — optional per-slot images so each part of
+                the site gets a crop made for its shape. Empty = falls
+                back to the featured image. */}
+            <div className="space-y-4 border border-border rounded-md p-4">
+              <div>
+                <Label>Placement crops (optional)</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Uploading a featured image walks you through each of these
+                  crops in turn, so you only pick the file once. Use the
+                  buttons below to replace a single crop later. Anything left
+                  empty uses the featured image.
+                </p>
               </div>
+              {renderImageSlot("heroImage")}
+              {renderImageSlot("squareImage")}
+              {renderImageSlot("issueImage")}
             </div>
 
             {/* Featured Video — replaces the featured image at the top

@@ -3,7 +3,7 @@ import type { ArticleWithDetails } from "@shared/schema";
 import FeaturedHero from "@/components/FeaturedHero";
 
 function hasImage(a: ArticleWithDetails): boolean {
-  return Boolean(a.splashImage || a.featuredImage || a.galleryImages?.[0]?.url);
+  return Boolean(a.heroImage || a.splashImage || a.featuredImage || a.galleryImages?.[0]?.url);
 }
 
 /**
