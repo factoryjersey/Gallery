@@ -364,7 +364,7 @@ export default function Header({ onSearch }: HeaderProps) {
       </div>
 
       {/* Desktop category nav */}
-      <div className="hidden md:block border-t border-border bg-white">
+      <div className="hidden md:block bg-white">
         <div className="max-w-[1296px] mx-auto px-6">
           <nav className="flex justify-center items-center gap-0"
             style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: 13 }}>
