@@ -91,13 +91,16 @@ psql --quiet --no-psqlrc -v ON_ERROR_STOP=1 "$LOCAL_ADMIN_URL" \
 
 # Build the extension filter: drop CREATE/COMMENT ON EXTENSION lines for
 # anything in SKIP_EXTENSIONS. With an empty list this is a plain cat.
+# NOTE: -E (extended regex). BSD sed on macOS does not understand \? as
+# an optional-quantifier in basic regex, so the quoted-identifier form
+# has to be written "? under -E. Both GNU and BSD sed accept -E.
 filter_args=()
 for ext in $SKIP_EXTENSIONS; do
-  filter_args+=(-e "/^CREATE EXTENSION IF NOT EXISTS \"\?${ext}\"\?/d")
-  filter_args+=(-e "/^COMMENT ON EXTENSION \"\?${ext}\"\?/d")
+  filter_args+=(-e "/^CREATE EXTENSION( IF NOT EXISTS)? \"?${ext}\"?[ ;]/d")
+  filter_args+=(-e "/^COMMENT ON EXTENSION \"?${ext}\"?[ ;]/d")
 done
 if (( ${#filter_args[@]} )); then
-  ext_filter=(sed "${filter_args[@]}")
+  ext_filter=(sed -E "${filter_args[@]}")
 else
   ext_filter=(cat)
 fi
