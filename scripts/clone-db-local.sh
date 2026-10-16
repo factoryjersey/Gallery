@@ -14,8 +14,10 @@
 #   ./scripts/clone-db-local.sh --dry-run              # print the plan, change nothing
 #   LOCAL_DATABASE_URL=postgres://localhost/foo ./scripts/clone-db-local.sh
 #
-# Requires: pg_dump / psql / createdb from Postgres 15+ client tools
-# (brew install libpq, or brew install postgresql@16).
+# Requires: pg_dump / psql / createdb, at least as new as the server's
+# major version (brew install postgresql@17). Homebrew's versioned
+# Postgres is keg-only, so also:
+#   export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 
 set -euo pipefail
 

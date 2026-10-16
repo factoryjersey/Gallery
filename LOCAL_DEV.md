@@ -72,9 +72,18 @@ things in `/admin` without any of it being real.
 You need Postgres running locally plus the client tools:
 
 ```bash
-brew install postgresql@16
-brew services start postgresql@16
+brew install postgresql@17
+brew services start postgresql@17
+export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 ```
+
+Homebrew's versioned Postgres is keg-only, so without that `export`
+neither `pg_dump` nor `createdb` is on your PATH and the clone script
+fails before it starts. Put the same line in `~/.zshrc` so it survives a
+new terminal.
+
+Version 17 rather than 16 because `pg_dump` must be at least as new as
+the server it reads — see the caveats below.
 
 Then, with the production URL from the Railway variables tab:
 
@@ -112,9 +121,13 @@ Three caveats:
 - Images are **not** copied. They load from the public R2 CDN, so they
   render fine, but uploading locally writes to the real R2 bucket unless
   you point the `R2_*` variables at a scratch bucket.
-- `pg_dump` must be the same major version as the server or newer. If
-  you get a "server version mismatch" error, your Homebrew Postgres is
-  older than Railway's.
+- `pg_dump` must be at least as new as the server's major version. A
+  newer `pg_dump` reads an older server fine; the reverse fails. If you
+  get a "server version mismatch" error, Railway is newer than your
+  Homebrew Postgres — install the matching formula
+  (`brew install postgresql@18`, and so on) and redo the `export PATH`
+  line with the new version number. To check what Railway runs:
+  `psql "$PROD_DATABASE_URL" -c 'select version();'`
 
 ## How deploys work
 
