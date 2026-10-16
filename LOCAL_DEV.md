@@ -119,5 +119,42 @@ Three caveats:
 ## How deploys work
 
 Railway auto-deploys on every push to `main`. There is no build or test
-pipeline in between — whatever lands on `main` goes to gallery.je. So work
-on a branch, open a PR, and merge when you're happy with the local preview.
+pipeline in between — whatever lands on `main` is on gallery.je a couple
+of minutes later. Run `pnpm check` before you push; it is the only thing
+between a type error and a failed deploy.
+
+Pushing straight to `main` is fine for ordinary work. Use a branch when
+you want someone to look at the change first, or when it's big enough
+that you'd rather not find out on the live site.
+
+Deploys never touch the database. The image runs `npm run build` and
+`npm run start` — no `drizzle-kit`, no migration step — so the schema
+only ever changes when someone runs `pnpm db:push` by hand.
+
+## If a deploy goes bad
+
+Code rolls back cleanly. In the Railway dashboard, open the service, go
+to the **Deployments** tab, and use the three-dot menu on the last good
+deployment:
+
+- **Rollback** reuses that deployment's stored image *and* its variables,
+  so it's live as soon as the container starts — no rebuild. Only offered
+  while the image is still retained: 72h on Hobby, 120h on Pro.
+- **Redeploy** rebuilds from that commit's source. Use it when the
+  deployment is too old to roll back. Same result, you just wait for the
+  build.
+
+Neither changes git history, so `main` still points at the bad commit.
+If you want history to reflect the fix, `git revert <sha>` and push —
+that deploys the revert as a new deployment.
+
+**Two things a rollback does not undo**, because they are data, not code:
+
+- **`pnpm db:push`.** If the bad deploy came with a schema change that
+  was pushed, rolling back gives you the old app against the new table
+  shape, which may be worse than the bug. Schema changes are worth a
+  heads-up to whoever else is working that day.
+- **Anything done in `/admin`.** Edited articles, uploaded images —
+  that's live content in Postgres and R2. There is no undo. `updated_at`
+  is the audit trail: `SELECT id, title, updated_at FROM articles ORDER
+  BY updated_at DESC LIMIT 20;` shows what changed most recently.
