@@ -31,6 +31,12 @@ EXCLUDE_DATA_TABLES=(public.users public.subscribers)
 # the dump has to be filtered instead. Override with
 # SKIP_EXTENSIONS="a b c" if production sprouts another.
 SKIP_EXTENSIONS="${SKIP_EXTENSIONS:-supabase_vault pgsodium pg_graphql supabase_functions pgjwt}"
+
+# Dump only this schema. Every pgTable in shared/schema.ts is unqualified,
+# so the whole app lives in public; the Supabase era left other schemas
+# behind (vault, graphql, ...) whose contents break the restore. Limiting
+# the dump drops all of them at once rather than naming them one by one.
+DUMP_SCHEMA="${DUMP_SCHEMA:-public}"
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 
@@ -67,6 +73,7 @@ echo "  into:    $LOCAL_DATABASE_URL"
 echo "  db name: $LOCAL_DB_NAME"
 echo "  schema+data for every table EXCEPT, schema only:"
 printf '             %s\n' "${EXCLUDE_DATA_TABLES[@]}"
+echo "  schema dumped:  $DUMP_SCHEMA (others, e.g. vault, are skipped)"
 echo "  extensions skipped (not available locally):"
 printf '             %s\n' $SKIP_EXTENSIONS
 echo
@@ -95,6 +102,9 @@ psql --quiet --no-psqlrc -v ON_ERROR_STOP=1 "$LOCAL_ADMIN_URL" \
 # an optional-quantifier in basic regex, so the quoted-identifier form
 # has to be written "? under -E. Both GNU and BSD sed accept -E.
 filter_args=()
+# Restricting the dump to one schema makes pg_dump emit CREATE SCHEMA for
+# it, which collides with the schema every new database already has.
+filter_args+=(-e "/^CREATE SCHEMA ${DUMP_SCHEMA};\$/d")
 for ext in $SKIP_EXTENSIONS; do
   filter_args+=(-e "/^CREATE EXTENSION( IF NOT EXISTS)? \"?${ext}\"?[ ;]/d")
   filter_args+=(-e "/^COMMENT ON EXTENSION \"?${ext}\"?[ ;]/d")
@@ -113,6 +123,7 @@ pg_dump \
   --no-owner \
   --no-privileges \
   --no-comments \
+  --schema="$DUMP_SCHEMA" \
   "${exclude_args[@]}" \
   "$PROD_DATABASE_URL" \
   | "${ext_filter[@]}" \
