@@ -53,6 +53,24 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   'property-review': 'The finest homes and property on the island',
 };
 
+/**
+ * Adds the per-placement article image columns (hero / square / issue)
+ * if they're missing, so a deploy that ships the new schema can't break
+ * article queries before anyone has run `pnpm db:push`. Idempotent.
+ */
+export async function ensureArticleImageColumns() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE articles
+        ADD COLUMN IF NOT EXISTS hero_image text,
+        ADD COLUMN IF NOT EXISTS square_image text,
+        ADD COLUMN IF NOT EXISTS issue_image text
+    `);
+  } catch (err) {
+    console.error("ensureArticleImageColumns failed:", err);
+  }
+}
+
 export async function fixCategoryDescriptions() {
   try {
     const rows = await db.select({ id: categories.id, slug: categories.slug, description: categories.description }).from(categories);

@@ -20,9 +20,9 @@ function ArticleCard({ article }: { article: any }) {
   return (
     <Link href={`/article/${article.slug}`}>
       <article className="article-card group cursor-pointer flex flex-col gap-3" data-testid={`article-card-${article.slug}`}>
-        {article.featuredImage && (
+        {(article.issueImage || article.featuredImage) && (
           <div className="overflow-hidden w-full" style={{ aspectRatio: "3/2" }}>
-            <LazyImage src={article.featuredImage} alt={article.title}
+            <LazyImage src={article.issueImage || article.featuredImage} alt={article.title}
               className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
           </div>
         )}

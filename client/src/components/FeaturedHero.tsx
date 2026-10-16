@@ -83,9 +83,9 @@ export default function FeaturedHero({ articles }: FeaturedHeroProps) {
                       browser fetches it as an LCP candidate. Very slow
                       Ken-Burns-ish scale on hover so the still image
                       doesn't feel dead. */}
-                  {article.featuredImage ? (
+                  {article.heroImage || article.featuredImage ? (
                     <LazyImage
-                      src={article.featuredImage}
+                      src={(article.heroImage || article.featuredImage)!}
                       alt={article.title}
                       priority={i === 0}
                       // object-top so the crop is anchored to the top

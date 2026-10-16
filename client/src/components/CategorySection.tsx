@@ -20,6 +20,8 @@ interface Props {
 // For paparazzi-style articles where the featured image is often weak but
 // the gallery has the actual content.
 function tileImage(article: ArticleWithDetails, preferGallery: boolean): string | null {
+  // An editor-supplied square crop always wins — it was made for this slot.
+  if (article.squareImage) return article.squareImage;
   if (preferGallery && Array.isArray(article.galleryImages) && article.galleryImages[0]?.url) {
     return article.galleryImages[0].url;
   }

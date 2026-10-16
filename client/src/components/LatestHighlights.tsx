@@ -6,7 +6,8 @@ import type { ArticleWithDetails } from "@shared/schema";
 
 function hasImage(article: ArticleWithDetails): boolean {
   return Boolean(
-    article.splashImage ||
+    article.squareImage ||
+      article.splashImage ||
       article.featuredImage ||
       article.galleryImages?.[0]?.url,
   );

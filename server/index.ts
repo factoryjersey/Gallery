@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { fixCategoryDescriptions } from "./dataMigrations";
+import { ensureArticleImageColumns, fixCategoryDescriptions } from "./dataMigrations";
 import http from "http";
 
 const app = express();
@@ -87,6 +87,7 @@ app.use((req, res, next) => {
     req.pipe(proxyReq);
   });
 
+  await ensureArticleImageColumns();
   await fixCategoryDescriptions();
   const server = await registerRoutes(app);
 
