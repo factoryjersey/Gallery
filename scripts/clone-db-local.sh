@@ -23,6 +23,14 @@ set -euo pipefail
 
 LOCAL_DATABASE_URL="${LOCAL_DATABASE_URL:-postgres://localhost:5432/gallery_dev}"
 EXCLUDE_DATA_TABLES=(public.users public.subscribers)
+
+# Extensions present in production but not on a stock local Postgres.
+# Left over from the Supabase era; nothing in this app uses them, but
+# pg_dump still emits CREATE EXTENSION for them and the restore dies on
+# the first one. pg_dump only grew --exclude-extension in 18, so on 17
+# the dump has to be filtered instead. Override with
+# SKIP_EXTENSIONS="a b c" if production sprouts another.
+SKIP_EXTENSIONS="${SKIP_EXTENSIONS:-supabase_vault pgsodium pg_graphql supabase_functions pgjwt}"
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 
@@ -59,6 +67,8 @@ echo "  into:    $LOCAL_DATABASE_URL"
 echo "  db name: $LOCAL_DB_NAME"
 echo "  schema+data for every table EXCEPT, schema only:"
 printf '             %s\n' "${EXCLUDE_DATA_TABLES[@]}"
+echo "  extensions skipped (not available locally):"
+printf '             %s\n' $SKIP_EXTENSIONS
 echo
 
 if (( DRY_RUN )); then
@@ -66,9 +76,31 @@ if (( DRY_RUN )); then
   exit 0
 fi
 
+# Connect to the 'postgres' maintenance database on the SAME server the
+# target URL names. Bare dropdb/createdb would use libpq's defaults and
+# silently act on a different server if LOCAL_DATABASE_URL points at a
+# non-default host or port.
+local_base="${LOCAL_DATABASE_URL%%\?*}"
+LOCAL_ADMIN_URL="${local_base%/*}/postgres"
+
 echo "==> dropping and recreating $LOCAL_DB_NAME"
-dropdb --if-exists "$LOCAL_DB_NAME"
-createdb "$LOCAL_DB_NAME"
+psql --quiet --no-psqlrc -v ON_ERROR_STOP=1 "$LOCAL_ADMIN_URL" \
+  -c "DROP DATABASE IF EXISTS \"$LOCAL_DB_NAME\";"
+psql --quiet --no-psqlrc -v ON_ERROR_STOP=1 "$LOCAL_ADMIN_URL" \
+  -c "CREATE DATABASE \"$LOCAL_DB_NAME\";"
+
+# Build the extension filter: drop CREATE/COMMENT ON EXTENSION lines for
+# anything in SKIP_EXTENSIONS. With an empty list this is a plain cat.
+filter_args=()
+for ext in $SKIP_EXTENSIONS; do
+  filter_args+=(-e "/^CREATE EXTENSION IF NOT EXISTS \"\?${ext}\"\?/d")
+  filter_args+=(-e "/^COMMENT ON EXTENSION \"\?${ext}\"\?/d")
+done
+if (( ${#filter_args[@]} )); then
+  ext_filter=(sed "${filter_args[@]}")
+else
+  ext_filter=(cat)
+fi
 
 echo "==> dumping production and restoring into $LOCAL_DB_NAME"
 # --no-owner/--no-privileges: Railway's roles don't exist locally.
@@ -80,6 +112,7 @@ pg_dump \
   --no-comments \
   "${exclude_args[@]}" \
   "$PROD_DATABASE_URL" \
+  | "${ext_filter[@]}" \
   | psql --quiet --no-psqlrc -v ON_ERROR_STOP=1 "$LOCAL_DATABASE_URL"
 
 echo "==> row counts"
