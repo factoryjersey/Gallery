@@ -113,7 +113,18 @@ DATABASE_URL=postgres://localhost:5432/gallery_dev
 Everything the site renders — articles, authors, categories, tags,
 issues, media, splash slides, site settings — comes across in full.
 
-Three caveats:
+**Only the `public` schema is copied.** Every table in
+`shared/schema.ts` is unqualified, so `public` is the whole app. The
+production database also carries schemas left over from its Supabase
+days — `vault` and friends — whose contents break a restore: Supabase
+registers `vault.secrets` as an extension config table, so `pg_dump`
+emits its rows even when the extension itself is skipped, and the
+restore dies on a relation that doesn't exist locally. Dumping only
+`public` sidesteps all of it. If you ever genuinely need one of those
+schemas, `DUMP_SCHEMA=... pnpm db:clone-local` overrides it, and
+`SKIP_EXTENSIONS` controls which extensions are filtered out.
+
+Four caveats:
 
 - `authors.email` **does** come across, and holds contributor email
   addresses. Treat the local copy as real data: don't commit a dump,
@@ -128,6 +139,9 @@ Three caveats:
   (`brew install postgresql@18`, and so on) and redo the `export PATH`
   line with the new version number. To check what Railway runs:
   `psql "$PROD_DATABASE_URL" -c 'select version();'`
+- The copy is a **snapshot**, not a live connection. Edits made on
+  gallery.je after you clone won't appear locally until you run
+  `pnpm db:clone-local` again. Re-running is safe and takes a minute.
 
 ## How deploys work
 
