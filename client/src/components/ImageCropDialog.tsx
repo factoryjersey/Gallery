@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactCrop, {
   centerCrop,
+  convertToPixelCrop,
   makeAspectCrop,
   type Crop,
   type PixelCrop,
@@ -24,6 +25,13 @@ interface Props {
    *  e.g. "Homepage tile — square". */
   title?: string;
   hint?: string;
+  /** Position in a multi-crop sequence (one upload → several slot crops).
+   *  Shows "Step n of total" and labels Apply as "Apply & next". */
+  step?: { index: number; total: number };
+  /** When set, shows a Skip button that moves past this crop without
+   *  producing an image. */
+  onSkip?: () => void;
+  skipLabel?: string;
 }
 
 // Aspect ratio presets. 5:4 landscape is the default per editorial brief
@@ -82,6 +90,9 @@ export default function ImageCropDialog({
   defaultAspect = DEFAULT_ASPECT,
   title = "Crop image",
   hint = "Drag the handles to set the crop, switch aspect ratio below.",
+  step,
+  onSkip,
+  skipLabel = "Skip",
 }: Props) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState<Crop | undefined>();
@@ -112,6 +123,9 @@ export default function ImageCropDialog({
       const { width, height } = e.currentTarget;
       const initial = makeInitialCrop(width, height, aspect);
       setCrop(initial);
+      // Seed completedCrop too, so the starting box can be applied
+      // without having to nudge a handle first.
+      setCompletedCrop(convertToPixelCrop(initial, width, height));
     },
     [aspect],
   );
@@ -121,7 +135,11 @@ export default function ImageCropDialog({
   const handleAspectChange = (value: number | null) => {
     setAspect(value);
     const img = imgRef.current;
-    if (img) setCrop(makeInitialCrop(img.width, img.height, value));
+    if (img) {
+      const next = makeInitialCrop(img.width, img.height, value);
+      setCrop(next);
+      setCompletedCrop(convertToPixelCrop(next, img.width, img.height));
+    }
   };
 
   const handleApply = async () => {
@@ -213,9 +231,25 @@ export default function ImageCropDialog({
         </div>
 
         <footer className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
+          {step && step.total > 1 && (
+            <span className="mr-auto text-xs text-muted-foreground" data-testid="crop-step">
+              Step {step.index} of {step.total}
+            </span>
+          )}
           <Button type="button" variant="ghost" onClick={onCancel} disabled={processing}>
             Cancel
           </Button>
+          {onSkip && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onSkip}
+              disabled={processing}
+              data-testid="crop-skip"
+            >
+              {skipLabel}
+            </Button>
+          )}
           <Button
             type="button"
             onClick={handleApply}
@@ -227,7 +261,7 @@ export default function ImageCropDialog({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cropping…
               </>
             ) : (
-              "Apply crop"
+              step && step.index < step.total ? "Apply & next" : "Apply crop"
             )}
           </Button>
         </footer>

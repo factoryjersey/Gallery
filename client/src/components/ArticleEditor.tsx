@@ -121,6 +121,9 @@ const IMAGE_SLOTS: Record<
   },
 };
 
+/** Crops a featured-image upload steps through, in order. */
+const FEATURED_CROP_SEQUENCE: ImageTarget[] = ["featuredImage", "heroImage", "squareImage", "issueImage"];
+
 type ArticleFormData = z.infer<typeof articleSchema>;
 
 interface ArticleEditorProps {
@@ -142,10 +145,14 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
   // Tracks the in-flight AI excerpt request so the button can show a
   // spinner and double-click is debounced.
   const [generatingExcerpt, setGeneratingExcerpt] = useState(false);
-  // Crop-dialog state. We stash the picked File + which form field to
-  // write the resulting URL into; the dialog handles the rest.
+  // Crop-dialog state. We stash the picked File + the queue of form
+  // fields still to crop it for; the head of the queue is the crop on
+  // screen. A featured-image upload queues every placement so one file
+  // walks through all the crops in turn.
   const [cropFile, setCropFile] = useState<File | null>(null);
-  const [cropTarget, setCropTarget] = useState<ImageTarget>("featuredImage");
+  const [cropQueue, setCropQueue] = useState<ImageTarget[]>([]);
+  const [cropTotal, setCropTotal] = useState(0);
+  const cropTarget: ImageTarget = cropQueue[0] ?? "featuredImage";
   // Toggles the media library picker modal for the gallery panel. When
   // true, MediaPickerDialog opens and the editor can tick existing
   // uploads to add straight into galleryImages — no re-upload needed.
@@ -466,8 +473,32 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
    *  calls back to handleCropApplied → handleImageUpload to finish the
    *  upload. */
   const openCropForUpload = (file: File, target: ImageTarget) => {
-    setCropTarget(target);
+    const queue = target === "featuredImage" ? FEATURED_CROP_SEQUENCE : [target];
+    setCropQueue(queue);
+    setCropTotal(queue.length);
     setCropFile(file);
+  };
+
+  /** Move to the next crop in the queue, closing the dialog after the last. */
+  const advanceCropQueue = () => {
+    const rest = cropQueue.slice(1);
+    setCropQueue(rest);
+    if (rest.length === 0) setCropFile(null);
+  };
+
+  /** Skip a placement crop: clear the slot so it falls back to the
+   *  (newly uploaded) featured image rather than keeping a crop of an
+   *  older photo. */
+  const handleCropSkipped = () => {
+    if (cropTarget !== "featuredImage") {
+      form.setValue(cropTarget, "", { shouldDirty: true });
+    }
+    advanceCropQueue();
+  };
+
+  const handleCropCancelled = () => {
+    setCropQueue([]);
+    setCropFile(null);
   };
 
   /** Called from ImageCropDialog with the cropped JPEG Blob — wraps it
@@ -478,7 +509,7 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
     const baseName = originalName.replace(/\.[^.]+$/, "");
     const croppedFile = new File([blob], `${baseName}-cropped.jpg`, { type: "image/jpeg" });
     const target = cropTarget;
-    setCropFile(null);
+    advanceCropQueue();
     handleImageUpload(croppedFile, target);
   };
 
@@ -711,12 +742,17 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
       {/* Crop dialog — opens after a featured/splash file is picked,
           uploads the cropped Blob through the same media pipeline. */}
       <ImageCropDialog
+        // Remount per step so each crop starts fresh at its own guide.
+        key={`${cropTarget}-${cropQueue.length}`}
         file={cropFile}
-        onCancel={() => setCropFile(null)}
+        onCancel={handleCropCancelled}
         onCropped={handleCropApplied}
         defaultAspect={IMAGE_SLOTS[cropTarget].aspect}
         title={`Crop — ${IMAGE_SLOTS[cropTarget].label}`}
         hint={IMAGE_SLOTS[cropTarget].cropHint}
+        step={{ index: cropTotal - cropQueue.length + 1, total: cropTotal }}
+        onSkip={cropTarget !== "featuredImage" && cropTotal > 1 ? handleCropSkipped : undefined}
+        skipLabel="Skip — use featured image"
       />
       <Card>
         <CardHeader>
@@ -1068,9 +1104,10 @@ export default function ArticleEditor({ articleId, onClose }: ArticleEditorProps
               <div>
                 <Label>Placement crops (optional)</Label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Upload a crop made for each place the article appears. The
-                  crop guide opens at the right shape. Anything left empty
-                  uses the featured image.
+                  Uploading a featured image walks you through each of these
+                  crops in turn, so you only pick the file once. Use the
+                  buttons below to replace a single crop later. Anything left
+                  empty uses the featured image.
                 </p>
               </div>
               {renderImageSlot("heroImage")}
