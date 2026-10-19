@@ -21,7 +21,7 @@ function ArticleCard({ article }: { article: any }) {
     <Link href={`/article/${article.slug}`}>
       <article className="article-card group cursor-pointer flex flex-col gap-3" data-testid={`article-card-${article.slug}`}>
         {(article.issueImage || article.featuredImage) && (
-          <div className="overflow-hidden w-full" style={{ aspectRatio: "3/2" }}>
+          <div className="overflow-hidden w-full" style={{ aspectRatio: "1/1" }}>
             <LazyImage src={article.issueImage || article.featuredImage} alt={article.title}
               className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
           </div>
@@ -327,7 +327,7 @@ export default function CurrentIssue() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="space-y-3">
-                      <div className="bg-border animate-pulse w-full" style={{ aspectRatio: "3/2" }} />
+                      <div className="bg-border animate-pulse w-full" style={{ aspectRatio: "1/1" }} />
                       <div className="h-3 bg-border rounded w-16 animate-pulse" />
                       <div className="h-5 bg-border rounded w-3/4 animate-pulse" />
                     </div>

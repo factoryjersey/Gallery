@@ -109,9 +109,9 @@ const IMAGE_SLOTS: Record<
   },
   issueImage: {
     label: "Current issue card",
-    aspect: 3 / 2,
-    description: "3:2 landscape cards on the Current Issue page.",
-    cropHint: "3:2 landscape — Current Issue page cards.",
+    aspect: 1,
+    description: "Square cards on the Current Issue page.",
+    cropHint: "Square — Current Issue page cards.",
   },
   splashImage: {
     label: "Splash image",

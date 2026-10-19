@@ -57,7 +57,7 @@ export const articles = pgTable("articles", {
   // these only exist where an editor wants a better-fitting crop.
   //   heroImage   — homepage featured-stories slideshow (wide band)
   //   squareImage — homepage / category square tiles
-  //   issueImage  — 3:2 cards on the /current-issue page
+  //   issueImage  — 1:1 square cards on the /current-issue page
   heroImage: text("hero_image"),
   squareImage: text("square_image"),
   issueImage: text("issue_image"),
