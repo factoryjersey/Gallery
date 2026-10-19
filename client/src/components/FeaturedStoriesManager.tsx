@@ -102,8 +102,14 @@ export function FeaturedStoriesManager() {
   const [search, setSearch] = useState("");
   const { toast } = useToast();
 
+  // Fetch with a high limit so this admin view shows EVERY pinned
+  // article, not just the hero-sized slice. The public endpoint
+  // defaults to limit=4 (matches the hero carousel), which was
+  // silently cropping the admin list — anything pinned beyond the
+  // 4th slot vanished from "Currently in rotation" even though it
+  // was still live on the homepage hero.
   const { data: featuredData, isLoading: featuredLoading } = useQuery<{ articles: ArticleWithDetails[] }>({
-    queryKey: ["/api/articles/featured"],
+    queryKey: ["/api/articles/featured?limit=50"],
   });
 
   const { data: categoriesData, isLoading: categoriesLoading } = useQuery<{ categories: Category[] }>({
@@ -125,7 +131,9 @@ export function FeaturedStoriesManager() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/articles/featured"] });
+      // Predicate match catches both the admin's /api/articles/featured?limit=50
+      // key and the public hero's bare /api/articles/featured key, plus all
+      // the /api/articles?... list queries that may surface the article too.
       queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string).startsWith("/api/articles") });
     },
     onError: () => {
@@ -140,7 +148,10 @@ export function FeaturedStoriesManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles/featured"] });
+      // Same reasoning — a category exclusion flip changes which articles the
+      // auto-fallback will backfill with, so both the admin and the public
+      // featured queries need to refetch.
+      queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string).startsWith("/api/articles/featured") });
     },
     onError: () => {
       toast({ title: "Error", description: "Could not update category exclusion.", variant: "destructive" });
