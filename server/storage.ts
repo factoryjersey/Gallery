@@ -589,7 +589,12 @@ export class DatabaseStorage implements IStorage {
       .from(articles)
       .leftJoin(authors, eq(articles.authorId, authors.id))
       .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(and(eq(articles.isFeatured, true), eq(articles.status, 'published'), ne(articles.contentType, 'gallery')))
+      // Explicit pins only — no contentType filter here. An editor who
+      // ticks a gallery-type (or photoshoot-type) article in Featured
+      // Stories has made a deliberate call; respecting that is more
+      // important than the historical "no galleries in the hero" rule,
+      // which still applies to the AUTO fallback below.
+      .where(and(eq(articles.isFeatured, true), eq(articles.status, 'published')))
       // NULLS LAST — a pinned article with a missing publishedAt should
       // not out-rank a real print date. Same reasoning as the getArticles
       // ordering above; this is the hero surface where the bug hurt most.
